@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import Dashboard from "./pages/Dashboard";
+import ScheduleQueue from "./pages/ScheduleQueue";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,7 +26,7 @@ const App = () => (
               <main className="flex-1 p-6 overflow-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
-                  <Route path="/schedule" element={<div className="text-2xl font-semibold">Schedule Queue (Coming Soon)</div>} />
+                  <Route path="/schedule" element={<ScheduleQueue />} />
                   <Route path="/requests" element={<div className="text-2xl font-semibold">Requests (Coming Soon)</div>} />
                   <Route path="/departments" element={<div className="text-2xl font-semibold">Departments (Coming Soon)</div>} />
                   <Route path="/operators" element={<div className="text-2xl font-semibold">Operators (Coming Soon)</div>} />

@@ -7,6 +7,7 @@ export type Status =
   | "changes_requested" 
   | "approved" 
   | "scheduled" 
+  | "published"
   | "live" 
   | "expired" 
   | "failed"
@@ -24,6 +25,7 @@ const statusConfig: Record<Status, { label: string; variant: "default" | "second
   changes_requested: { label: "Changes Requested", variant: "outline", className: "border-warning text-warning" },
   approved: { label: "Approved", variant: "outline", className: "border-success text-success" },
   scheduled: { label: "Scheduled", variant: "outline", className: "border-info text-info" },
+  published: { label: "Published", variant: "default", className: "bg-primary text-primary-foreground" },
   live: { label: "Live", variant: "default", className: "bg-success text-success-foreground" },
   expired: { label: "Expired", variant: "secondary" },
   failed: { label: "Failed", variant: "destructive" },
