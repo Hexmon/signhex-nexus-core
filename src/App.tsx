@@ -10,6 +10,8 @@ import Dashboard from "./pages/Dashboard";
 import ScheduleQueue from "./pages/ScheduleQueue";
 import Departments from "./pages/Departments";
 import Conversations from "./pages/Conversations";
+import Screens from "./pages/Screens";
+import MediaLibrary from "./pages/MediaLibrary";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,8 +35,8 @@ const App = () => (
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/operators" element={<div className="text-2xl font-semibold">Operators (Coming Soon)</div>} />
                   <Route path="/conversations" element={<Conversations />} />
-                  <Route path="/screens" element={<div className="text-2xl font-semibold">Screens (Coming Soon)</div>} />
-                  <Route path="/media" element={<div className="text-2xl font-semibold">Media Library (Coming Soon)</div>} />
+                  <Route path="/screens" element={<Screens />} />
+                  <Route path="/media" element={<MediaLibrary />} />
                   <Route path="/reports" element={<div className="text-2xl font-semibold">Reports & Logs (Coming Soon)</div>} />
                   <Route path="/settings" element={<div className="text-2xl font-semibold">Site Settings (Coming Soon)</div>} />
                   <Route path="*" element={<NotFound />} />

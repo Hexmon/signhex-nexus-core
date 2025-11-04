@@ -10,7 +10,8 @@ export type ContentType =
   | "pptx" 
   | "csv" 
   | "link"
-  | "html";
+  | "html"
+  | "document";
 
 interface ContentTypeBadgeProps {
   type: ContentType;
@@ -26,6 +27,7 @@ const typeConfig: Record<ContentType, { label: string; icon: typeof FileImage; c
   csv: { label: "CSV", icon: FileSpreadsheet, color: "text-green-600" },
   link: { label: "Link", icon: Link2, color: "text-cyan-600" },
   html: { label: "HTML", icon: File, color: "text-gray-600" },
+  document: { label: "Document", icon: FileText, color: "text-gray-700" },
 };
 
 export function ContentTypeBadge({ type, className }: ContentTypeBadgeProps) {
