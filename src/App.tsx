@@ -9,6 +9,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import Dashboard from "./pages/Dashboard";
 import ScheduleQueue from "./pages/ScheduleQueue";
 import Departments from "./pages/Departments";
+import Conversations from "./pages/Conversations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,7 +32,7 @@ const App = () => (
                   <Route path="/requests" element={<div className="text-2xl font-semibold">Requests (Coming Soon)</div>} />
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/operators" element={<div className="text-2xl font-semibold">Operators (Coming Soon)</div>} />
-                  <Route path="/conversations" element={<div className="text-2xl font-semibold">Conversations (Coming Soon)</div>} />
+                  <Route path="/conversations" element={<Conversations />} />
                   <Route path="/screens" element={<div className="text-2xl font-semibold">Screens (Coming Soon)</div>} />
                   <Route path="/media" element={<div className="text-2xl font-semibold">Media Library (Coming Soon)</div>} />
                   <Route path="/reports" element={<div className="text-2xl font-semibold">Reports & Logs (Coming Soon)</div>} />
