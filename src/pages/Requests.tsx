@@ -1,201 +1,174 @@
 import { useState } from "react";
-import { Search, Filter, CheckCircle, XCircle, Clock, Eye } from "lucide-react";
+import { Search, Filter, Plus, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { RequestDetailDrawer } from "@/components/requests/RequestDetailDrawer";
+import { KanbanBoard, KanbanRequest } from "@/components/requests/KanbanBoard";
+import { ComprehensiveDetailDrawer } from "@/components/requests/ComprehensiveDetailDrawer";
+import { RejectReasonModal } from "@/components/requests/RejectReasonModal";
+import { EmergencyTakeoverModal, TakeoverConfig } from "@/components/requests/EmergencyTakeoverModal";
+import { useToast } from "@/hooks/use-toast";
 
-type RequestStatus = "pending" | "approved" | "rejected";
-type RequestType = "content" | "schedule" | "screen" | "department";
-
-interface Request {
-  id: string;
-  title: string;
-  description: string;
-  type: RequestType;
-  status: RequestStatus;
-  submittedBy: {
-    name: string;
-    avatar?: string;
-    role: string;
-  };
-  submittedAt: string;
-  priority: "low" | "medium" | "high";
-  department?: string;
-}
-
-const mockRequests: Request[] = [
+// Mock data converted to Kanban format
+const mockKanbanRequests: KanbanRequest[] = [
   {
-    id: "REQ-001",
-    title: "New promotional video upload",
-    description: "Request to upload Q1 promotional video to lobby screens",
-    type: "content",
-    status: "pending",
-    submittedBy: {
-      name: "Sarah Johnson",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
-      role: "Marketing Manager",
-    },
-    submittedAt: "2024-03-15T10:30:00",
-    priority: "high",
+    id: "REQ-2024-001",
+    title: "Q1 Sales Campaign - Digital Signage",
     department: "Marketing",
-  },
-  {
-    id: "REQ-002",
-    title: "Schedule change for cafeteria display",
-    description: "Update lunch menu schedule for next week",
-    type: "schedule",
-    status: "pending",
-    submittedBy: {
-      name: "Michael Chen",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Michael",
-      role: "Cafeteria Manager",
-    },
-    submittedAt: "2024-03-15T09:15:00",
-    priority: "medium",
-    department: "Operations",
-  },
-  {
-    id: "REQ-003",
-    title: "Add new screen to reception",
-    description: "Install and configure new display screen at main reception",
-    type: "screen",
-    status: "approved",
-    submittedBy: {
-      name: "David Miller",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=David",
-      role: "IT Coordinator",
-    },
-    submittedAt: "2024-03-14T14:20:00",
+    owner: "Priya Sharma",
+    status: "submitted",
     priority: "high",
-    department: "IT",
+    mediaCount: 8,
+    targetScreens: 12,
+    thumbnail: "https://images.unsplash.com/photo-1557821552-17105176677c?w=400",
+    expiresAt: "Mar 31, 2024",
+    conflictCount: 0,
+    createdAt: "Feb 15, 2024 2:30 PM",
   },
   {
-    id: "REQ-004",
-    title: "Create HR department section",
-    description: "Request to create dedicated section for HR announcements",
-    type: "department",
-    status: "rejected",
-    submittedBy: {
-      name: "Emma Wilson",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emma",
-      role: "HR Director",
-    },
-    submittedAt: "2024-03-14T11:00:00",
-    priority: "low",
+    id: "REQ-2024-002",
+    title: "Employee Safety Training Video",
     department: "HR",
+    owner: "Anjali Mehta",
+    status: "in_progress",
+    priority: "medium",
+    mediaCount: 1,
+    targetScreens: 25,
+    thumbnail: "https://images.unsplash.com/photo-1552664730-d307ca884978?w=400",
+    createdAt: "Feb 10, 2024 11:45 AM",
   },
   {
-    id: "REQ-005",
-    title: "Emergency alert content",
-    description: "Upload emergency evacuation procedure slides",
-    type: "content",
-    status: "approved",
-    submittedBy: {
-      name: "John Smith",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
-      role: "Safety Officer",
-    },
-    submittedAt: "2024-03-13T16:45:00",
-    priority: "high",
-    department: "Safety",
+    id: "REQ-2024-003",
+    title: "Cafeteria Menu Display - Weekly Update",
+    department: "Facilities",
+    owner: "Rajesh Kumar",
+    status: "dept_review",
+    priority: "low",
+    mediaCount: 3,
+    targetScreens: 4,
+    conflictCount: 2,
+    createdAt: "Feb 18, 2024 9:15 AM",
+  },
+  {
+    id: "REQ-2024-004",
+    title: "Product Launch Announcement",
+    department: "Marketing",
+    owner: "Vikram Singh",
+    status: "admin_approval",
+    priority: "emergency",
+    mediaCount: 5,
+    targetScreens: 45,
+    thumbnail: "https://images.unsplash.com/photo-1556155092-490a1ba16284?w=400",
+    expiresAt: "Feb 25, 2024",
+    createdAt: "Feb 14, 2024 4:20 PM",
+  },
+  {
+    id: "REQ-2024-005",
+    title: "IT Department Town Hall Meeting",
+    department: "Engineering",
+    owner: "Neha Gupta",
+    status: "scheduled",
+    priority: "medium",
+    mediaCount: 2,
+    targetScreens: 8,
+    createdAt: "Feb 16, 2024 10:00 AM",
+  },
+  {
+    id: "REQ-2024-006",
+    title: "Holiday Promo Campaign - Completed",
+    department: "Marketing",
+    owner: "Sarah Chen",
+    status: "completed",
+    priority: "low",
+    mediaCount: 4,
+    targetScreens: 20,
+    createdAt: "Jan 15, 2024 3:45 PM",
   },
 ];
 
-const Requests = () => {
+export default function Requests() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<string>("all");
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<KanbanRequest | null>(null);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isTakeoverModalOpen, setIsTakeoverModalOpen] = useState(false);
+  const [requests, setRequests] = useState<KanbanRequest[]>(mockKanbanRequests);
+  const { toast } = useToast();
 
-  const filteredRequests = mockRequests.filter((request) => {
-    const matchesSearch =
-      request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.submittedBy.name.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredRequests = requests.filter((request) =>
+    searchQuery === "" ||
+    request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    request.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    request.owner.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-    const matchesTab =
-      activeTab === "all" ||
-      (activeTab === "pending" && request.status === "pending") ||
-      (activeTab === "approved" && request.status === "approved") ||
-      (activeTab === "rejected" && request.status === "rejected");
-
-    return matchesSearch && matchesTab;
-  });
-
-  const getStatusIcon = (status: RequestStatus) => {
-    switch (status) {
-      case "approved":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case "rejected":
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case "pending":
-        return <Clock className="h-4 w-4 text-yellow-500" />;
-    }
+  const handleStatusChange = (requestId: string, newStatus: any) => {
+    setRequests(requests.map(req => 
+      req.id === requestId ? { ...req, status: newStatus } : req
+    ));
+    toast({
+      title: "Status Updated",
+      description: `Request moved to ${newStatus.replace('_', ' ')}`,
+    });
   };
 
-  const getStatusBadge = (status: RequestStatus) => {
-    const variants = {
-      pending: "secondary",
-      approved: "default",
-      rejected: "destructive",
-    } as const;
-
-    return (
-      <Badge variant={variants[status]} className="capitalize">
-        {status}
-      </Badge>
-    );
+  const handleApprove = () => {
+    if (!selectedRequest) return;
+    handleStatusChange(selectedRequest.id, "scheduled");
+    toast({
+      title: "Request Approved",
+      description: `${selectedRequest.title} has been approved and scheduled.`,
+    });
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const colors = {
-      high: "bg-red-100 text-red-800 border-red-200",
-      medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      low: "bg-blue-100 text-blue-800 border-blue-200",
-    };
-
-    return (
-      <Badge variant="outline" className={colors[priority as keyof typeof colors]}>
-        {priority}
-      </Badge>
-    );
+  const handleReject = (reason: string) => {
+    if (!selectedRequest) return;
+    console.log("Rejecting request with reason:", reason);
+    handleStatusChange(selectedRequest.id, "submitted");
+    toast({
+      title: "Request Rejected",
+      description: `${selectedRequest.title} has been rejected and returned to department.`,
+      variant: "destructive",
+    });
   };
 
-  const handleViewRequest = (request: Request) => {
-    setSelectedRequest(request);
-    setDrawerOpen(true);
+  const handleRequestChanges = () => {
+    setIsRejectModalOpen(true);
   };
 
-  const handleApprove = (requestId: string) => {
-    console.log("Approving request:", requestId);
-    // Handle approval logic
+  const handleEmergencyTakeover = (config: TakeoverConfig) => {
+    console.log("Emergency takeover activated:", config);
+    toast({
+      title: "Emergency Takeover Activated",
+      description: `${config.title} is now live on ${config.scope === 'all' ? 'all screens' : 'selected screens'} for ${config.duration} minutes.`,
+      variant: "destructive",
+    });
   };
-
-  const handleReject = (requestId: string) => {
-    console.log("Rejecting request:", requestId);
-    // Handle rejection logic
-  };
-
-  const pendingCount = mockRequests.filter((r) => r.status === "pending").length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Requests</h1>
-        <p className="text-muted-foreground">
-          Review and manage content, schedule, and system requests
-        </p>
+    <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)]">
+      <div className="flex items-center justify-between flex-shrink-0">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Requests Workboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Drag and drop requests between workflow stages
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsTakeoverModalOpen(true)}>
+            <Zap className="mr-2 h-4 w-4" />
+            Emergency Takeover
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Request
+          </Button>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex gap-4 flex-shrink-0">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search requests..."
+            placeholder="Search requests by title, department, or owner..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -207,134 +180,40 @@ const Requests = () => {
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all">All Requests</TabsTrigger>
-          <TabsTrigger value="pending">
-            Pending
-            {pendingCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {pendingCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected</TabsTrigger>
-        </TabsList>
+      <div className="flex-1 overflow-hidden flex gap-4">
+        <div className="flex-1">
+          <KanbanBoard
+            requests={filteredRequests}
+            onRequestClick={(request) => setSelectedRequest(request)}
+            onStatusChange={handleStatusChange}
+          />
+        </div>
 
-        <TabsContent value={activeTab} className="space-y-4 mt-6">
-          {filteredRequests.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground">No requests found</p>
-              </CardContent>
-            </Card>
-          ) : (
-            filteredRequests.map((request) => (
-              <Card key={request.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex gap-4 flex-1">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={request.submittedBy.avatar} />
-                        <AvatarFallback>
-                          {request.submittedBy.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")}
-                        </AvatarFallback>
-                      </Avatar>
+        {selectedRequest && (
+          <ComprehensiveDetailDrawer
+            request={selectedRequest}
+            onClose={() => setSelectedRequest(null)}
+            onApprove={handleApprove}
+            onReject={() => setIsRejectModalOpen(true)}
+            onRequestChanges={handleRequestChanges}
+          />
+        )}
+      </div>
 
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              {getStatusIcon(request.status)}
-                              <h3 className="font-semibold">{request.title}</h3>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {request.description}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            {getStatusBadge(request.status)}
-                            {getPriorityBadge(request.priority)}
-                          </div>
-                        </div>
+      {/* Reject Reason Modal */}
+      <RejectReasonModal
+        open={isRejectModalOpen}
+        onOpenChange={setIsRejectModalOpen}
+        requestTitle={selectedRequest?.title || ""}
+        onConfirm={handleReject}
+      />
 
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>
-                            <strong>{request.submittedBy.name}</strong> •{" "}
-                            {request.submittedBy.role}
-                          </span>
-                          {request.department && (
-                            <>
-                              <span>•</span>
-                              <span>{request.department}</span>
-                            </>
-                          )}
-                          <span>•</span>
-                          <span>
-                            {new Date(request.submittedAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          <span>•</span>
-                          <Badge variant="outline" className="capitalize">
-                            {request.type}
-                          </Badge>
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewRequest(request)}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </Button>
-                          {request.status === "pending" && (
-                            <>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => handleApprove(request.id)}
-                              >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Approve
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleReject(request.id)}
-                              >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
-      </Tabs>
-
-      <RequestDetailDrawer
-        request={selectedRequest}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+      {/* Emergency Takeover Modal */}
+      <EmergencyTakeoverModal
+        open={isTakeoverModalOpen}
+        onOpenChange={setIsTakeoverModalOpen}
+        onConfirm={handleEmergencyTakeover}
       />
     </div>
   );
-};
-
-export default Requests;
+}
