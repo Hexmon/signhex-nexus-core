@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Save, Bell, Lock, Palette, Globe, Database, Zap } from "lucide-react";
+import { Save, Bell, Lock, Palette, Globe, Database, Zap, Key, Webhook, Shield, FileBarChart } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const Settings = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [twoFactorAuth, setTwoFactorAuth] = useState(false);
@@ -66,6 +68,10 @@ const Settings = () => {
           <TabsTrigger value="advanced">
             <Zap className="mr-2 h-4 w-4" />
             Advanced
+          </TabsTrigger>
+          <TabsTrigger value="enterprise">
+            <Shield className="mr-2 h-4 w-4" />
+            Enterprise
           </TabsTrigger>
         </TabsList>
 
@@ -358,6 +364,78 @@ const Settings = () => {
                     <SelectItem value="error">Error (Critical Only)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="enterprise" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Enterprise Features</CardTitle>
+              <CardDescription>
+                Advanced enterprise capabilities and integrations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div 
+                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => navigate('/api-keys')}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Key className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">API Key Management</h3>
+                    <p className="text-sm text-muted-foreground">Generate and manage API keys with scoped permissions</p>
+                  </div>
+                </div>
+              </div>
+
+              <div 
+                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => navigate('/webhooks')}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Webhook className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Webhooks Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Configure webhooks with delivery logs and test sends</p>
+                  </div>
+                </div>
+              </div>
+
+              <div 
+                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => navigate('/sso-config')}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Shield className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">SSO / OIDC Setup</h3>
+                    <p className="text-sm text-muted-foreground">Configure Single Sign-On authentication</p>
+                  </div>
+                </div>
+              </div>
+
+              <div 
+                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => navigate('/proof-of-play')}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <FileBarChart className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Proof of Play Reports</h3>
+                    <p className="text-sm text-muted-foreground">Detailed playback logs and compliance reporting</p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

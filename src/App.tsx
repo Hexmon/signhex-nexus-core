@@ -16,6 +16,10 @@ import Requests from "./pages/Requests";
 import Operators from "./pages/Operators";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import ApiKeys from "./pages/ApiKeys";
+import Webhooks from "./pages/Webhooks";
+import SsoConfig from "./pages/SsoConfig";
+import ProofOfPlay from "./pages/ProofOfPlay";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +47,10 @@ const App = () => (
                   <Route path="/media" element={<MediaLibrary />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/api-keys" element={<ApiKeys />} />
+                  <Route path="/webhooks" element={<Webhooks />} />
+                  <Route path="/sso-config" element={<SsoConfig />} />
+                  <Route path="/proof-of-play" element={<ProofOfPlay />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
