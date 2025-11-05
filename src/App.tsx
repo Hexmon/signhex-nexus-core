@@ -12,6 +12,10 @@ import Departments from "./pages/Departments";
 import Conversations from "./pages/Conversations";
 import Screens from "./pages/Screens";
 import MediaLibrary from "./pages/MediaLibrary";
+import Requests from "./pages/Requests";
+import Operators from "./pages/Operators";
+import Reports from "./pages/Reports";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,14 +35,14 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/schedule" element={<ScheduleQueue />} />
-                  <Route path="/requests" element={<div className="text-2xl font-semibold">Requests (Coming Soon)</div>} />
+                  <Route path="/requests" element={<Requests />} />
                   <Route path="/departments" element={<Departments />} />
-                  <Route path="/operators" element={<div className="text-2xl font-semibold">Operators (Coming Soon)</div>} />
+                  <Route path="/operators" element={<Operators />} />
                   <Route path="/conversations" element={<Conversations />} />
                   <Route path="/screens" element={<Screens />} />
                   <Route path="/media" element={<MediaLibrary />} />
-                  <Route path="/reports" element={<div className="text-2xl font-semibold">Reports & Logs (Coming Soon)</div>} />
-                  <Route path="/settings" element={<div className="text-2xl font-semibold">Site Settings (Coming Soon)</div>} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
