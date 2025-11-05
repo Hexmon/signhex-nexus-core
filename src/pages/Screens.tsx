@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Monitor, Plus, MapPin, Power, Settings, Trash2, Activity } from "lucide-react";
+import { Search, Monitor, Plus, MapPin, Power, Settings, Trash2, Activity, Wifi, LayoutGrid } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { PairDeviceModal } from "@/components/screens/PairDeviceModal";
+import { ScreenHealthDashboard } from "@/components/screens/ScreenHealthDashboard";
+import { FrameLayoutEditor } from "@/components/screens/FrameLayoutEditor";
+import { BulkActionsBar } from "@/components/screens/BulkActionsBar";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Screen = {
   id: string;
@@ -114,6 +119,27 @@ export default function Screens() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isPairDeviceOpen, setIsPairDeviceOpen] = useState(false);
+  const [isFrameEditorOpen, setIsFrameEditorOpen] = useState(false);
+  const [selectedScreenForHealth, setSelectedScreenForHealth] = useState<{id: string, name: string} | null>(null);
+  const [selectedScreens, setSelectedScreens] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"grid" | "health">("grid");
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedScreens(filteredScreens.map(s => s.id));
+    } else {
+      setSelectedScreens([]);
+    }
+  };
+
+  const handleSelectScreen = (screenId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedScreens([...selectedScreens, screenId]);
+    } else {
+      setSelectedScreens(selectedScreens.filter(id => id !== screenId));
+    }
+  };
 
   const filteredScreens = mockScreens.filter(screen => {
     const matchesSearch = search === "" || 
@@ -134,6 +160,23 @@ export default function Screens() {
     maintenance: mockScreens.filter(s => s.status === "maintenance").length,
   };
 
+  if (viewMode === "health" && selectedScreenForHealth) {
+    return (
+      <div className="space-y-4">
+        <Button variant="outline" onClick={() => {
+          setViewMode("grid");
+          setSelectedScreenForHealth(null);
+        }}>
+          ← Back to Screens
+        </Button>
+        <ScreenHealthDashboard
+          screenId={selectedScreenForHealth.id}
+          screenName={selectedScreenForHealth.name}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -143,14 +186,23 @@ export default function Screens() {
             Manage and monitor all display screens across locations
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Screen
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsPairDeviceOpen(true)}>
+            <Wifi className="h-4 w-4 mr-2" />
+            Pair Device
+          </Button>
+          <Button variant="outline" onClick={() => setIsFrameEditorOpen(true)}>
+            <LayoutGrid className="h-4 w-4 mr-2" />
+            Frame Editor
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Screen
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Screen</DialogTitle>
               <DialogDescription>
@@ -217,6 +269,7 @@ export default function Screens() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -270,6 +323,13 @@ export default function Screens() {
       {/* Filters and Search */}
       <Card className="p-4">
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedScreens.length === filteredScreens.length && filteredScreens.length > 0}
+              onCheckedChange={handleSelectAll}
+            />
+            <span className="text-sm text-muted-foreground">Select All</span>
+          </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -297,6 +357,10 @@ export default function Screens() {
             <div className="space-y-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={selectedScreens.includes(screen.id)}
+                    onCheckedChange={(checked) => handleSelectScreen(screen.id, checked as boolean)}
+                  />
                   <div className={`p-2 rounded-lg ${
                     screen.status === "online" ? "bg-green-500/10" :
                     screen.status === "offline" ? "bg-red-500/10" :
@@ -344,9 +408,17 @@ export default function Screens() {
               </div>
 
               <div className="flex gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Settings className="h-3 w-3 mr-1" />
-                  Configure
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setSelectedScreenForHealth({ id: screen.id, name: screen.name });
+                    setViewMode("health");
+                  }}
+                >
+                  <Activity className="h-3 w-3 mr-1" />
+                  Health
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1">
                   <Power className="h-3 w-3 mr-1" />
@@ -360,6 +432,13 @@ export default function Screens() {
           </Card>
         ))}
       </div>
+
+      <PairDeviceModal open={isPairDeviceOpen} onOpenChange={setIsPairDeviceOpen} />
+      <FrameLayoutEditor open={isFrameEditorOpen} onOpenChange={setIsFrameEditorOpen} />
+      <BulkActionsBar
+        selectedCount={selectedScreens.length}
+        onClearSelection={() => setSelectedScreens([])}
+      />
     </div>
   );
 }
