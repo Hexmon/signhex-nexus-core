@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
+import Home from "./pages/Home";
+import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ScheduleQueue from "./pages/ScheduleQueue";
 import Departments from "./pages/Departments";
@@ -30,33 +32,42 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <SidebarProvider defaultOpen>
-          <div className="min-h-screen flex w-full bg-background">
-            <AppSidebar />
-            <div className="flex-1 flex flex-col w-full">
-              <AppHeader />
-              <main className="flex-1 p-6 overflow-auto">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/schedule" element={<ScheduleQueue />} />
-                  <Route path="/requests" element={<Requests />} />
-                  <Route path="/departments" element={<Departments />} />
-                  <Route path="/operators" element={<Operators />} />
-                  <Route path="/conversations" element={<Conversations />} />
-                  <Route path="/screens" element={<Screens />} />
-                  <Route path="/media" element={<MediaLibrary />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/api-keys" element={<ApiKeys />} />
-                  <Route path="/webhooks" element={<Webhooks />} />
-                  <Route path="/sso-config" element={<SsoConfig />} />
-                  <Route path="/proof-of-play" element={<ProofOfPlay />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Auth />} />
+
+          {/* Protected Routes with Layout */}
+          <Route path="/*" element={
+            <SidebarProvider defaultOpen>
+              <div className="min-h-screen flex w-full bg-background">
+                <AppSidebar />
+                <div className="flex-1 flex flex-col w-full">
+                  <AppHeader />
+                  <main className="flex-1 p-6 overflow-auto">
+                    <Routes>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/schedule" element={<ScheduleQueue />} />
+                      <Route path="/requests" element={<Requests />} />
+                      <Route path="/departments" element={<Departments />} />
+                      <Route path="/operators" element={<Operators />} />
+                      <Route path="/conversations" element={<Conversations />} />
+                      <Route path="/screens" element={<Screens />} />
+                      <Route path="/media" element={<MediaLibrary />} />
+                      <Route path="/reports" element={<Reports />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="/api-keys" element={<ApiKeys />} />
+                      <Route path="/webhooks" element={<Webhooks />} />
+                      <Route path="/sso-config" element={<SsoConfig />} />
+                      <Route path="/proof-of-play" element={<ProofOfPlay />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </main>
+                </div>
+              </div>
+            </SidebarProvider>
+          } />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
