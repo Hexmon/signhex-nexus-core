@@ -26,7 +26,7 @@ import {
 import signhexLogo from "@/assets/signhex-logo.png";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
   { title: "Requests", url: "/requests", icon: MessageSquare },
   { title: "Departments", url: "/departments", icon: Building2 },
