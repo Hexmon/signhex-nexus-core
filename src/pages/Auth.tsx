@@ -7,40 +7,56 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authApi } from "@/api/domains/auth";
+import { ApiError } from "@/api/apiClient";
+import { useAppDispatch } from "@/store/hooks";
+import { setCredentials } from "@/store/authSlice";
 
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const dispatch = useAppDispatch();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("login-email") ?? "");
+    const password = String(formData.get("login-password") ?? "");
+
+    try {
+      const auth = await authApi.login({ email, password });
+      dispatch(setCredentials({ token: auth.token, user: auth.user }));
+
       toast({
         title: "Login successful",
         description: "Welcome back to Signhex CMS",
       });
       navigate("/dashboard");
-    }, 1000);
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : "Unable to login right now.";
+      toast({
+        title: "Login failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate signup
-    setTimeout(() => {
-      setIsLoading(false);
-      toast({
-        title: "Account created",
-        description: "Your account has been created successfully",
-      });
-      navigate("/dashboard");
-    }, 1000);
+    toast({
+      title: "Signup request",
+      description: "Self-service signup is disabled. Please ask an admin to invite you.",
+    });
+    setIsLoading(false);
   };
 
   return (
@@ -80,6 +96,7 @@ const Auth = () => {
                     <Label htmlFor="login-email">Email</Label>
                     <Input
                       id="login-email"
+                      name="login-email"
                       type="email"
                       placeholder="name@company.com"
                       required
@@ -96,6 +113,7 @@ const Auth = () => {
                     </div>
                     <Input
                       id="login-password"
+                      name="login-password"
                       type="password"
                       required
                       disabled={isLoading}
@@ -124,6 +142,7 @@ const Auth = () => {
                     <Label htmlFor="signup-name">Full Name</Label>
                     <Input
                       id="signup-name"
+                      name="signup-name"
                       type="text"
                       placeholder="John Doe"
                       required
@@ -135,6 +154,7 @@ const Auth = () => {
                     <Label htmlFor="signup-email">Email</Label>
                     <Input
                       id="signup-email"
+                      name="signup-email"
                       type="email"
                       placeholder="name@company.com"
                       required
@@ -146,6 +166,7 @@ const Auth = () => {
                     <Label htmlFor="signup-password">Password</Label>
                     <Input
                       id="signup-password"
+                      name="signup-password"
                       type="password"
                       placeholder="Create a strong password"
                       required
@@ -157,6 +178,7 @@ const Auth = () => {
                     <Label htmlFor="signup-confirm">Confirm Password</Label>
                     <Input
                       id="signup-confirm"
+                      name="signup-confirm"
                       type="password"
                       placeholder="Confirm your password"
                       required
@@ -178,7 +200,7 @@ const Auth = () => {
         {/* Back to Home */}
         <div className="text-center">
           <Button variant="ghost" onClick={() => navigate("/")}>
-            ← Back to Home
+            Back to Home
           </Button>
         </div>
       </div>

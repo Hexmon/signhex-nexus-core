@@ -1,4 +1,4 @@
-import { Bell, Search, User } from "lucide-react";
+import { Bell, Search, User, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,8 +12,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useNavigate } from "react-router-dom";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { clearAuth } from "@/store/authSlice";
+
+const getInitials = (name?: string, email?: string) => {
+  if (name) {
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase())
+      .join("")
+      .slice(0, 2);
+  }
+  if (email) {
+    return email.slice(0, 2).toUpperCase();
+  }
+  return "SA";
+};
 
 export function AppHeader() {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector((state) => state.auth.user);
+
+  const handleLogout = () => {
+    dispatch(clearAuth());
+    navigate("/login");
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center gap-4 px-4">
@@ -45,12 +72,22 @@ export function AppHeader() {
               <Button variant="ghost" className="gap-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-primary text-primary-foreground">
-                    SA
+                    {getInitials(
+                      `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim(),
+                      user?.email,
+                    )}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden md:flex flex-col items-start text-xs">
-                  <span className="font-medium">Super Admin</span>
-                  <span className="text-muted-foreground">admin@signhex.com</span>
+                  <span className="font-medium">
+                    {user
+                      ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() ||
+                        "Signed in"
+                      : "Super Admin"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {user?.email ?? "admin@signhex.com"}
+                  </span>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -66,7 +103,8 @@ export function AppHeader() {
                 Notifications
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem className="text-destructive" onSelect={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>
             </DropdownMenuContent>

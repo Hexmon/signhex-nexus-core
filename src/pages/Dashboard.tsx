@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Monitor, HardDrive, Calendar, Activity, Plus, AlertTriangle } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,46 +20,82 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import { metricsApi } from "@/api/domains/metrics";
+import { ApiError } from "@/api/apiClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAppSelector } from "@/store/hooks";
 
 export default function Dashboard() {
   const [selectedKPI, setSelectedKPI] = useState<string | null>(null);
+  const { toast } = useToast();
+  const authToken = useAppSelector((state) => state.auth.token);
 
-  const kpiData = [
-    { 
-      id: "total-screens",
-      title: "Total Screens", 
-      value: "247", 
-      subtitle: "Registered devices",
-      icon: Monitor,
-      trend: { value: "+12 this month", isPositive: true }
-    },
-    { 
-      id: "online-screens",
-      title: "Online Screens", 
-      value: "231", 
-      subtitle: "93.5% uptime",
-      icon: Activity,
-      variant: "success" as const,
-      trend: { value: "+5 since yesterday", isPositive: true }
-    },
-    { 
-      id: "storage",
-      title: "Media Storage", 
-      value: "2.4 TB", 
-      subtitle: "of 5 TB quota used",
-      icon: HardDrive,
-      variant: "warning" as const,
-      trend: { value: "48% capacity", isPositive: true }
-    },
-    { 
-      id: "active-scheduled",
-      title: "Active Scheduled", 
-      value: "89", 
-      subtitle: "Screens running playlists",
-      icon: Calendar,
-      trend: { value: "36% of online", isPositive: true }
-    },
-  ];
+  const {
+    data: overview,
+    isLoading: isMetricsLoading,
+    isError: isMetricsError,
+    error: metricsError,
+  } = useQuery({
+    queryKey: ["metrics-overview"],
+    queryFn: metricsApi.getOverview,
+    enabled: Boolean(authToken),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (isMetricsError) {
+      const message =
+        metricsError instanceof ApiError
+          ? metricsError.message
+          : "We couldn't load metrics right now.";
+      toast({
+        title: "Metrics unavailable",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  }, [isMetricsError, metricsError, toast]);
+
+  const kpiData = useMemo(() => {
+    const totals = overview?.totals ?? {};
+    return [
+      {
+        id: "total-screens",
+        title: "Total Screens",
+        value: isMetricsLoading ? "…" : String(totals.screens ?? totals.total_screens ?? 0),
+        subtitle: "Registered devices",
+        icon: Monitor,
+        trend: { value: "", isPositive: true },
+      },
+      {
+        id: "online-screens",
+        title: "Online Screens",
+        value: isMetricsLoading ? "…" : String(totals.online_screens ?? totals.online ?? 0),
+        subtitle: "Active heartbeat in last 5m",
+        icon: Activity,
+        variant: "success" as const,
+        trend: { value: "", isPositive: true },
+      },
+      {
+        id: "storage",
+        title: "Media Storage",
+        value: isMetricsLoading ? "…" : `${totals.media_storage_used ?? 0} GB`,
+        subtitle: "Used capacity",
+        icon: HardDrive,
+        variant: "warning" as const,
+        trend: { value: "", isPositive: true },
+      },
+      {
+        id: "active-scheduled",
+        title: "Active Scheduled",
+        value: isMetricsLoading ? "…" : String(totals.active_schedules ?? 0),
+        subtitle: "Screens running playlists",
+        icon: Calendar,
+        trend: { value: "", isPositive: true },
+      },
+    ];
+  }, [overview, isMetricsLoading]);
 
   const pendingRequests = [
     { id: 1, department: "Marketing", title: "Q1 Campaign Assets", status: "in_review" as const, priority: "High", dueIn: "2 hours" },
