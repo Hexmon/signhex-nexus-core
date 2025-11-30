@@ -11,6 +11,9 @@ import { authApi } from "@/api/domains/auth";
 import { ApiError } from "@/api/apiClient";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
+import { getCookie } from "@/lib/cookies";
+import { isValidEmail, isSecurePassword } from "@/lib/validation";
+import { STORAGE_KEYS } from "@/lib/constants";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -26,15 +29,41 @@ const Auth = () => {
     const email = String(formData.get("login-email") ?? "");
     const password = String(formData.get("login-password") ?? "");
 
+    if (!isValidEmail(email)) {
+      toast({
+        title: "Invalid email",
+        description: "Enter a valid email address.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isSecurePassword(password)) {
+      toast({
+        title: "Weak password",
+        description: "Password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const auth = await authApi.login({ email, password });
-      dispatch(setCredentials({ token: auth.token, user: auth.user }));
+      const csrfToken = auth.csrf_token ?? getCookie("csrf_token");
+
+      dispatch(setCredentials({ token: auth.token, user: auth.user, csrfToken }));
 
       toast({
         title: "Login successful",
         description: "Welcome back to Signhex CMS",
       });
-      navigate("/dashboard");
+      const redirectPath = sessionStorage.getItem(STORAGE_KEYS.postLoginRedirect);
+      if (redirectPath) {
+        sessionStorage.removeItem(STORAGE_KEYS.postLoginRedirect);
+      }
+      navigate(redirectPath || "/dashboard");
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : "Unable to login right now.";
@@ -101,6 +130,7 @@ const Auth = () => {
                       placeholder="name@company.com"
                       required
                       disabled={isLoading}
+                      defaultValue="admin@hexmon.local"
                     />
                   </div>
                   
@@ -117,6 +147,7 @@ const Auth = () => {
                       type="password"
                       required
                       disabled={isLoading}
+                      defaultValue="ChangeMe123!"
                     />
                   </div>
                 </CardContent>

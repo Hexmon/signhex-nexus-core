@@ -17,6 +17,12 @@ export const schedulesApi = {
       body: payload,
     }),
 
+  getById: (scheduleId: string) =>
+    apiClient.request<Schedule>({
+      path: `/v1/schedules/${scheduleId}`,
+      method: "GET",
+    }),
+
   update: (scheduleId: string, payload: Partial<SchedulePayload>) =>
     apiClient.request<Schedule>({
       path: `/v1/schedules/${scheduleId}`,
@@ -62,5 +68,11 @@ export const schedulesApi = {
       path: `/v1/publishes/${publishId}/targets/${targetId}`,
       method: "PATCH",
       body: payload,
+    }),
+
+  remove: (scheduleId: string) =>
+    apiClient.request<void>({
+      path: `/v1/schedules/${scheduleId}`,
+      method: "DELETE",
     }),
 };

@@ -17,6 +17,13 @@ export interface MediaCompletionPayload {
 }
 
 export const mediaApi = {
+  createMetadata: (payload: { filename: string; content_type: string; size?: number; type?: string }) =>
+    apiClient.request<MediaAsset>({
+      path: "/v1/media",
+      method: "POST",
+      body: payload,
+    }),
+
   presignUpload: (payload: PresignPayload) =>
     apiClient.request<{
       upload_url: string;
@@ -48,5 +55,11 @@ export const mediaApi = {
     apiClient.request<MediaAsset>({
       path: `/v1/media/${mediaId}`,
       method: "GET",
+    }),
+
+  remove: (mediaId: string) =>
+    apiClient.request<void>({
+      path: `/v1/media/${mediaId}`,
+      method: "DELETE",
     }),
 };

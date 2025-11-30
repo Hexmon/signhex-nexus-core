@@ -48,6 +48,8 @@ const ApiKeys = () => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const authToken = useAppSelector((state) => state.auth.token);
+  const user = useAppSelector((state) => state.auth.user);
+  const isAuthenticated = Boolean(authToken || user);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyName, setKeyName] = useState("");
@@ -58,7 +60,7 @@ const ApiKeys = () => {
   const { data: apiKeys, isLoading, isFetching } = useQuery({
     queryKey: ["api-keys"],
     queryFn: apiKeysApi.list,
-    enabled: Boolean(authToken),
+    enabled: isAuthenticated,
     staleTime: 30_000,
   });
 
@@ -158,7 +160,7 @@ const ApiKeys = () => {
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button disabled={!authToken}>
+            <Button disabled={!isAuthenticated}>
               <Plus className="mr-2 h-4 w-4" />
               Create API Key
             </Button>
@@ -227,7 +229,7 @@ const ApiKeys = () => {
             Active API Keys
           </CardTitle>
           <CardDescription>
-            {authToken
+            {isAuthenticated
               ? "Manage your API keys and their permissions"
               : "Sign in to view and manage API keys."}
           </CardDescription>

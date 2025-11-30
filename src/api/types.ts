@@ -11,12 +11,13 @@ export interface User {
 }
 
 export interface AuthResponse {
-  token: string;
+  token?: string;
+  csrf_token?: string;
   expiresAt?: string;
   user: User;
 }
 
-export interface PaginationParams {
+export interface PaginationParams extends Record<string, string | number | boolean | undefined | null> {
   page?: number;
   limit?: number;
 }
@@ -118,6 +119,59 @@ export interface Department {
   id: string;
   name: string;
   description?: string | null;
+}
+
+export interface AuditLog {
+  id: string;
+  user_id?: string;
+  resource_type?: string;
+  action?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface Notification {
+  id: string;
+  title?: string;
+  body?: string;
+  read?: boolean;
+  created_at?: string;
+}
+
+export interface Presentation {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScreenGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface DevicePairing {
+  id: string;
+  pairing_code?: string;
+  device_id?: string;
+  status?: string;
+  created_at?: string;
+}
+
+export interface DeviceCommand {
+  id: string;
+  type: string;
+  payload?: Record<string, unknown>;
+  status?: string;
+  created_at?: string;
+}
+
+export interface EmergencyStatus {
+  id: string;
+  status: string;
+  triggered_at?: string;
 }
 
 export interface Screen {

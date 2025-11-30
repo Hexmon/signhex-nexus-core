@@ -12,6 +12,7 @@ import {
 import storageSession from "redux-persist/lib/storage/session";
 import { rootReducer } from "./rootReducer";
 import { apiClient } from "@/api/apiClient";
+import { getCookie } from "@/lib/cookies";
 
 const createNoopStorage = () => ({
   getItem: async () => null,
@@ -45,6 +46,9 @@ export const persistor = persistStore(store);
 
 apiClient.setAuthTokenProvider(() => store.getState().auth.token);
 apiClient.setApiKeyProvider(() => store.getState().auth.apiKey);
+apiClient.setCsrfTokenProvider(
+  () => store.getState().auth.csrfToken ?? getCookie("csrf_token"),
+);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

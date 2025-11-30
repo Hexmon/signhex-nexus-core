@@ -30,6 +30,8 @@ export default function Dashboard() {
   const [selectedKPI, setSelectedKPI] = useState<string | null>(null);
   const { toast } = useToast();
   const authToken = useAppSelector((state) => state.auth.token);
+  const user = useAppSelector((state) => state.auth.user);
+  const isAuthenticated = Boolean(authToken || user);
 
   const {
     data: overview,
@@ -39,7 +41,7 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ["metrics-overview"],
     queryFn: metricsApi.getOverview,
-    enabled: Boolean(authToken),
+    enabled: isAuthenticated,
     staleTime: 30_000,
   });
 

@@ -31,9 +31,12 @@ export class ApiError extends Error {
 type TokenProvider = () => string | undefined | null;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const baseURL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "http://localhost:3000";
+const envBase =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || undefined;
+const inferredHttps =
+  typeof window !== "undefined" && window.location.protocol === "https:" ? window.location.origin : undefined;
+const baseURL = envBase || inferredHttps || "http://localhost:3000";
+const POST_LOGIN_REDIRECT_KEY = "postLoginRedirect";
 
 const sanitizeMessage = (message: unknown) => {
   if (typeof message === "string") return message;
@@ -43,6 +46,8 @@ const sanitizeMessage = (message: unknown) => {
 export class ApiClient {
   private authTokenProvider: TokenProvider = () => undefined;
   private apiKeyProvider: TokenProvider = () => undefined;
+  private csrfTokenProvider: TokenProvider = () => undefined;
+  private inflightGetRequests = new Map<string, Promise<unknown>>();
 
   setAuthTokenProvider(getToken: TokenProvider) {
     this.authTokenProvider = getToken;
@@ -50,6 +55,10 @@ export class ApiClient {
 
   setApiKeyProvider(getKey: TokenProvider) {
     this.apiKeyProvider = getKey;
+  }
+
+  setCsrfTokenProvider(getToken: TokenProvider) {
+    this.csrfTokenProvider = getToken;
   }
 
   async request<TResponse, TBody = unknown>(
@@ -60,6 +69,7 @@ export class ApiClient {
 
     const queryString = this.buildQuery(options.query);
     const url = `${baseURL}${options.path}${queryString}`;
+    const method = options.method ?? "GET";
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
@@ -77,49 +87,87 @@ export class ApiClient {
       headers["X-API-Key"] = apiKey;
     }
 
+    const csrfToken = this.csrfTokenProvider();
+    const isStateChanging = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    if (isStateChanging && csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+
     // Prevent caching sensitive responses
     headers["Cache-Control"] = "no-store";
 
+    const requestKey = method === "GET" ? `${method}:${url}` : undefined;
+
+    if (requestKey && this.inflightGetRequests.has(requestKey)) {
+      return this.inflightGetRequests.get(requestKey) as Promise<TResponse>;
+    }
+
+    const executeRequest = async () => {
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+          signal: options.signal ?? controller.signal,
+          credentials: "include",
+        });
+
+        const contentType = response.headers.get("content-type");
+        const isJson = contentType?.includes("application/json");
+        const payload = isJson ? await response.json() : await response.text();
+
+        if (!response.ok) {
+          throw new ApiError({
+            status: response.status,
+            message:
+              (isJson && typeof payload?.error === "string" && payload.error) ||
+              sanitizeMessage(payload),
+            details: isJson ? payload : undefined,
+          });
+        }
+
+        return payload as TResponse;
+      } catch (error) {
+        if (error instanceof ApiError) {
+          // Handle expired/invalid sessions centrally.
+          if (typeof window !== "undefined" && error.status === 401 && !options.path.includes("/auth/login")) {
+            try {
+              sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname + window.location.search);
+            } catch {
+              // ignore storage errors
+            }
+            window.location.replace("/login");
+          }
+
+          throw error;
+        }
+
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new ApiError({
+            status: 408,
+            message: "Request timed out. Please retry.",
+          });
+        }
+
+        const message = error instanceof Error ? error.message : "Network error";
+        throw new ApiError({ status: 500, message: sanitizeMessage(message) });
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const requestPromise = executeRequest();
+
+    if (requestKey) {
+      this.inflightGetRequests.set(requestKey, requestPromise);
+    }
+
     try {
-      const response = await fetch(url, {
-        method: options.method ?? "GET",
-        headers,
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        signal: options.signal ?? controller.signal,
-        credentials: "include",
-      });
-
-      const contentType = response.headers.get("content-type");
-      const isJson = contentType?.includes("application/json");
-      const payload = isJson ? await response.json() : await response.text();
-
-      if (!response.ok) {
-        throw new ApiError({
-          status: response.status,
-          message:
-            (isJson && typeof payload?.error === "string" && payload.error) ||
-            sanitizeMessage(payload),
-          details: isJson ? payload : undefined,
-        });
-      }
-
-      return payload as TResponse;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new ApiError({
-          status: 408,
-          message: "Request timed out. Please retry.",
-        });
-      }
-
-      const message = error instanceof Error ? error.message : "Network error";
-      throw new ApiError({ status: 500, message: sanitizeMessage(message) });
+      return await requestPromise;
     } finally {
-      clearTimeout(timeout);
+      if (requestKey) {
+        this.inflightGetRequests.delete(requestKey);
+      }
     }
   }
 

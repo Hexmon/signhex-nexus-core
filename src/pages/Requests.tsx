@@ -1,219 +1,195 @@
-import { useState } from "react";
-import { Search, Filter, Plus, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { KanbanBoard, KanbanRequest } from "@/components/requests/KanbanBoard";
-import { ComprehensiveDetailDrawer } from "@/components/requests/ComprehensiveDetailDrawer";
-import { RejectReasonModal } from "@/components/requests/RejectReasonModal";
-import { EmergencyTakeoverModal, TakeoverConfig } from "@/components/requests/EmergencyTakeoverModal";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { requestsApi, type RequestPayload } from "@/api/domains/requests";
+import type { RequestTicket } from "@/api/types";
+import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Mock data converted to Kanban format
-const mockKanbanRequests: KanbanRequest[] = [
-  {
-    id: "REQ-2024-001",
-    title: "Q1 Sales Campaign - Digital Signage",
-    department: "Marketing",
-    owner: "Priya Sharma",
-    status: "submitted",
-    priority: "high",
-    mediaCount: 8,
-    targetScreens: 12,
-    thumbnail: "https://images.unsplash.com/photo-1557821552-17105176677c?w=400",
-    expiresAt: "Mar 31, 2024",
-    conflictCount: 0,
-    createdAt: "Feb 15, 2024 2:30 PM",
-  },
-  {
-    id: "REQ-2024-002",
-    title: "Employee Safety Training Video",
-    department: "HR",
-    owner: "Anjali Mehta",
-    status: "in_progress",
-    priority: "medium",
-    mediaCount: 1,
-    targetScreens: 25,
-    thumbnail: "https://images.unsplash.com/photo-1552664730-d307ca884978?w=400",
-    createdAt: "Feb 10, 2024 11:45 AM",
-  },
-  {
-    id: "REQ-2024-003",
-    title: "Cafeteria Menu Display - Weekly Update",
-    department: "Facilities",
-    owner: "Rajesh Kumar",
-    status: "dept_review",
-    priority: "low",
-    mediaCount: 3,
-    targetScreens: 4,
-    conflictCount: 2,
-    createdAt: "Feb 18, 2024 9:15 AM",
-  },
-  {
-    id: "REQ-2024-004",
-    title: "Product Launch Announcement",
-    department: "Marketing",
-    owner: "Vikram Singh",
-    status: "admin_approval",
-    priority: "emergency",
-    mediaCount: 5,
-    targetScreens: 45,
-    thumbnail: "https://images.unsplash.com/photo-1556155092-490a1ba16284?w=400",
-    expiresAt: "Feb 25, 2024",
-    createdAt: "Feb 14, 2024 4:20 PM",
-  },
-  {
-    id: "REQ-2024-005",
-    title: "IT Department Town Hall Meeting",
-    department: "Engineering",
-    owner: "Neha Gupta",
-    status: "scheduled",
-    priority: "medium",
-    mediaCount: 2,
-    targetScreens: 8,
-    createdAt: "Feb 16, 2024 10:00 AM",
-  },
-  {
-    id: "REQ-2024-006",
-    title: "Holiday Promo Campaign - Completed",
-    department: "Marketing",
-    owner: "Sarah Chen",
-    status: "completed",
-    priority: "low",
-    mediaCount: 4,
-    targetScreens: 20,
-    createdAt: "Jan 15, 2024 3:45 PM",
-  },
-];
+const statusColors: Record<string, string> = {
+  OPEN: "bg-blue-500/10 text-blue-700",
+  IN_PROGRESS: "bg-amber-500/10 text-amber-700",
+  CLOSED: "bg-emerald-500/10 text-emerald-700",
+};
 
 export default function Requests() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRequest, setSelectedRequest] = useState<KanbanRequest | null>(null);
-  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [isTakeoverModalOpen, setIsTakeoverModalOpen] = useState(false);
-  const [requests, setRequests] = useState<KanbanRequest[]>(mockKanbanRequests);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [payload, setPayload] = useState<RequestPayload>({ title: "", description: "", priority: "MEDIUM" });
 
-  const filteredRequests = requests.filter((request) =>
-    searchQuery === "" ||
-    request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    request.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    request.owner.toLowerCase().includes(searchQuery.toLowerCase())
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["requests"],
+    queryFn: () => requestsApi.list({ page: 1, limit: 100 }),
+  });
+
+  const requests = useMemo(() => data?.items ?? [], [data]);
+
+  const createRequest = useMutation({
+    mutationFn: (body: RequestPayload) => requestsApi.create(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
+      toast({ title: "Request submitted", description: "Your content request has been created." });
+      setIsCreateOpen(false);
+      setPayload({ title: "", description: "", priority: "MEDIUM" });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : "Unable to create request.";
+      toast({ title: "Create failed", description: message, variant: "destructive" });
+    },
+  });
+
+  const filtered = useMemo(
+    () =>
+      requests.filter((req) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          q === "" ||
+          req.title.toLowerCase().includes(q) ||
+          (req.description || "").toLowerCase().includes(q) ||
+          (req.priority || "").toLowerCase().includes(q)
+        );
+      }),
+    [requests, searchQuery]
   );
 
-  const handleStatusChange = (requestId: string, newStatus: any) => {
-    setRequests(requests.map(req => 
-      req.id === requestId ? { ...req, status: newStatus } : req
-    ));
-    toast({
-      title: "Status Updated",
-      description: `Request moved to ${newStatus.replace('_', ' ')}`,
-    });
-  };
-
-  const handleApprove = () => {
-    if (!selectedRequest) return;
-    handleStatusChange(selectedRequest.id, "scheduled");
-    toast({
-      title: "Request Approved",
-      description: `${selectedRequest.title} has been approved and scheduled.`,
-    });
-  };
-
-  const handleReject = (reason: string) => {
-    if (!selectedRequest) return;
-    console.log("Rejecting request with reason:", reason);
-    handleStatusChange(selectedRequest.id, "submitted");
-    toast({
-      title: "Request Rejected",
-      description: `${selectedRequest.title} has been rejected and returned to department.`,
-      variant: "destructive",
-    });
-  };
-
-  const handleRequestChanges = () => {
-    setIsRejectModalOpen(true);
-  };
-
-  const handleEmergencyTakeover = (config: TakeoverConfig) => {
-    console.log("Emergency takeover activated:", config);
-    toast({
-      title: "Emergency Takeover Activated",
-      description: `${config.title} is now live on ${config.scope === 'all' ? 'all screens' : 'selected screens'} for ${config.duration} minutes.`,
-      variant: "destructive",
-    });
-  };
-
   return (
-    <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)]">
-      <div className="flex items-center justify-between flex-shrink-0">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Requests Workboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Drag and drop requests between workflow stages
-          </p>
+          <p className="text-muted-foreground mt-1">Track incoming content and scheduling requests.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsTakeoverModalOpen(true)}>
-            <Zap className="mr-2 h-4 w-4" />
-            Emergency Takeover
+          <Button variant="outline">
+            <Filter className="mr-2 h-4 w-4" />
+            Filters
           </Button>
-          <Button>
+          <Button onClick={() => setIsCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             New Request
           </Button>
         </div>
       </div>
 
-      <div className="flex gap-4 flex-shrink-0">
+      <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search requests by title, department, or owner..."
+            placeholder="Search requests by title, description, or priority..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>
-        <Button variant="outline">
-          <Filter className="mr-2 h-4 w-4" />
-          Filters
-        </Button>
-      </div>
-
-      <div className="flex-1 overflow-hidden flex gap-4">
-        <div className="flex-1">
-          <KanbanBoard
-            requests={filteredRequests}
-            onRequestClick={(request) => setSelectedRequest(request)}
-            onStatusChange={handleStatusChange}
-          />
+        <div className="text-sm text-muted-foreground">
+          {isFetching ? "Refreshing..." : `${filtered.length} requests`}
         </div>
-
-        {selectedRequest && (
-          <ComprehensiveDetailDrawer
-            request={selectedRequest}
-            onClose={() => setSelectedRequest(null)}
-            onApprove={handleApprove}
-            onReject={() => setIsRejectModalOpen(true)}
-            onRequestChanges={handleRequestChanges}
-          />
-        )}
       </div>
 
-      {/* Reject Reason Modal */}
-      <RejectReasonModal
-        open={isRejectModalOpen}
-        onOpenChange={setIsRejectModalOpen}
-        requestTitle={selectedRequest?.title || ""}
-        onConfirm={handleReject}
-      />
+      {isLoading ? (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <Skeleton key={idx} className="h-40" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((request: RequestTicket) => (
+            <Card key={request.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="text-lg leading-tight">{request.title}</CardTitle>
+                  <Badge className={statusColors[request.status || "OPEN"] ?? "bg-secondary text-foreground"}>
+                    {request.status || "OPEN"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p className="line-clamp-3">{request.description || "No description"}</p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{request.priority || "MEDIUM"}</Badge>
+                  {request.assigned_to && <Badge variant="secondary">Assigned</Badge>}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {/* Emergency Takeover Modal */}
-      <EmergencyTakeoverModal
-        open={isTakeoverModalOpen}
-        onOpenChange={setIsTakeoverModalOpen}
-        onConfirm={handleEmergencyTakeover}
-      />
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Request</DialogTitle>
+            <DialogDescription>Submit a new content/scheduling request.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="req-title">Title</Label>
+              <Input
+                id="req-title"
+                value={payload.title}
+                onChange={(e) => setPayload((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="e.g., Q1 Campaign Assets"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="req-desc">Description</Label>
+              <Textarea
+                id="req-desc"
+                value={payload.description}
+                onChange={(e) => setPayload((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Add notes, links, or requirements"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select
+                value={payload.priority || "MEDIUM"}
+                onValueChange={(v) => setPayload((prev) => ({ ...prev, priority: v as RequestPayload["priority"] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LOW">Low</SelectItem>
+                  <SelectItem value="MEDIUM">Medium</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createRequest.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createRequest.mutate({ ...payload, title: payload.title.trim() })}
+              disabled={createRequest.isPending || !payload.title.trim()}
+            >
+              {createRequest.isPending ? "Submitting..." : "Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

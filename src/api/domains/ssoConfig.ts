@@ -12,20 +12,17 @@ export const ssoApi = {
       path: "/v1/sso-config",
       method: "POST",
       body: payload,
-      useApiKey: true,
     }),
 
   getActive: () =>
     apiClient.request<SsoConfig | null>({
       path: "/v1/sso-config",
       method: "GET",
-      useApiKey: true,
     }),
 
   deactivate: (id: string) =>
     apiClient.request<void>({
       path: `/v1/sso-config/${id}/deactivate`,
       method: "POST",
-      useApiKey: true,
     }),
 };

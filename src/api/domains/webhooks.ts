@@ -15,14 +15,12 @@ export const webhooksApi = {
       path: "/v1/webhooks",
       method: "POST",
       body: payload,
-      useApiKey: true,
     }),
 
   list: () =>
     apiClient.request<Webhook[]>({
       path: "/v1/webhooks",
       method: "GET",
-      useApiKey: true,
     }),
 
   update: (webhookId: string, payload: Partial<CreateWebhookPayload>) =>
@@ -30,20 +28,17 @@ export const webhooksApi = {
       path: `/v1/webhooks/${webhookId}`,
       method: "PATCH",
       body: payload,
-      useApiKey: true,
     }),
 
   remove: (webhookId: string) =>
     apiClient.request<void>({
       path: `/v1/webhooks/${webhookId}`,
       method: "DELETE",
-      useApiKey: true,
     }),
 
   test: (webhookId: string) =>
     apiClient.request<void>({
       path: `/v1/webhooks/${webhookId}/test`,
       method: "POST",
-      useApiKey: true,
     }),
 };

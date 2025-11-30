@@ -15,6 +15,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { clearAuth } from "@/store/authSlice";
+import { useToast } from "@/hooks/use-toast";
+import { authApi } from "@/api/domains/auth";
+import { ApiError } from "@/api/apiClient";
 
 const getInitials = (name?: string, email?: string) => {
   if (name) {
@@ -35,10 +38,23 @@ export function AppHeader() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
+  const { toast } = useToast();
 
-  const handleLogout = () => {
-    dispatch(clearAuth());
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      const description =
+        error instanceof ApiError ? error.message : "Unable to log out right now.";
+      toast({
+        title: "Logout error",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      dispatch(clearAuth());
+      navigate("/login");
+    }
   };
 
   return (
@@ -103,7 +119,7 @@ export function AppHeader() {
                 Notifications
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onSelect={handleLogout}>
+              <DropdownMenuItem className="text-destructive" onSelect={() => { void handleLogout(); }}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>

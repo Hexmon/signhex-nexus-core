@@ -1,15 +1,16 @@
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  MessageSquare, 
-  Building2, 
-  Users, 
+import type { CSSProperties } from "react";
+import {
+  LayoutDashboard,
+  Calendar,
+  MessageSquare,
+  Building2,
+  Users,
   Kanban,
   Monitor,
   FolderOpen,
   FileBarChart,
   Settings,
-  HelpCircle
+  HelpCircle,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -38,12 +39,20 @@ const navItems = [
   { title: "Site Settings", url: "/settings", icon: Settings },
 ];
 
+const sidebarTheme: CSSProperties = {
+  // Force a light shell with dark text, even if the rest of the app theme changes.
+  "--sidebar-background": "0 0% 100%",
+  "--sidebar-foreground": "217 33% 17%",
+  "--sidebar-accent": "0 34% 95%",
+  "--sidebar-accent-foreground": "0 100% 25%",
+};
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   return (
-    <Sidebar collapsible="icon" className="border-r">
+    <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground" style={sidebarTheme}>
       <SidebarContent>
         <div className={`flex items-center px-4 py-6 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
           <img 
@@ -70,9 +79,9 @@ export function AppSidebar() {
                       to={item.url} 
                       end={item.url === "/"}
                       className={({ isActive }) =>
-                        isActive 
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                          : ""
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-foreground font-semibold hover:bg-sidebar-accent"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent"
                       }
                     >
                       <item.icon className="h-4 w-4" />

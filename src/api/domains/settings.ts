@@ -6,7 +6,6 @@ export const settingsApi = {
     apiClient.request<OrgSetting[]>({
       path: "/v1/settings",
       method: "GET",
-      useApiKey: true,
     }),
 
   upsert: (payload: OrgSetting) =>
@@ -14,6 +13,5 @@ export const settingsApi = {
       path: "/v1/settings",
       method: "POST",
       body: payload,
-      useApiKey: true,
     }),
 };
