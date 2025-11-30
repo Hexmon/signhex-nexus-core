@@ -45,6 +45,8 @@ export default function Screens() {
   const screenGroupsQuery = useQuery({
     queryKey: queryKeys.screenGroups,
     queryFn: screensApi.listGroups,
+    enabled: false, // backend endpoint not available yet; avoid noise.
+    retry: false,
   });
 
   const pairingsQuery = useQuery({

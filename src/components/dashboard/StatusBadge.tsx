@@ -16,7 +16,7 @@ export type Status =
   | "maintenance";
 
 interface StatusBadgeProps {
-  status: Status;
+  status?: Status | string;
   className?: string;
 }
 
@@ -36,7 +36,9 @@ const statusConfig: Record<Status, { label: string; variant: "default" | "second
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const normalized = (status || "offline").toLowerCase().replace(/\s+/g, "_") as Status;
+  const config =
+    statusConfig[normalized] ?? { label: status ?? "Unknown", variant: "secondary" as const };
   
   return (
     <Badge 
