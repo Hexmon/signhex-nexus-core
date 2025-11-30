@@ -61,13 +61,20 @@ const Departments = () => {
     },
   }, "Unable to delete department.");
 
-  const filteredDepartments = useMemo(
-    () =>
-      departments.filter((dept) =>
-        dept.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ),
-    [departments, searchQuery]
-  );
+  const filteredDepartments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return departments;
+    return departments.filter((dept) => {
+      const haystack = [
+        dept.name,
+        dept.description ?? "",
+        dept.id,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [departments, searchQuery]);
 
   return (
     <div className="space-y-6">
