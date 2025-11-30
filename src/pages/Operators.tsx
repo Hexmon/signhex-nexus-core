@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
+import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 
 const roleColor: Record<string, string> = {
   ADMIN: "bg-purple-500/10 text-purple-700",
@@ -169,11 +170,7 @@ export default function Operators() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, idx) => (
-            <Skeleton key={idx} className="h-32" />
-          ))}
-        </div>
+        <LoadingIndicator fullScreen label="Loading operators..." />
       ) : filtered.length === 0 ? (
         <EmptyState title="No operators found" description="Try adjusting your search or add a new operator." />
       ) : (

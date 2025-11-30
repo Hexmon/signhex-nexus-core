@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { queryKeys } from "@/api/queryKeys";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 
 const Departments = () => {
   const queryClient = useQueryClient();
@@ -96,11 +97,7 @@ const Departments = () => {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, idx) => (
-            <Skeleton key={idx} className="h-40" />
-          ))}
-        </div>
+        <LoadingIndicator fullScreen label="Loading departments..." />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

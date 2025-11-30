@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
+import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 
 export default function Screens() {
   const queryClient = useQueryClient();
@@ -152,11 +153,7 @@ export default function Screens() {
       </Card>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, idx) => (
-            <Skeleton key={idx} className="h-44" />
-          ))}
-        </div>
+        <LoadingIndicator fullScreen label="Loading screens..." />
       ) : filteredScreens.length === 0 ? (
         <EmptyState title="No screens found" description="Try adjusting your search or add a new screen." />
       ) : (
