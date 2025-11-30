@@ -3,68 +3,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-
-interface Department {
-  id: string;
-  name: string;
-  description: string;
-  screenCount: number;
-  owners: string[];
-  operators: string[];
-  storageUsed: string;
-  storageQuota: string;
-}
+import { useEffect, useState } from "react";
+import type { Department } from "@/api/types";
 
 interface DepartmentFormDialogProps {
   open: boolean;
   onClose: () => void;
   department?: Department | null;
+  onSubmit: (payload: { name: string; description?: string }, id?: string) => Promise<void> | void;
+  isSubmitting?: boolean;
+  onDelete?: (id: string) => Promise<void> | void;
 }
 
-export const DepartmentFormDialog = ({ open, onClose, department }: DepartmentFormDialogProps) => {
-  const { toast } = useToast();
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    storageQuota: "50",
-    owners: "",
-    operators: "",
-  });
+export const DepartmentFormDialog = ({
+  open,
+  onClose,
+  department,
+  onSubmit,
+  isSubmitting,
+  onDelete,
+}: DepartmentFormDialogProps) => {
+  const [formData, setFormData] = useState({ name: "", description: "" });
 
   useEffect(() => {
     if (department) {
       setFormData({
         name: department.name,
-        description: department.description,
-        storageQuota: department.storageQuota.replace(" GB", ""),
-        owners: department.owners.join(", "),
-        operators: department.operators.join(", "),
+        description: department.description || "",
       });
     } else {
-      setFormData({
-        name: "",
-        description: "",
-        storageQuota: "50",
-        owners: "",
-        operators: "",
-      });
+      setFormData({ name: "", description: "" });
     }
   }, [department, open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: department ? "Department updated" : "Department created",
-      description: `${formData.name} has been ${department ? "updated" : "created"} successfully.`,
-    });
-    onClose();
+    await onSubmit(
+      { name: formData.name.trim(), description: formData.description.trim() || "" },
+      department?.id
+    );
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{department ? "Edit Department" : "Create New Department"}</DialogTitle>
         </DialogHeader>
@@ -77,6 +59,7 @@ export const DepartmentFormDialog = ({ open, onClose, department }: DepartmentFo
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., Marketing"
               required
+              disabled={isSubmitting}
             />
           </div>
 
@@ -86,51 +69,34 @@ export const DepartmentFormDialog = ({ open, onClose, department }: DepartmentFo
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Brief description of this department's purpose"
+              placeholder="What content and screens belong here?"
               rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="storageQuota">Storage Quota (GB) *</Label>
-            <Input
-              id="storageQuota"
-              type="number"
-              value={formData.storageQuota}
-              onChange={(e) => setFormData({ ...formData, storageQuota: e.target.value })}
-              placeholder="50"
-              min="1"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="owners">Owners (comma-separated emails or names)</Label>
-            <Input
-              id="owners"
-              value={formData.owners}
-              onChange={(e) => setFormData({ ...formData, owners: e.target.value })}
-              placeholder="john@example.com, sarah@example.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="operators">Operators (comma-separated emails or names)</Label>
-            <Input
-              id="operators"
-              value={formData.operators}
-              onChange={(e) => setFormData({ ...formData, operators: e.target.value })}
-              placeholder="mike@example.com, emily@example.com"
+              disabled={isSubmitting}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit">{department ? "Update" : "Create"} Department</Button>
+            <Button type="submit" disabled={isSubmitting || !formData.name.trim()}>
+              {isSubmitting ? "Saving..." : department ? "Update" : "Create"} Department
+            </Button>
           </DialogFooter>
         </form>
+        {department?.id && onDelete && (
+          <div className="flex items-center justify-between pt-2">
+            <div className="text-sm text-muted-foreground">Deleting will remove this department permanently.</div>
+            <Button
+              variant="destructive"
+              type="button"
+              onClick={() => onDelete(department.id)}
+              disabled={isSubmitting}
+            >
+              Delete
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

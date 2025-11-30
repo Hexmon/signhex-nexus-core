@@ -7,7 +7,6 @@ export const departmentsApi = {
       path: "/v1/departments",
       method: "GET",
       query: params,
-      useApiKey: true,
     }),
 
   create: (payload: { name: string; description?: string }) =>
@@ -15,7 +14,12 @@ export const departmentsApi = {
       path: "/v1/departments",
       method: "POST",
       body: payload,
-      useApiKey: true,
+    }),
+
+  getById: (id: string) =>
+    apiClient.request<Department>({
+      path: `/v1/departments/${id}`,
+      method: "GET",
     }),
 
   update: (id: string, payload: Partial<{ name: string; description?: string }>) =>
@@ -23,6 +27,11 @@ export const departmentsApi = {
       path: `/v1/departments/${id}`,
       method: "PATCH",
       body: payload,
-      useApiKey: true,
+    }),
+
+  remove: (id: string) =>
+    apiClient.request<void>({
+      path: `/v1/departments/${id}`,
+      method: "DELETE",
     }),
 };

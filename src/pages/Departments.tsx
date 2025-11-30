@@ -1,168 +1,159 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { DepartmentCard } from "@/components/departments/DepartmentCard";
 import { DepartmentFormDialog } from "@/components/departments/DepartmentFormDialog";
-import { TransferScreensDialog } from "@/components/departments/TransferScreensDialog";
-import { DeleteDepartmentDialog } from "@/components/departments/DeleteDepartmentDialog";
-
-interface Department {
-  id: string;
-  name: string;
-  description: string;
-  screenCount: number;
-  owners: string[];
-  operators: string[];
-  storageUsed: string;
-  storageQuota: string;
-}
-
-const mockDepartments: Department[] = [
-  {
-    id: "dept-1",
-    name: "Marketing",
-    description: "Marketing and promotional content",
-    screenCount: 24,
-    owners: ["John Smith", "Sarah Connor"],
-    operators: ["Mike Johnson", "Emily Davis"],
-    storageUsed: "45.2 GB",
-    storageQuota: "100 GB",
-  },
-  {
-    id: "dept-2",
-    name: "HR & Internal Comms",
-    description: "Employee communications and announcements",
-    screenCount: 12,
-    owners: ["David Lee"],
-    operators: ["Anna White", "Tom Brown"],
-    storageUsed: "12.8 GB",
-    storageQuota: "50 GB",
-  },
-  {
-    id: "dept-3",
-    name: "Operations",
-    description: "Operational updates and KPIs",
-    screenCount: 18,
-    owners: ["Rachel Green"],
-    operators: ["Chris Evans"],
-    storageUsed: "28.5 GB",
-    storageQuota: "75 GB",
-  },
-  {
-    id: "dept-4",
-    name: "Sales",
-    description: "Sales performance and targets",
-    screenCount: 16,
-    owners: ["Michael Scott"],
-    operators: ["Jim Halpert", "Pam Beesly"],
-    storageUsed: "34.1 GB",
-    storageQuota: "100 GB",
-  },
-];
+import { departmentsApi } from "@/api/domains/departments";
+import type { Department } from "@/api/types";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/common/PageHeader";
+import { SearchBar } from "@/components/common/SearchBar";
+import { EmptyState } from "@/components/common/EmptyState";
+import { useSafeMutation } from "@/hooks/useSafeMutation";
+import { queryKeys } from "@/api/queryKeys";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 const Departments = () => {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [departments] = useState<Department[]>(mockDepartments);
   const [formOpen, setFormOpen] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  const filteredDepartments = departments.filter((dept) =>
-    dept.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const {
+    data,
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: queryKeys.departments,
+    queryFn: () => departmentsApi.list({ page: 1, limit: 50 }),
+  });
+
+  const departments = useMemo(() => data?.items ?? [], [data]);
+
+  const createOrUpdate = useSafeMutation({
+    mutationFn: async (payload: { values: { name: string; description?: string }; id?: string }) => {
+      const trimmed = { ...payload.values, name: payload.values.name.trim(), description: payload.values.description?.trim() };
+      if (!trimmed.name) {
+        throw new Error("Name is required");
+      }
+      if (payload.id) {
+        return departmentsApi.update(payload.id, trimmed);
+      }
+      return departmentsApi.create(trimmed);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.departments });
+      setFormOpen(false);
+      setSelectedDepartment(null);
+    },
+  }, "Unable to save department.");
+
+  const deleteDepartment = useSafeMutation({
+    mutationFn: async (id: string) => departmentsApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.departments });
+      setSelectedDepartment(null);
+      setFormOpen(false);
+      setIsConfirmOpen(false);
+      setDeleteTarget(null);
+    },
+  }, "Unable to delete department.");
+
+  const filteredDepartments = useMemo(
+    () =>
+      departments.filter((dept) =>
+        dept.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [departments, searchQuery]
   );
-
-  const handleEdit = (dept: Department) => {
-    setSelectedDepartment(dept);
-    setFormOpen(true);
-  };
-
-  const handleTransfer = (dept: Department) => {
-    setSelectedDepartment(dept);
-    setTransferOpen(true);
-  };
-
-  const handleDelete = (dept: Department) => {
-    setSelectedDepartment(dept);
-    setDeleteOpen(true);
-  };
-
-  const handleCloseForm = () => {
-    setFormOpen(false);
-    setSelectedDepartment(null);
-  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Department Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Organize screens, users, and content by department
-          </p>
-        </div>
-        <Button onClick={() => setFormOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Department
-        </Button>
-      </div>
+      <PageHeader
+        title="Department Management"
+        description="Organize screens, users, and content by department"
+        actionLabel="New Department"
+        actionIcon={<Plus className="h-4 w-4" />}
+        onAction={() => setFormOpen(true)}
+      />
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search departments..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px] max-w-md">
+          <SearchBar placeholder="Search departments..." onSearch={setSearchQuery} initialValue={searchQuery} />
         </div>
         <div className="text-sm text-muted-foreground">
-          {filteredDepartments.length} {filteredDepartments.length === 1 ? "department" : "departments"}
+          {isFetching ? "Refreshing..." : `${filteredDepartments.length} departments`}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDepartments.map((dept) => (
-          <DepartmentCard
-            key={dept.id}
-            department={dept}
-            onEdit={handleEdit}
-            onTransfer={handleTransfer}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
-
-      {filteredDepartments.length === 0 && (
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">No departments found</p>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <Skeleton key={idx} className="h-40" />
+          ))}
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredDepartments.map((dept) => (
+            <DepartmentCard
+              key={dept.id}
+              department={dept}
+              onEdit={(d) => {
+                setSelectedDepartment(d);
+                setFormOpen(true);
+              }}
+                onDelete={(d) => {
+                  setDeleteTarget(d);
+                  setIsConfirmOpen(true);
+                }}
+            />
+          ))}
+          </div>
+
+          {filteredDepartments.length === 0 && (
+            <EmptyState title="No departments found" description="Try adjusting your search or create a new department." />
+          )}
+        </>
       )}
 
       <DepartmentFormDialog
         open={formOpen}
-        onClose={handleCloseForm}
-        department={selectedDepartment}
-      />
-
-      <TransferScreensDialog
-        open={transferOpen}
         onClose={() => {
-          setTransferOpen(false);
+          setFormOpen(false);
           setSelectedDepartment(null);
         }}
         department={selectedDepartment}
+        isSubmitting={createOrUpdate.isPending}
+        onSubmit={async (values, id) => {
+          await createOrUpdate.mutateAsync({ values, id });
+        }}
+        onDelete={(deptId) => {
+          if (!deptId) return;
+          const dept = departments.find((d) => d.id === deptId) || selectedDepartment;
+          if (dept) {
+            setDeleteTarget(dept);
+            setIsConfirmOpen(true);
+          }
+        }}
       />
 
-      <DeleteDepartmentDialog
-        open={deleteOpen}
-        onClose={() => {
-          setDeleteOpen(false);
-          setSelectedDepartment(null);
+      <ConfirmDialog
+        open={isConfirmOpen}
+        title="Delete department?"
+        description={`This will permanently remove "${deleteTarget?.name ?? "this department"}".`}
+        confirmLabel="Delete"
+        onCancel={() => {
+          setIsConfirmOpen(false);
+          setDeleteTarget(null);
         }}
-        department={selectedDepartment}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await deleteDepartment.mutateAsync(deleteTarget.id);
+        }}
+        isLoading={deleteDepartment.isPending}
       />
     </div>
   );
