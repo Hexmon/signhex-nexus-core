@@ -4,20 +4,20 @@ import type { Conversation, ConversationMessage, PaginationParams, PaginatedResp
 export const conversationsApi = {
   start: (participant_id: string) =>
     apiClient.request<Conversation>({
-      path: "/v1/conversations",
+      path: "/conversations",
       method: "POST",
       body: { participant_id },
     }),
 
   list: () =>
     apiClient.request<Conversation[]>({
-      path: "/v1/conversations",
+      path: "/conversations",
       method: "GET",
     }),
 
   listMessages: (conversationId: string, params?: PaginationParams) =>
     apiClient.request<PaginatedResponse<ConversationMessage>>({
-      path: `/v1/conversations/${conversationId}/messages`,
+      path: `/conversations/${conversationId}/messages`,
       method: "GET",
       query: params,
     }),
@@ -27,14 +27,14 @@ export const conversationsApi = {
     payload: { content: string; attachments?: string[] },
   ) =>
     apiClient.request<ConversationMessage>({
-      path: `/v1/conversations/${conversationId}/messages`,
+      path: `/conversations/${conversationId}/messages`,
       method: "POST",
       body: payload,
     }),
 
   markRead: (conversationId: string) =>
     apiClient.request<void>({
-      path: `/v1/conversations/${conversationId}/read`,
+      path: `/conversations/${conversationId}/read`,
       method: "POST",
     }),
 };

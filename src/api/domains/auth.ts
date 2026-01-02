@@ -9,20 +9,20 @@ export interface LoginPayload {
 export const authApi = {
   login: (payload: LoginPayload) =>
     apiClient.request<AuthResponse>({
-      path: "/v1/auth/login",
+      path: "/auth/login",
       method: "POST",
       body: payload,
     }),
 
   me: () =>
     apiClient.request<User>({
-      path: "/v1/auth/me",
+      path: "/auth/me",
       method: "GET",
     }),
 
   logout: () =>
     apiClient.request<void>({
-      path: "/v1/auth/logout",
+      path: "/auth/logout",
       method: "POST",
     }),
 };

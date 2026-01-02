@@ -1,13 +1,15 @@
 type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 export interface ApiRequestOptions<TBody = unknown> {
-  path: string;
+  path: string; // e.g. "/screens/:id/now-playing" (no /api/v1 needed)
+  pathParams?: Record<string, string | number>;
   method?: HttpMethod;
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: TBody;
   headers?: Record<string, string>;
   signal?: AbortSignal;
   useApiKey?: boolean;
+  rawBody?: BodyInit; // if you need FormData/Blob; skips JSON stringify
 }
 
 export interface ApiErrorShape {
@@ -19,7 +21,6 @@ export interface ApiErrorShape {
 export class ApiError extends Error {
   status: number;
   details?: unknown;
-
   constructor(payload: ApiErrorShape) {
     super(payload.message);
     this.name = "ApiError";
@@ -31,17 +32,24 @@ export class ApiError extends Error {
 type TokenProvider = () => string | undefined | null;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const envBase =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || undefined;
-const inferredHttps =
-  typeof window !== "undefined" && window.location.protocol === "https:" ? window.location.origin : undefined;
-const baseURL = envBase || inferredHttps || "http://localhost:3000";
+const envBase = "http://localhost:3000/api/v1";
+const inferredOrigin =
+  typeof window !== "undefined" && window.location.origin;
+const API_PREFIX = "/api";
+const API_VERSION = "v1";
+const baseURL = envBase || `${inferredOrigin ?? "http://localhost:3000"}${API_PREFIX}/${API_VERSION}`;
 const POST_LOGIN_REDIRECT_KEY = "postLoginRedirect";
 
-const sanitizeMessage = (message: unknown) => {
-  if (typeof message === "string") return message;
-  return "Request failed. Please try again.";
-};
+const sanitizeMessage = (message: unknown) =>
+  typeof message === "string" ? message : "Request failed. Please try again.";
+
+const fillPathParams = (path: string, params?: Record<string, string | number>) =>
+  !params
+    ? path
+    : Object.entries(params).reduce(
+        (acc, [key, value]) => acc.replace(new RegExp(`:${key}\\b`, "g"), encodeURIComponent(String(value))),
+        path,
+      );
 
 export class ApiClient {
   private authTokenProvider: TokenProvider = () => undefined;
@@ -52,62 +60,57 @@ export class ApiClient {
   setAuthTokenProvider(getToken: TokenProvider) {
     this.authTokenProvider = getToken;
   }
-
   setApiKeyProvider(getKey: TokenProvider) {
     this.apiKeyProvider = getKey;
   }
-
   setCsrfTokenProvider(getToken: TokenProvider) {
     this.csrfTokenProvider = getToken;
   }
 
-  async request<TResponse, TBody = unknown>(
-    options: ApiRequestOptions<TBody>,
-  ): Promise<TResponse> {
+  async request<TResponse, TBody = unknown>(options: ApiRequestOptions<TBody>): Promise<TResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
+    const pathWithParams = fillPathParams(options.path, options.pathParams);
     const queryString = this.buildQuery(options.query);
-    const url = `${baseURL}${options.path}${queryString}`;
+    const url = `${baseURL}${pathWithParams}${queryString}`;
     const method = options.method ?? "GET";
+
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",
       ...options.headers,
     };
-
     const authToken = this.authTokenProvider();
     const apiKey = options.useApiKey ? this.apiKeyProvider() : undefined;
-
-    if (authToken) {
-      headers.Authorization = `Bearer ${authToken}`;
-    }
-
-    if (apiKey) {
-      headers["X-API-Key"] = apiKey;
-    }
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    if (apiKey) headers["X-API-Key"] = apiKey;
 
     const csrfToken = this.csrfTokenProvider();
     const isStateChanging = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
-    if (isStateChanging && csrfToken) {
-      headers["X-CSRF-Token"] = csrfToken;
-    }
+    if (isStateChanging && csrfToken) headers["X-CSRF-Token"] = csrfToken;
 
-    // Prevent caching sensitive responses
     headers["Cache-Control"] = "no-store";
 
     const requestKey = method === "GET" ? `${method}:${url}` : undefined;
-
     if (requestKey && this.inflightGetRequests.has(requestKey)) {
       return this.inflightGetRequests.get(requestKey) as Promise<TResponse>;
     }
 
     const executeRequest = async () => {
       try {
+        const body =
+          options.rawBody !== undefined
+            ? options.rawBody
+            : options.body !== undefined
+            ? JSON.stringify(options.body)
+            : undefined;
+
+        if (body && options.rawBody === undefined) headers["Content-Type"] = "application/json";
+
         const response = await fetch(url, {
           method,
           headers,
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          body,
           signal: options.signal ?? controller.signal,
           credentials: "include",
         });
@@ -120,7 +123,7 @@ export class ApiClient {
           throw new ApiError({
             status: response.status,
             message:
-              (isJson && typeof payload?.error === "string" && payload.error) ||
+              (isJson && typeof (payload as any)?.error === "string" && (payload as any).error) ||
               sanitizeMessage(payload),
             details: isJson ? payload : undefined,
           });
@@ -129,26 +132,22 @@ export class ApiClient {
         return payload as TResponse;
       } catch (error) {
         if (error instanceof ApiError) {
-          // Handle expired/invalid sessions centrally.
           if (typeof window !== "undefined" && error.status === 401 && !options.path.includes("/auth/login")) {
             try {
-              sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname + window.location.search);
+              sessionStorage.setItem(
+                POST_LOGIN_REDIRECT_KEY,
+                window.location.pathname + window.location.search,
+              );
             } catch {
-              // ignore storage errors
+              /* ignore */
             }
             window.location.replace("/login");
           }
-
           throw error;
         }
-
         if (error instanceof DOMException && error.name === "AbortError") {
-          throw new ApiError({
-            status: 408,
-            message: "Request timed out. Please retry.",
-          });
+          throw new ApiError({ status: 408, message: "Request timed out. Please retry." });
         }
-
         const message = error instanceof Error ? error.message : "Network error";
         throw new ApiError({ status: 500, message: sanitizeMessage(message) });
       } finally {
@@ -157,30 +156,22 @@ export class ApiClient {
     };
 
     const requestPromise = executeRequest();
-
-    if (requestKey) {
-      this.inflightGetRequests.set(requestKey, requestPromise);
-    }
+    if (requestKey) this.inflightGetRequests.set(requestKey, requestPromise);
 
     try {
       return await requestPromise;
     } finally {
-      if (requestKey) {
-        this.inflightGetRequests.delete(requestKey);
-      }
+      if (requestKey) this.inflightGetRequests.delete(requestKey);
     }
   }
 
-  private buildQuery(
-    query: ApiRequestOptions["query"],
-  ): string {
+  private buildQuery(query: ApiRequestOptions["query"]): string {
     if (!query) return "";
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
       params.append(key, String(value));
     });
-
     const qs = params.toString();
     return qs ? `?${qs}` : "";
   }

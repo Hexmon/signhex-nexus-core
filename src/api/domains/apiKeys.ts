@@ -11,7 +11,7 @@ export interface CreateApiKeyPayload {
 export const apiKeysApi = {
   create: (payload: CreateApiKeyPayload) =>
     apiClient.request<ApiKey>({
-      path: "/v1/api-keys",
+      path: "/api-keys",
       method: "POST",
       body: payload,
       useApiKey: true,
@@ -19,21 +19,21 @@ export const apiKeysApi = {
 
   list: () =>
     apiClient.request<ApiKey[]>({
-      path: "/v1/api-keys",
+      path: "/api-keys",
       method: "GET",
       useApiKey: true,
     }),
 
   rotate: (apiKeyId: string) =>
     apiClient.request<ApiKey>({
-      path: `/v1/api-keys/${apiKeyId}/rotate`,
+      path: `/api-keys/${apiKeyId}/rotate`,
       method: "POST",
       useApiKey: true,
     }),
 
   revoke: (apiKeyId: string) =>
     apiClient.request<void>({
-      path: `/v1/api-keys/${apiKeyId}/revoke`,
+      path: `/api-keys/${apiKeyId}/revoke`,
       method: "POST",
       useApiKey: true,
     }),

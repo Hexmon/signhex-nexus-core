@@ -111,8 +111,87 @@ export interface ReportSummary {
 }
 
 export interface MetricsOverview {
-  totals?: Record<string, number>;
+  totals?: {
+    users?: number;
+    media?: number;
+    screens?: number;
+    requests?: number;
+    [key: string]: number | undefined;
+  };
+  screens?: {
+    total?: number;
+    online_last_5m?: number;
+    online?: number;
+  };
+  storage?: {
+    media_bytes?: number;
+  };
+  schedules?: {
+    active?: number;
+  };
   proof_of_play?: Record<string, number>;
+  system_health?: {
+    status?: string;
+    heartbeats?: {
+      last_5m?: number;
+      last_1h?: number;
+    };
+    last_heartbeat_at?: string | null;
+    health_endpoint?: string;
+  };
+}
+
+export interface HealthStatus {
+  status: string;
+  timestamp?: string;
+}
+
+export interface DepartmentRequestsReport {
+  department_id: string | null;
+  department_name: string | null;
+  requests: Array<{
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+  }>;
+}
+
+export interface OfflineScreensReport {
+  count: number;
+  screens: Array<{
+    id: string;
+    name: string;
+    location?: string | null;
+    last_heartbeat_at?: string | null;
+    offline_hours?: number;
+  }>;
+}
+
+export interface StorageReport {
+  storage: {
+    media_bytes: number;
+    quota_bytes: number | null;
+    quota_percent: number | null;
+  };
+  expiring_media?: {
+    supported: boolean;
+  };
+}
+
+export interface SystemHealthReport {
+  transcode_queue?: {
+    pending?: number;
+  };
+  publishes?: {
+    last_published_at?: string | null;
+  };
+  jobs?: {
+    failed_last_24h?: number;
+  };
+  operators?: {
+    active?: number;
+  };
 }
 
 export interface Department {
@@ -182,9 +261,18 @@ export interface Screen {
   last_heartbeat_at?: string | null;
 }
 
+export type MediaType = "IMAGE" | "VIDEO" | "DOCUMENT";
+
+export interface MediaListParams extends PaginationParams {
+  type?: MediaType;
+  status?: string;
+}
+
 export interface MediaAsset {
   id: string;
   filename: string;
+  name?: string;
+  type?: MediaType;
   content_type?: string;
   size?: number;
   status?: string;
@@ -195,6 +283,7 @@ export interface MediaAsset {
   thumbnail_object_id?: string | null;
   source_bucket?: string;
   source_key?: string;
+  media_url?: string | null;
 }
 
 export interface Schedule {

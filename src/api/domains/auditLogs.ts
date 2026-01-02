@@ -12,14 +12,14 @@ export const auditLogsApi = {
     },
   ) =>
     apiClient.request<PaginatedResponse<AuditLog>>({
-      path: "/v1/audit-logs",
+      path: "/audit-logs",
       method: "GET",
       query: params,
     }),
 
   getById: (auditLogId: string) =>
     apiClient.request<AuditLog>({
-      path: `/v1/audit-logs/${auditLogId}`,
+      path: `/audit-logs/${auditLogId}`,
       method: "GET",
     }),
 };

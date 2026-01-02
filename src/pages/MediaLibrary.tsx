@@ -1,70 +1,256 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, Upload, Image, Video, FileText, Presentation as PresentationIcon } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Upload, Image as ImageIcon, Video, FileText, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { mediaApi } from "@/api/domains/media";
-import { presentationsApi } from "@/api/domains/presentations";
-import type { MediaAsset } from "@/api/types";
+import type { MediaAsset, MediaType } from "@/api/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect } from "react";
 
 export default function MediaLibrary() {
   const { toast } = useToast();
-  const [search, setSearch] = useState("");
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("all");
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MediaAsset | null>(null);
+  const [deleteMode, setDeleteMode] = useState<"soft" | "hard">("soft");
+
+  const allowedMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "video/mp4",
+    "video/quicktime", // mov
+    "application/pdf",
+    "application/vnd.ms-powerpoint", // ppt
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
+    "text/csv",
+    "application/msword", // doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+  ]);
+  const allowedExtensions = new Set([
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".mp4",
+    ".mov",
+    ".pdf",
+    ".ppt",
+    ".pptx",
+    ".csv",
+    ".doc",
+    ".docx",
+  ]);
+
+  const readMediaMetadata = (file: File) =>
+    new Promise<Partial<{ width: number; height: number; duration_seconds: number }>>((resolve) => {
+      if (typeof window === "undefined") return resolve({});
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          resolve({ width: img.naturalWidth, height: img.naturalHeight });
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = () => {
+          resolve({});
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+        return;
+      }
+      if (file.type.startsWith("video/")) {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+          resolve({
+            width: video.videoWidth || undefined,
+            height: video.videoHeight || undefined,
+            duration_seconds: isNaN(video.duration) ? undefined : Math.round(video.duration),
+          });
+          URL.revokeObjectURL(url);
+        };
+        video.onerror = () => {
+          resolve({});
+          URL.revokeObjectURL(url);
+        };
+        video.src = url;
+        return;
+      }
+      resolve({});
+    });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const contentType = file.type || "application/octet-stream";
+      const presign = await mediaApi.presignUpload({
+        filename: file.name,
+        content_type: contentType,
+        size: file.size,
+      });
+
+      const uploadResponse = await fetch(presign.upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        const message = await uploadResponse.text().catch(() => "");
+        throw new Error(message || "Upload failed.");
+      }
+
+      const metadata = await readMediaMetadata(file);
+      return mediaApi.complete(presign.media_id, {
+        status: "READY",
+        content_type: contentType,
+        size: file.size,
+        ...metadata,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Upload complete", description: "Media uploaded and marked ready." });
+      setIsUploadOpen(false);
+      setSelectedFile(null);
+      void queryClient.invalidateQueries({ queryKey: ["media"] });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Upload failed.";
+      toast({ title: "Upload failed", description: message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ mediaId, hard }: { mediaId: string; hard: boolean }) => {
+      const response = await mediaApi.remove(mediaId, hard ? { hard: true } : undefined);
+      return response as { message?: string } | void;
+    },
+    onSuccess: (res) => {
+      const description = (res as { message?: string } | undefined)?.message ?? "Media deleted.";
+      toast({ title: "Deleted", description });
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["media"] });
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Delete failed.";
+      toast({ title: "Delete failed", description: message, variant: "destructive" });
+    },
+  });
+
+  const typeFilter = (activeTab === "all" ? undefined : activeTab.toUpperCase()) as MediaType | undefined;
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ["media"],
-    queryFn: () => mediaApi.list({ limit: 100, page: 1 }),
+    queryKey: ["media", typeFilter],
+    queryFn: () =>
+      mediaApi.list({
+        limit: 100,
+        page: 1,
+        status: "READY",
+        type: typeFilter,
+      }),
   });
 
-  const presentationsQuery = useQuery({
-    queryKey: ["presentations"],
-    queryFn: () => presentationsApi.list({ page: 1, limit: 20 }),
-  });
+  const isUploading = uploadMutation.isPending;
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const ext = file.name.includes(".") ? file.name.substring(file.name.lastIndexOf(".")).toLowerCase() : "";
+    const isAllowed = allowedMimeTypes.has(file.type) || (ext && allowedExtensions.has(ext));
+    if (!isAllowed) {
+      toast({
+        title: "Unsupported file type",
+        description: "Allowed: JPEG, PNG, WEBP, MP4, MOV, PDF, PPT/PPTX, CSV, DOC/DOCX.",
+        variant: "destructive",
+      });
+      input.value = "";
+      setSelectedFile(null);
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
+  const handleUpload = () => {
+    if (!selectedFile || isUploading) return;
+    uploadMutation.mutate(selectedFile);
+  };
+
+  const handleCopyUrl = async (url?: string | null) => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Copied", description: "Media URL copied to clipboard." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy URL.";
+      toast({ title: "Copy failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handlePreview = (item: MediaAsset) => {
+    if (item.media_url) setPreviewMedia(item);
+  };
+
+  const closePreview = () => setPreviewMedia(null);
+
+  const confirmDelete = (item: MediaAsset) => {
+    setDeleteTarget(item);
+    setDeleteMode("soft");
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget || deleteMutation.isPending) return;
+    deleteMutation.mutate({ mediaId: deleteTarget.id, hard: deleteMode === "hard" });
+  };
 
   useEffect(() => {
-    const err = error || presentationsQuery.error;
-    if (isError || presentationsQuery.isError) {
-      const message = err instanceof ApiError ? err.message : "Unable to load media.";
+    if (!isUploadOpen) setSelectedFile(null);
+  }, [isUploadOpen]);
+
+  useEffect(() => {
+    if (isError) {
+      const message = error instanceof ApiError ? error.message : "Unable to load media.";
       toast({ title: "Load failed", description: message, variant: "destructive" });
     }
-  }, [isError, error, toast, presentationsQuery.error, presentationsQuery.isError]);
+  }, [isError, error, toast]);
 
   const media = useMemo(() => data?.items ?? [], [data]);
-  const presentations = useMemo(() => presentationsQuery.data?.items ?? [], [presentationsQuery.data]);
 
   const filteredMedia = useMemo(
     () =>
       media.filter((item) => {
-        const q = search.toLowerCase();
-        const matchesSearch =
-          q === "" ||
-          item.filename.toLowerCase().includes(q) ||
-          (item.content_type || "").toLowerCase().includes(q);
+        if (item.status && item.status !== "READY") return false;
+        const typeKey = (item.type || "").toUpperCase();
         const matchesTab =
           activeTab === "all" ||
-          (activeTab === "image" && (item.content_type || "").startsWith("image")) ||
-          (activeTab === "video" && (item.content_type || "").startsWith("video")) ||
-          (activeTab === "document" &&
-            !(item.content_type || "").startsWith("video") &&
-            !(item.content_type || "").startsWith("image"));
-        return matchesSearch && matchesTab;
+          (activeTab === "image" && typeKey === "IMAGE") ||
+          (activeTab === "video" && typeKey === "VIDEO") ||
+          (activeTab === "document" && typeKey === "DOCUMENT");
+        return matchesTab;
       }),
-    [media, search, activeTab]
+    [media, activeTab]
   );
 
   const stats = useMemo(() => {
     const total = media.length;
-    const images = media.filter((m) => (m.content_type || "").startsWith("image")).length;
-    const videos = media.filter((m) => (m.content_type || "").startsWith("video")).length;
-    const documents = total - images - videos;
+    const images = media.filter((m) => (m.type || "").toUpperCase() === "IMAGE").length;
+    const videos = media.filter((m) => (m.type || "").toUpperCase() === "VIDEO").length;
+    const documents = media.filter((m) => (m.type || "").toUpperCase() === "DOCUMENT").length;
     return { total, images, videos, documents };
   }, [media]);
 
@@ -77,30 +263,21 @@ export default function MediaLibrary() {
             Browse uploaded assets that are ready for scheduling.
           </p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
           <Upload className="h-4 w-4 mr-2" />
-          Upload via presigned URL (use CLI)
+          Upload Media
         </Button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
         <StatCard title="Total Files" value={stats.total} icon={<FileText className="h-5 w-5 text-primary" />} />
-        <StatCard title="Images" value={stats.images} icon={<Image className="h-5 w-5 text-blue-600" />} />
+        <StatCard title="Images" value={stats.images} icon={<ImageIcon className="h-5 w-5 text-blue-600" />} />
         <StatCard title="Videos" value={stats.videos} icon={<Video className="h-5 w-5 text-purple-600" />} />
         <StatCard title="Documents" value={stats.documents} icon={<FileText className="h-5 w-5 text-orange-600" />} />
       </div>
 
       <Card className="p-4">
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search media files..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -124,7 +301,11 @@ export default function MediaLibrary() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredMedia.map((item: MediaAsset) => (
-            <Card key={item.id} className="hover:shadow-lg transition-shadow">
+            <Card
+              key={item.id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => handlePreview(item)}
+            >
               <CardHeader>
                 <CardTitle className="text-base flex items-center justify-between">
                   <span className="truncate">{item.filename}</span>
@@ -132,6 +313,75 @@ export default function MediaLibrary() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
+                {item.media_url && (
+                  <div className="overflow-hidden rounded-md border bg-muted/30">
+                    {item.type === "IMAGE" || (item.content_type || "").startsWith("image/") ? (
+                      <img
+                        src={item.media_url}
+                        alt={item.filename}
+                        className="h-40 w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : item.type === "VIDEO" || (item.content_type || "").startsWith("video/") ? (
+                      <video
+                        src={item.media_url}
+                        className="h-40 w-full object-cover"
+                        controls
+                        preload="metadata"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="h-40 w-full flex flex-col items-center justify-center gap-2 text-center px-3">
+                        <FileText className="h-8 w-8 text-primary" />
+                        <p className="text-xs text-muted-foreground">Document preview</p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyUrl(item.media_url);
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy URL
+                          </Button>
+                          <Button variant="ghost" size="sm" asChild onClick={(e) => e.stopPropagation()}>
+                            <a href={item.media_url} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {item.media_url && (
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyUrl(item.media_url);
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy URL
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDelete(item);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
+                )}
                 {item.size && <div>Size: {(item.size / 1024 / 1024).toFixed(2)} MB</div>}
                 {item.status && (
                   <Badge variant="secondary" className="text-xs">
@@ -147,38 +397,139 @@ export default function MediaLibrary() {
         </div>
       )}
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <PresentationIcon className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Presentations</CardTitle>
+      <Dialog
+        open={isUploadOpen}
+        onOpenChange={(open) => {
+          setIsUploadOpen(open);
+          if (!open) setSelectedFile(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Upload Media</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="media-file">Select file</Label>
+              <Input
+                id="media-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,.mov,.mp4,.pdf,.ppt,.pptx,.csv,.doc,.docx"
+                onChange={handleFileChange}
+                disabled={isUploading}
+              />
+            </div>
+            {selectedFile && (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground space-y-1">
+                <div className="flex items-center justify-between text-foreground">
+                  <span className="font-medium truncate">{selectedFile.name}</span>
+                  <Badge variant="outline">{selectedFile.type || "unknown"}</Badge>
+                </div>
+                <div>Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              We request a presigned upload URL, upload directly to storage, then mark the media READY.
+            </p>
           </div>
-          <Badge variant="outline">{presentations.length} items</Badge>
-        </div>
-        {presentationsQuery.isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-4 w-28" />
-          </div>
-        ) : presentations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No presentations found.</p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {presentations.map((p) => (
-              <Card key={p.id} className="border-dashed">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{p.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-1">
-                  <p>{p.description || "No description"}</p>
-                  <p className="text-xs">Updated: {p.updated_at ?? p.created_at ?? "—"}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Card>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsUploadOpen(false)} disabled={isUploading}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpload} disabled={!selectedFile || isUploading}>
+              {isUploading ? "Uploading..." : "Upload"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {previewMedia && (
+        <Dialog open={!!previewMedia} onOpenChange={(open) => (open ? null : closePreview())}>
+          <DialogContent className="sm:max-w-[720px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span className="truncate">{previewMedia.filename}</span>
+                {previewMedia.type && <Badge variant="outline">{previewMedia.type}</Badge>}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {previewMedia.media_url ? (
+                previewMedia.type === "IMAGE" || (previewMedia.content_type || "").startsWith("image/") ? (
+                  <img
+                    src={previewMedia.media_url}
+                    alt={previewMedia.filename}
+                    className="w-full max-h-[480px] object-contain"
+                  />
+                ) : previewMedia.type === "VIDEO" || (previewMedia.content_type || "").startsWith("video/") ? (
+                  <video
+                    src={previewMedia.media_url}
+                    className="w-full max-h-[480px]"
+                    controls
+                    preload="metadata"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 rounded-md border bg-muted/40 p-6 text-center">
+                    <FileText className="h-10 w-10 text-primary" />
+                    <p className="text-sm text-muted-foreground">Document preview unavailable. Open in a new tab.</p>
+                    <Button variant="outline" asChild>
+                      <a href={previewMedia.media_url} target="_blank" rel="noreferrer">
+                        Open document
+                      </a>
+                    </Button>
+                  </div>
+                )
+              ) : (
+                <p className="text-sm text-muted-foreground">No media URL available.</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closePreview}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {deleteTarget && (
+        <Dialog open={!!deleteTarget} onOpenChange={(open) => (open ? null : setDeleteTarget(null))}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Delete Media</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Choose soft delete to restrict usage, or hard delete to permanently remove the media and its storage
+              references.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant={deleteMode === "soft" ? "default" : "outline"}
+                onClick={() => setDeleteMode("soft")}
+              >
+                Soft Delete
+              </Button>
+              <Button
+                variant={deleteMode === "hard" ? "destructive" : "outline"}
+                onClick={() => setDeleteMode("hard")}
+              >
+                Hard Delete
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Deleting..." : deleteMode === "hard" ? "Hard Delete" : "Soft Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -196,4 +547,3 @@ function StatCard({ title, value, icon }: { title: string; value: number; icon: 
     </Card>
   );
 }
-

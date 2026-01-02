@@ -1,10 +1,18 @@
 import { apiClient } from "../apiClient";
-import type { MediaAsset, PaginatedResponse, PaginationParams } from "../types";
+import type { MediaAsset, MediaListParams, MediaType, PaginatedResponse } from "../types";
 
 export interface PresignPayload {
   filename: string;
   content_type: string;
   size: number;
+}
+
+export interface PresignResponse {
+  upload_url: string;
+  media_id: string;
+  bucket: string;
+  object_key: string;
+  expires_in: number;
 }
 
 export interface MediaCompletionPayload {
@@ -16,50 +24,51 @@ export interface MediaCompletionPayload {
   duration_seconds?: number;
 }
 
+export interface MediaMetadataPayload {
+  name: string;
+  type: MediaType;
+}
+
 export const mediaApi = {
-  createMetadata: (payload: { filename: string; content_type: string; size?: number; type?: string }) =>
+  // Create a metadata-only media entry (no upload).
+  createMetadata: (payload: MediaMetadataPayload) =>
     apiClient.request<MediaAsset>({
-      path: "/v1/media",
+      path: "/media",
       method: "POST",
       body: payload,
     }),
 
   presignUpload: (payload: PresignPayload) =>
-    apiClient.request<{
-      upload_url: string;
-      media_id: string;
-      bucket: string;
-      object_key: string;
-      expires_in: number;
-    }>({
-      path: "/v1/media/presign-upload",
+    apiClient.request<PresignResponse>({
+      path: "/media/presign-upload",
       method: "POST",
       body: payload,
     }),
 
   complete: (mediaId: string, payload: MediaCompletionPayload) =>
     apiClient.request<MediaAsset>({
-      path: `/v1/media/${mediaId}/complete`,
+      path: `/media/${mediaId}/complete`,
       method: "POST",
       body: payload,
     }),
 
-  list: (params?: PaginationParams & { type?: string; status?: string }) =>
+  list: (params?: MediaListParams) =>
     apiClient.request<PaginatedResponse<MediaAsset>>({
-      path: "/v1/media",
+      path: "/media",
       method: "GET",
       query: params,
     }),
 
   getById: (mediaId: string) =>
     apiClient.request<MediaAsset>({
-      path: `/v1/media/${mediaId}`,
+      path: `/media/${mediaId}`,
       method: "GET",
-    }),
+  }),
 
-  remove: (mediaId: string) =>
-    apiClient.request<void>({
-      path: `/v1/media/${mediaId}`,
+  remove: (mediaId: string, options?: { hard?: boolean }) =>
+    apiClient.request<{ message?: string } | void>({
+      path: `/media/${mediaId}`,
       method: "DELETE",
+      query: options?.hard ? { hard: true } : undefined,
     }),
 };
