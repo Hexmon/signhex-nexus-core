@@ -31,6 +31,7 @@ const navItems = [
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
   { title: "Requests", url: "/requests", icon: MessageSquare },
   { title: "Departments", url: "/departments", icon: Building2 },
+  { title: "Users", url: "/users", icon: Users },
   { title: "Operators", url: "/operators", icon: Users },
   { title: "Conversations", url: "/conversations", icon: Kanban },
   { title: "Screens", url: "/screens", icon: Monitor },
