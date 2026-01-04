@@ -225,18 +225,112 @@ export interface Presentation {
   updated_at?: string;
 }
 
+export interface Screen {
+  id: string;
+  name: string;
+  location?: string | null;
+  status?: string;
+  is_active?: boolean;
+  last_heartbeat_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScreenStatus {
+  screen_id: string;
+  status: "ACTIVE" | "OFFLINE" | "INACTIVE";
+  last_heartbeat_at?: string | null;
+  uptime_seconds?: number;
+}
+
+export interface NowPlaying {
+  screen_id: string;
+  media_id?: string;
+  media_name?: string;
+  started_at?: string;
+  schedule_id?: string;
+}
+
+export interface ScreenAvailability {
+  screen_id: string;
+  is_available: boolean;
+  current_schedule_id?: string | null;
+  next_available_at?: string | null;
+}
+
+export interface ScreenSnapshot {
+  screen_id: string;
+  snapshot_at: string;
+  current_media?: {
+    id: string;
+    name: string;
+    url?: string;
+  };
+  schedule?: {
+    id: string;
+    name: string;
+  };
+}
+
 export interface ScreenGroup {
   id: string;
   name: string;
   description?: string | null;
+  screen_ids?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScreenGroupAvailability {
+  group_id: string;
+  available_count: number;
+  total_count: number;
+  screens: Array<{
+    screen_id: string;
+    is_available: boolean;
+  }>;
+}
+
+export interface ScreenGroupNowPlaying {
+  group_id: string;
+  screens: Array<{
+    screen_id: string;
+    media_id?: string;
+    media_name?: string;
+  }>;
+}
+
+export interface ScreensOverview {
+  screens: Screen[];
+  groups: ScreenGroup[];
+  now_playing: NowPlaying[];
+  stats?: {
+    total_screens: number;
+    active_screens: number;
+    offline_screens: number;
+    total_groups: number;
+  };
 }
 
 export interface DevicePairing {
   id: string;
-  pairing_code?: string;
   device_id?: string;
-  status?: string;
+  pairing_code?: string;
+  status?: "pending" | "used" | "expired";
+  used_at?: string | null;
+  expires_at?: string;
   created_at?: string;
+}
+
+export interface DevicePairingRequest {
+  device_label: string;
+  width: number;
+  height: number;
+  aspect_ratio: string;
+  orientation: "landscape" | "portrait";
+  model?: string;
+  codecs?: string[];
+  device_info?: Record<string, unknown>;
 }
 
 export interface DeviceCommand {
@@ -251,14 +345,6 @@ export interface EmergencyStatus {
   id: string;
   status: string;
   triggered_at?: string;
-}
-
-export interface Screen {
-  id: string;
-  name: string;
-  location?: string | null;
-  status?: string;
-  last_heartbeat_at?: string | null;
 }
 
 export type MediaType = "IMAGE" | "VIDEO" | "DOCUMENT";
