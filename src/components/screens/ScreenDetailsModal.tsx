@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -35,40 +35,55 @@ export function ScreenDetailsModal({ screenId, open, onOpenChange }: ScreenDetai
         queryKey: ["screen", screenId],
         queryFn: () => screensApi.getById(screenId),
         enabled: open,
+        staleTime: 5000, // Consider data fresh for 5 seconds
     });
 
     const { data: status } = useQuery({
         queryKey: ["screen-status", screenId],
         queryFn: () => screensApi.getStatus(screenId),
         enabled: open,
-        refetchInterval: 30000,
+        staleTime: 5000,
+        // refetchInterval: 30000,
     });
 
     const { data: nowPlaying } = useQuery({
         queryKey: ["screen-now-playing", screenId],
         queryFn: () => screensApi.getNowPlaying(screenId),
         enabled: open,
-        refetchInterval: 10000,
+        staleTime: 5000,
+        // refetchInterval: 10000,
     });
 
     const { data: availability } = useQuery({
         queryKey: ["screen-availability", screenId],
         queryFn: () => screensApi.getAvailability(screenId),
         enabled: open,
+        staleTime: 5000,
     });
 
+    const calledRef = useRef(false);
+
     const { data: snapshot } = useQuery({
-        queryKey: ["screen-snapshot", screenId],
-        queryFn: () => screensApi.getSnapshot(screenId, true),
+        queryKey: ["screen-snapshot", screenId, true],
+        queryFn: () => {
+            if (calledRef.current) return Promise.resolve(null);
+            calledRef.current = true;
+            return screensApi.getSnapshot(screenId, true);
+        },
         enabled: open,
     });
 
     const updateScreen = useSafeMutation({
         mutationFn: (payload: { name: string; location?: string }) =>
             screensApi.update(screenId, payload),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["screen", screenId] });
-            queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+        onSuccess: (updatedScreen) => {
+            queryClient.setQueryData(["screen", screenId], updatedScreen);
+
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.screens,
+                exact: true
+            });
+
             setIsEditing(false);
             toast.success("Screen updated successfully");
         },
@@ -117,7 +132,7 @@ export function ScreenDetailsModal({ screenId, open, onOpenChange }: ScreenDetai
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between pr-5">
                         <div>
                             <DialogTitle className="flex items-center gap-2">
                                 {isEditing ? (
