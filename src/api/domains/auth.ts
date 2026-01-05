@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { AuthResponse, User } from "../types";
 
 export interface LoginPayload {
@@ -9,20 +10,20 @@ export interface LoginPayload {
 export const authApi = {
   login: (payload: LoginPayload) =>
     apiClient.request<AuthResponse>({
-      path: "/auth/login",
+      path: endpoints.auth.login,
       method: "POST",
       body: payload,
     }),
 
   me: () =>
     apiClient.request<User>({
-      path: "/auth/me",
+      path: endpoints.auth.me,
       method: "GET",
     }),
 
   logout: () =>
     apiClient.request<void>({
-      path: "/auth/logout",
+      path: endpoints.auth.logout,
       method: "POST",
     }),
 };

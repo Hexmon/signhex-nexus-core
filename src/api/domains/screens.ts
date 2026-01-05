@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type {
   PaginatedResponse,
   PaginationParams,
@@ -17,34 +18,34 @@ export const screensApi = {
   // Screens
   list: (params?: PaginationParams & { status?: string }) =>
     apiClient.request<PaginatedResponse<Screen>>({
-      path: "/screens",
+      path: endpoints.screens.base,
       method: "GET",
       query: params,
     }),
 
   getById: (screenId: string) =>
     apiClient.request<Screen>({
-      path: `/screens/${screenId}`,
+      path: endpoints.screens.byId(screenId),
       method: "GET",
     }),
 
   create: (payload: { name: string; location?: string }) =>
     apiClient.request<Screen>({
-      path: "/screens",
+      path: endpoints.screens.base,
       method: "POST",
       body: payload,
     }),
 
   update: (id: string, payload: Partial<{ name: string; location?: string; is_active?: boolean }>) =>
     apiClient.request<Screen>({
-      path: `/screens/${id}`,
+      path: endpoints.screens.byId(id),
       method: "PATCH",
       body: payload,
     }),
 
   remove: (id: string) =>
     apiClient.request<void>({
-      path: `/screens/${id}`,
+      path: endpoints.screens.byId(id),
       method: "DELETE",
     }),
 
@@ -82,34 +83,27 @@ export const screensApi = {
   // Screen Groups
   createGroup: (payload: { name: string; description?: string; screen_ids?: string[] }) =>
     apiClient.request<ScreenGroup>({
-      path: "/screen-groups",
+      path: endpoints.screens.groups,
       method: "POST",
       body: payload,
     }),
 
-  listGroups: (params?: PaginationParams) =>
-    apiClient.request<PaginatedResponse<ScreenGroup>>({
-      path: "/screen-groups",
-      method: "GET",
-      query: params,
-    }),
-
-  getGroupById: (groupId: string) =>
-    apiClient.request<ScreenGroup>({
-      path: `/screen-groups/${groupId}`,
+  listGroups: () =>
+    apiClient.request<ScreenGroup[]>({
+      path: endpoints.screens.groups,
       method: "GET",
     }),
 
   updateGroup: (groupId: string, payload: Partial<{ name?: string; description?: string; screen_ids?: string[] }>) =>
     apiClient.request<ScreenGroup>({
-      path: `/screen-groups/${groupId}`,
+      path: endpoints.screens.groupById(groupId),
       method: "PATCH",
       body: payload,
     }),
 
   removeGroup: (groupId: string) =>
     apiClient.request<void>({
-      path: `/screen-groups/${groupId}`,
+      path: endpoints.screens.groupById(groupId),
       method: "DELETE",
     }),
 
