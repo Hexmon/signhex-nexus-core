@@ -6,6 +6,7 @@ export const ROUTES = {
   requests: "/requests",
   departments: "/departments",
   operators: "/operators",
+  users: "/users",
   conversations: "/conversations",
   screens: "/screens",
   media: "/media",

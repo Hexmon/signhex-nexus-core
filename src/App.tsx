@@ -25,6 +25,7 @@ import Webhooks from "./pages/Webhooks";
 import SsoConfig from "./pages/SsoConfig";
 import ProofOfPlay from "./pages/ProofOfPlay";
 import NotFound from "./pages/NotFound";
+import Users from "./pages/Users";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +69,7 @@ const App = () => (
                         <Route path="/requests" element={<Requests />} />
                         <Route path="/departments" element={<Departments />} />
                         <Route path="/operators" element={<Operators />} />
+                        <Route path="/users" element={<Users />} />
                         <Route path="/conversations" element={<Conversations />} />
                         <Route path="/screens" element={<Screens />} />
                         <Route path="/media" element={<MediaLibrary />} />

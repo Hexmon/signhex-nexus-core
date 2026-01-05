@@ -8,6 +8,15 @@ export interface InviteUserPayload {
   department_id?: string;
 }
 
+export interface UserInvitation {
+  id: string;
+  email?: string;
+  role?: User["role"];
+  invited_at?: string;
+  expires_at?: string;
+  status?: string;
+}
+
 export const usersApi = {
   create: (payload: { email: string; role: User["role"]; department_id?: string; password?: string }) =>
     apiClient.request<User>({
@@ -21,6 +30,13 @@ export const usersApi = {
       path: endpoints.users.invite,
       method: "POST",
       body: payload,
+    }),
+
+  listInvitations: (params?: PaginationParams & { status?: string; email?: string; invited_after?: string }) =>
+    apiClient.request<PaginatedResponse<UserInvitation>>({
+      path: "/users/invite",
+      method: "GET",
+      query: params,
     }),
 
   activate: (payload: { token: string; password: string }) =>
