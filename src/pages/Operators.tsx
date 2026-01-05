@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus } from "lucide-react";
+import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus, EyeOff, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ const roleColor: Record<string, string> = {
 };
 
 export default function Operators() {
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
@@ -45,6 +46,7 @@ export default function Operators() {
     last_name: "",
     role: "OPERATOR",
     department_id: "",
+    password: "",
   });
   const [pendingActionUser, setPendingActionUser] = useState<ApiUser | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -87,6 +89,7 @@ export default function Operators() {
         last_name: selectedUser.last_name ?? "",
         role: selectedUser.role,
         department_id: selectedUser.department_id ?? "",
+        password: "",
       });
     } else {
       setFormData({
@@ -95,22 +98,34 @@ export default function Operators() {
         last_name: "",
         role: "OPERATOR",
         department_id: "",
+        password: "",
       });
     }
   }, [selectedUser, isFormOpen]);
 
   const createOrUpdate = useSafeMutation({
     mutationFn: async () => {
+      if (selectedUser) {
+        // Update existing user
+        const payload = {
+          email: formData.email.trim(),
+          first_name: formData.first_name.trim() || undefined,
+          last_name: formData.last_name.trim() || undefined,
+          role: formData.role as ApiUser["role"],
+          department_id: formData.department_id.trim() || undefined,
+        };
+        return usersApi.update(selectedUser.id, payload);
+      }
+
+      // Create new user with password
       const payload = {
         email: formData.email.trim(),
         first_name: formData.first_name.trim() || undefined,
         last_name: formData.last_name.trim() || undefined,
         role: formData.role as ApiUser["role"],
         department_id: formData.department_id.trim() || undefined,
+        password: formData.password,
       };
-      if (selectedUser) {
-        return usersApi.update(selectedUser.id, payload);
-      }
       return usersApi.create(payload);
     },
     onSuccess: () => {
@@ -131,10 +146,14 @@ export default function Operators() {
 
   const resetPassword = useSafeMutation({
     mutationFn: (id: string) => usersApi.resetPassword(id),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setPendingActionUser(null);
       setIsResetConfirmOpen(false);
-      toast({ title: "Password reset", description: "Temporary password generated." });
+      toast({
+        title: "Password reset",
+        description: `Temporary password: ${data.temp_password}`,
+        duration: 10000,
+      });
     },
   }, "Unable to reset password.");
 
@@ -294,6 +313,7 @@ export default function Operators() {
                   value={formData.first_name}
                   onChange={(e) => setFormData((p) => ({ ...p, first_name: e.target.value }))}
                   disabled={createOrUpdate.isPending}
+                  placeholder="Optional"
                 />
               </div>
               <div className="space-y-2">
@@ -303,9 +323,41 @@ export default function Operators() {
                   value={formData.last_name}
                   onChange={(e) => setFormData((p) => ({ ...p, last_name: e.target.value }))}
                   disabled={createOrUpdate.isPending}
+                  placeholder="Optional"
                 />
               </div>
             </div>
+            {!selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
+                    placeholder="Enter initial password"
+                    disabled={createOrUpdate.isPending}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={createOrUpdate.isPending}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Set an initial password for the new operator with atleast 8 characters with special character, number, and uppercase letter.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
@@ -342,9 +394,13 @@ export default function Operators() {
             </Button>
             <Button
               onClick={() => createOrUpdate.mutate()}
-              disabled={createOrUpdate.isPending || !formData.email.trim()}
+              disabled={
+                createOrUpdate.isPending ||
+                !formData.email.trim() ||
+                (!selectedUser && !formData.password.trim())
+              }
             >
-              {createOrUpdate.isPending ? "Saving..." : "Save"}
+              {createOrUpdate.isPending ? "Saving..." : selectedUser ? "Update" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>
