@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { ApiKey } from "../types";
 
 export interface CreateApiKeyPayload {
@@ -11,7 +12,7 @@ export interface CreateApiKeyPayload {
 export const apiKeysApi = {
   create: (payload: CreateApiKeyPayload) =>
     apiClient.request<ApiKey>({
-      path: "/api-keys",
+      path: endpoints.apiKeys.base,
       method: "POST",
       body: payload,
       useApiKey: true,
@@ -19,21 +20,21 @@ export const apiKeysApi = {
 
   list: () =>
     apiClient.request<ApiKey[]>({
-      path: "/api-keys",
+      path: endpoints.apiKeys.base,
       method: "GET",
       useApiKey: true,
     }),
 
   rotate: (apiKeyId: string) =>
     apiClient.request<ApiKey>({
-      path: `/api-keys/${apiKeyId}/rotate`,
+      path: endpoints.apiKeys.rotate(apiKeyId),
       method: "POST",
       useApiKey: true,
     }),
 
   revoke: (apiKeyId: string) =>
     apiClient.request<void>({
-      path: `/api-keys/${apiKeyId}/revoke`,
+      path: endpoints.apiKeys.revoke(apiKeyId),
       method: "POST",
       useApiKey: true,
     }),

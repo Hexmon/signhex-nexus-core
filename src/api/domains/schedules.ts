@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { PaginatedResponse, PaginationParams, Publish, Schedule } from "../types";
 
 export interface SchedulePayload {
@@ -12,27 +13,27 @@ export interface SchedulePayload {
 export const schedulesApi = {
   create: (payload: SchedulePayload) =>
     apiClient.request<Schedule>({
-      path: "/v1/schedules",
+      path: endpoints.schedules.base,
       method: "POST",
       body: payload,
     }),
 
   getById: (scheduleId: string) =>
     apiClient.request<Schedule>({
-      path: `/v1/schedules/${scheduleId}`,
+      path: endpoints.schedules.byId(scheduleId),
       method: "GET",
     }),
 
   update: (scheduleId: string, payload: Partial<SchedulePayload>) =>
     apiClient.request<Schedule>({
-      path: `/v1/schedules/${scheduleId}`,
+      path: endpoints.schedules.byId(scheduleId),
       method: "PATCH",
       body: payload,
     }),
 
   list: (params?: PaginationParams & { is_active?: boolean }) =>
     apiClient.request<PaginatedResponse<Schedule>>({
-      path: "/v1/schedules",
+      path: endpoints.schedules.base,
       method: "GET",
       query: params,
     }),
@@ -42,20 +43,20 @@ export const schedulesApi = {
     payload: { screen_ids?: string[]; screen_group_ids?: string[] },
   ) =>
     apiClient.request<Publish>({
-      path: `/v1/schedules/${scheduleId}/publish`,
+      path: endpoints.schedules.publish(scheduleId),
       method: "POST",
       body: payload,
     }),
 
   getPublish: (publishId: string) =>
     apiClient.request<Publish>({
-      path: `/v1/publishes/${publishId}`,
+      path: endpoints.schedules.publishById(publishId),
       method: "GET",
     }),
 
   listPublishes: (scheduleId: string) =>
     apiClient.request<Publish[]>({
-      path: `/v1/schedules/${scheduleId}/publishes`,
+      path: endpoints.schedules.publishesForSchedule(scheduleId),
       method: "GET",
     }),
 
@@ -65,14 +66,14 @@ export const schedulesApi = {
     payload: { status: string; error?: string | null },
   ) =>
     apiClient.request<Publish>({
-      path: `/v1/publishes/${publishId}/targets/${targetId}`,
+      path: endpoints.schedules.publishTarget(publishId, targetId),
       method: "PATCH",
       body: payload,
     }),
 
   remove: (scheduleId: string) =>
     apiClient.request<void>({
-      path: `/v1/schedules/${scheduleId}`,
+      path: endpoints.schedules.byId(scheduleId),
       method: "DELETE",
     }),
 };
