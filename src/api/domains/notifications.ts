@@ -1,35 +1,36 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { Notification, PaginatedResponse, PaginationParams } from "../types";
 
 export const notificationsApi = {
   list: (params?: PaginationParams & { read?: boolean }) =>
     apiClient.request<PaginatedResponse<Notification>>({
-      path: "/v1/notifications",
+      path: endpoints.notifications.base,
       method: "GET",
       query: params,
     }),
 
   getById: (notificationId: string) =>
     apiClient.request<Notification>({
-      path: `/v1/notifications/${notificationId}`,
+      path: endpoints.notifications.byId(notificationId),
       method: "GET",
     }),
 
   markRead: (notificationId: string) =>
     apiClient.request<void>({
-      path: `/v1/notifications/${notificationId}/read`,
+      path: endpoints.notifications.markRead(notificationId),
       method: "POST",
     }),
 
   markAllRead: () =>
     apiClient.request<void>({
-      path: "/v1/notifications/read-all",
+      path: endpoints.notifications.markAllRead,
       method: "POST",
     }),
 
   remove: (notificationId: string) =>
     apiClient.request<void>({
-      path: `/v1/notifications/${notificationId}`,
+      path: endpoints.notifications.byId(notificationId),
       method: "DELETE",
     }),
 };

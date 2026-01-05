@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { MediaAsset, MediaListParams, MediaType, PaginatedResponse } from "../types";
 
 export interface PresignPayload {
@@ -33,41 +34,41 @@ export const mediaApi = {
   // Create a metadata-only media entry (no upload).
   createMetadata: (payload: MediaMetadataPayload) =>
     apiClient.request<MediaAsset>({
-      path: "/media",
+      path: endpoints.media.base,
       method: "POST",
       body: payload,
     }),
 
   presignUpload: (payload: PresignPayload) =>
     apiClient.request<PresignResponse>({
-      path: "/media/presign-upload",
+      path: endpoints.media.presignUpload,
       method: "POST",
       body: payload,
     }),
 
   complete: (mediaId: string, payload: MediaCompletionPayload) =>
     apiClient.request<MediaAsset>({
-      path: `/media/${mediaId}/complete`,
+      path: endpoints.media.complete(mediaId),
       method: "POST",
       body: payload,
     }),
 
   list: (params?: MediaListParams) =>
     apiClient.request<PaginatedResponse<MediaAsset>>({
-      path: "/media",
+      path: endpoints.media.base,
       method: "GET",
       query: params,
     }),
 
   getById: (mediaId: string) =>
     apiClient.request<MediaAsset>({
-      path: `/media/${mediaId}`,
+      path: endpoints.media.byId(mediaId),
       method: "GET",
-  }),
+    }),
 
   remove: (mediaId: string, options?: { hard?: boolean }) =>
     apiClient.request<{ message?: string } | void>({
-      path: `/media/${mediaId}`,
+      path: endpoints.media.byId(mediaId),
       method: "DELETE",
       query: options?.hard ? { hard: true } : undefined,
     }),

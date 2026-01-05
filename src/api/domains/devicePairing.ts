@@ -1,11 +1,12 @@
 import { apiClient } from "../apiClient";
-import type { PaginatedResponse, PaginationParams, DevicePairing, DevicePairingRequest } from "../types";
+import { endpoints } from "../endpoints";
+import type { DevicePairing, DevicePairingRequest, PaginatedResponse, PaginationParams } from "../types";
 
 export const devicePairingApi = {
   // Generate pairing code (for device setup)
   generate: (payload: { device_id?: string; expires_in?: number }) =>
     apiClient.request<DevicePairing>({
-      path: "/device-pairing/generate",
+      path: endpoints.devicePairing.generate,
       method: "POST",
       body: payload,
     }),
@@ -13,7 +14,7 @@ export const devicePairingApi = {
   // Complete pairing (from device side with CSR)
   complete: (payload: { pairing_code: string; csr?: string }) =>
     apiClient.request<DevicePairing>({
-      path: "/device-pairing/complete",
+      path: endpoints.devicePairing.complete,
       method: "POST",
       body: payload,
     }),
@@ -21,7 +22,7 @@ export const devicePairingApi = {
   // List all pairing records (for reviewing pending/used/expired codes)
   list: (params?: PaginationParams) =>
     apiClient.request<PaginatedResponse<DevicePairing>>({
-      path: "/device-pairing",
+      path: endpoints.devicePairing.base,
       method: "GET",
       query: params,
     }),

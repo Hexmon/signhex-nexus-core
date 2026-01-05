@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { PaginatedResponse, PaginationParams, RequestTicket } from "../types";
 
 export interface RequestPayload {
@@ -11,35 +12,35 @@ export interface RequestPayload {
 export const requestsApi = {
   create: (payload: RequestPayload) =>
     apiClient.request<RequestTicket>({
-      path: "/v1/requests",
+      path: endpoints.requests.base,
       method: "POST",
       body: payload,
     }),
 
   list: (params?: PaginationParams & { status?: string }) =>
     apiClient.request<PaginatedResponse<RequestTicket>>({
-      path: "/v1/requests",
+      path: endpoints.requests.base,
       method: "GET",
       query: params,
     }),
 
   update: (id: string, payload: Partial<RequestPayload>) =>
     apiClient.request<RequestTicket>({
-      path: `/v1/requests/${id}`,
+      path: endpoints.requests.byId(id),
       method: "PATCH",
       body: payload,
     }),
 
   listMessages: (id: string, params?: PaginationParams) =>
     apiClient.request<PaginatedResponse<{ id: string; message: string; created_at: string }>>({
-      path: `/v1/requests/${id}/messages`,
+      path: endpoints.requests.messages(id),
       method: "GET",
       query: params,
     }),
 
   sendMessage: (id: string, payload: { message: string; attachments?: string[] }) =>
     apiClient.request<{ id: string }>({
-      path: `/v1/requests/${id}/messages`,
+      path: endpoints.requests.messages(id),
       method: "POST",
       body: payload,
     }),

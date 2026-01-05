@@ -1,3 +1,5 @@
+import { API_BASE_PATH } from "./endpoints";
+
 type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 export interface ApiRequestOptions<TBody = unknown> {
@@ -32,12 +34,8 @@ export class ApiError extends Error {
 type TokenProvider = () => string | undefined | null;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const envBase = "http://localhost:3000/api/v1";
-const inferredOrigin =
-  typeof window !== "undefined" && window.location.origin;
-const API_PREFIX = "/api";
-const API_VERSION = "v1";
-const baseURL = envBase || `${inferredOrigin ?? "http://localhost:3000"}${API_PREFIX}/${API_VERSION}`;
+const inferredOrigin = typeof window !== "undefined" && window.location.origin;
+const baseURL = `${"http://localhost:3000"}${API_BASE_PATH}`;
 const POST_LOGIN_REDIRECT_KEY = "postLoginRedirect";
 
 const sanitizeMessage = (message: unknown) =>

@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { endpoints } from "../endpoints";
 import type { Webhook } from "../types";
 
 export interface CreateWebhookPayload {
@@ -12,33 +13,33 @@ export interface CreateWebhookPayload {
 export const webhooksApi = {
   create: (payload: CreateWebhookPayload) =>
     apiClient.request<Webhook>({
-      path: "/v1/webhooks",
+      path: endpoints.webhooks.base,
       method: "POST",
       body: payload,
     }),
 
   list: () =>
     apiClient.request<Webhook[]>({
-      path: "/v1/webhooks",
+      path: endpoints.webhooks.base,
       method: "GET",
     }),
 
   update: (webhookId: string, payload: Partial<CreateWebhookPayload>) =>
     apiClient.request<Webhook>({
-      path: `/v1/webhooks/${webhookId}`,
+      path: endpoints.webhooks.byId(webhookId),
       method: "PATCH",
       body: payload,
     }),
 
   remove: (webhookId: string) =>
     apiClient.request<void>({
-      path: `/v1/webhooks/${webhookId}`,
+      path: endpoints.webhooks.byId(webhookId),
       method: "DELETE",
     }),
 
   test: (webhookId: string) =>
     apiClient.request<void>({
-      path: `/v1/webhooks/${webhookId}/test`,
+      path: endpoints.webhooks.test(webhookId),
       method: "POST",
     }),
 };
