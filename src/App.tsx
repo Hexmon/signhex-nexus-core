@@ -26,6 +26,7 @@ import SsoConfig from "./pages/SsoConfig";
 import ProofOfPlay from "./pages/ProofOfPlay";
 import NotFound from "./pages/NotFound";
 import Users from "./pages/Users";
+import Layouts from "./pages/Layouts";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +67,7 @@ const App = () => (
                       <Routes>
                         <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/schedule" element={<ScheduleQueue />} />
+                        <Route path="/layouts" element={<Layouts />} />
                         <Route path="/requests" element={<Requests />} />
                         <Route path="/departments" element={<Departments />} />
                         <Route path="/operators" element={<Operators />} />
