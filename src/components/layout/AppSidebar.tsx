@@ -11,6 +11,7 @@ import {
   FileBarChart,
   Settings,
   HelpCircle,
+  PanelsTopLeft
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -28,20 +29,20 @@ import signhexLogo from "@/assets/signhex-logo.png";
 
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Media Library", url: "/media", icon: FolderOpen },
+  { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
+  { title: "Screens", url: "/screens", icon: Monitor },
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
   { title: "Requests", url: "/requests", icon: MessageSquare },
+  { title: "Conversations", url: "/conversations", icon: Kanban },
+  { title: "Operators", url: "/operators", icon: Users },
   { title: "Departments", url: "/departments", icon: Building2 },
   { title: "Users", url: "/users", icon: Users },
-  { title: "Operators", url: "/operators", icon: Users },
-  { title: "Conversations", url: "/conversations", icon: Kanban },
-  { title: "Screens", url: "/screens", icon: Monitor },
-  { title: "Media Library", url: "/media", icon: FolderOpen },
   { title: "Reports & Logs", url: "/reports", icon: FileBarChart },
   { title: "Site Settings", url: "/settings", icon: Settings },
 ];
 
-const sidebarTheme: CSSProperties = {
-  // Force a light shell with dark text, even if the rest of the app theme changes.
+const sidebarTheme: CSSProperties & Record<string, string> = {
   "--sidebar-background": "0 0% 100%",
   "--sidebar-foreground": "217 33% 17%",
   "--sidebar-accent": "0 34% 95%",
