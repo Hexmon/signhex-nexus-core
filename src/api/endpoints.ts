@@ -75,7 +75,7 @@ export const endpoints = {
     requestsByDepartment: "/reports/requests-by-department",
     offlineScreens: "/reports/offline-screens",
     storage: "/reports/storage",
-    systemHealth: "/reports/system-health",
+    systemHealth: "/health",
   },
   requests: {
     base: "/requests",
@@ -88,8 +88,7 @@ export const endpoints = {
     publish: (scheduleId: string) => `/schedules/${scheduleId}/publish`,
     publishById: (publishId: string) => `/publishes/${publishId}`,
     publishesForSchedule: (scheduleId: string) => `/schedules/${scheduleId}/publishes`,
-    publishTarget: (publishId: string, targetId: string) =>
-      `/publishes/${publishId}/targets/${targetId}`,
+    publishTarget: (publishId: string, targetId: string) => `/publishes/${publishId}/targets/${targetId}`,
   },
   screens: {
     base: "/screens",
