@@ -31,7 +31,7 @@ export const schedulesApi = {
       body: payload,
     }),
 
-  list: (params?: PaginationParams & { is_active?: boolean }) =>
+  list: (params?: PaginationParams & { page: number; limit: number; is_active?: boolean }) =>
     apiClient.request<PaginatedResponse<Schedule>>({
       path: endpoints.schedules.base,
       method: "GET",
