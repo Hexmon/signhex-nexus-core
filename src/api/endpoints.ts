@@ -61,6 +61,10 @@ export const endpoints = {
     markRead: (notificationId: string) => `/notifications/${notificationId}/read`,
     markAllRead: "/notifications/read-all",
   },
+  layouts: {
+    base: "/layouts",
+    byId: (layoutId: string) => `/layouts/${layoutId}`,
+  },
   presentations: {
     base: "/presentations",
     byId: (presentationId: string) => `/presentations/${presentationId}`,
@@ -95,6 +99,7 @@ export const endpoints = {
     byId: (screenId: string) => `/screens/${screenId}`,
     groups: "/screen-groups",
     groupById: (groupId: string) => `/screen-groups/${groupId}`,
+    aspectRatios: "/screens/aspect-ratios",
   },
   settings: {
     base: "/settings",

@@ -40,6 +40,53 @@ export interface ApiKey {
   revoked_at?: string | null;
 }
 
+export interface LayoutSlot {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface LayoutSpec {
+  slots: LayoutSlot[];
+}
+
+export interface LayoutItem {
+  id: string;
+  name: string;
+  description: string;
+  aspect_ratio: string;
+  spec: LayoutSpec;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LayoutPagination {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface LayoutListResponse {
+  items: LayoutItem[];
+  pagination: LayoutPagination;
+}
+
+export interface LayoutListParams extends PaginationParams {
+  search?: string;
+  aspect_ratio?: string;
+}
+
+export interface LayoutCreatePayload {
+  name: string;
+  description?: string;
+  aspect_ratio: string;
+  spec: LayoutSpec;
+}
+
+export type LayoutUpdatePayload = LayoutCreatePayload;
+
 export interface Webhook {
   id: string;
   name: string;
@@ -234,6 +281,16 @@ export interface Screen {
   last_heartbeat_at?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ScreenAspectRatio {
+  id: string;
+  name: string;
+  aspect_ratio: string;
+}
+
+export interface ScreenAspectRatioListResponse {
+  items: ScreenAspectRatio[];
 }
 
 export interface ScreenStatus {

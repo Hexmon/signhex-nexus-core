@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -10,6 +11,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   isLoading?: boolean;
+  confirmDisabled?: boolean;
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -21,6 +24,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   isLoading = false,
+  confirmDisabled = false,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onCancel}>
@@ -29,11 +34,16 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </DialogHeader>
+        {children && <div className="space-y-3 py-2">{children}</div>}
         <DialogFooter>
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             {cancelLabel}
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isLoading}>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isLoading || confirmDisabled}
+          >
             {isLoading ? "Processing..." : confirmLabel}
           </Button>
         </DialogFooter>

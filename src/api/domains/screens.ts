@@ -12,6 +12,7 @@ import type {
   ScreenGroupAvailability,
   ScreenGroupNowPlaying,
   ScreensOverview,
+  ScreenAspectRatioListResponse,
 } from "../types";
 
 export const screensApi = {
@@ -117,6 +118,13 @@ export const screensApi = {
     apiClient.request<ScreenGroupNowPlaying>({
       path: `/screen-groups/${groupId}/now-playing`,
       method: "GET",
+    }),
+
+  listAspectRatios: (params?: { search?: string }) =>
+    apiClient.request<ScreenAspectRatioListResponse>({
+      path: endpoints.screens.aspectRatios,
+      method: "GET",
+      query: params,
     }),
 
   listAvailableScreens: (params?: PaginationParams) =>
