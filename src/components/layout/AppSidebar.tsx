@@ -26,6 +26,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import signhexLogo from "@/assets/signhex-logo.png";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -77,17 +78,30 @@ export function AppSidebar() {
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       end={item.url === "/"}
                       className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-foreground font-semibold hover:bg-sidebar-accent"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent"
+                        cn(
+                          "group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+                        )
                       }
                     >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      {({ isActive }) => (
+                        <>
+                          <span
+                            className={cn(
+                              "h-6 w-1 rounded-full bg-primary transition-all duration-200",
+                              isActive ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span>{item.title}</span>
+                        </>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
