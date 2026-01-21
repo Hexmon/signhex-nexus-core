@@ -68,6 +68,7 @@ export const endpoints = {
   presentations: {
     base: "/presentations",
     byId: (presentationId: string) => `/presentations/${presentationId}`,
+    slots: (presentationId: string) => `/presentations/${presentationId}/slots`,
   },
   proofOfPlay: {
     base: "/proof-of-play",
@@ -90,9 +91,13 @@ export const endpoints = {
     base: "/schedules",
     byId: (scheduleId: string) => `/schedules/${scheduleId}`,
     publish: (scheduleId: string) => `/schedules/${scheduleId}/publish`,
+    items: (scheduleId: string) => `/schedules/${scheduleId}/items`,
     publishById: (publishId: string) => `/publishes/${publishId}`,
     publishesForSchedule: (scheduleId: string) => `/schedules/${scheduleId}/publishes`,
     publishTarget: (publishId: string, targetId: string) => `/publishes/${publishId}/targets/${targetId}`,
+  },
+  scheduleRequests: {
+    base: "/schedule-requests",
   },
   screens: {
     base: "/screens",

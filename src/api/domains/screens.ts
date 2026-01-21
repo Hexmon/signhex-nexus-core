@@ -89,10 +89,11 @@ export const screensApi = {
       body: payload,
     }),
 
-  listGroups: () =>
-    apiClient.request<ScreenGroup[]>({
+  listGroups: (params?: PaginationParams) =>
+    apiClient.request<PaginatedResponse<ScreenGroup>>({
       path: endpoints.screens.groups,
       method: "GET",
+      query: params,
     }),
 
   updateGroup: (groupId: string, payload: Partial<{ name?: string; description?: string; screen_ids?: string[] }>) =>

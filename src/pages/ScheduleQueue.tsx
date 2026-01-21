@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, Plus, AlertTriangle, Calendar, Clock, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { ContentTypeBadge } from "@/components/dashboard/ContentTypeBadge";
 import { RequestDetailDrawer } from "@/components/schedule/RequestDetailDrawer";
 
 interface Request {
@@ -105,6 +105,7 @@ const mockRequests: Request[] = [
 ];
 
 export default function ScheduleQueue() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
@@ -146,7 +147,7 @@ export default function ScheduleQueue() {
               <Zap className="h-4 w-4 mr-2" />
               Emergency Takeover
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => navigate("/schedule/new")}>
               <Plus className="h-4 w-4 mr-2" />
               New Request
             </Button>
@@ -219,11 +220,10 @@ export default function ScheduleQueue() {
                     <div
                       key={request.id}
                       onClick={() => setSelectedRequest(request)}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                        selectedRequest?.id === request.id
+                      className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${selectedRequest?.id === request.id
                           ? "border-primary bg-primary/5"
                           : "border-border bg-card hover:border-primary/50"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">

@@ -268,8 +268,34 @@ export interface Presentation {
   id: string;
   name: string;
   description?: string | null;
+  layout_id?: string;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export type PresentationFitMode = "cover" | "contain";
+
+export interface PresentationSlotPayload {
+  slot_id: string;
+  media_id: string;
+  order: number;
+  duration_seconds: number;
+  fit_mode: PresentationFitMode;
+  audio_enabled: boolean;
+}
+
+export interface PresentationSlot {
+  id: string;
+  presentation_id: string;
+  slot_id: string;
+  media_id: string;
+  order: number;
+  duration_seconds: number;
+  fit_mode: PresentationFitMode;
+  audio_enabled: boolean;
+  created_at?: string;
+  media?: MediaAsset;
 }
 
 export interface Screen {
@@ -436,6 +462,39 @@ export interface Schedule {
   start_at: string;
   end_at: string;
   is_active?: boolean;
+}
+
+export interface ScheduleItemPayload {
+  presentation_id: string;
+  start_at: string;
+  end_at: string;
+  priority: number;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+}
+
+export interface ScheduleItem {
+  id: string;
+  schedule_id: string;
+  presentation_id: string;
+  start_at: string;
+  end_at: string;
+  priority: number;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+  created_at?: string;
+}
+
+export interface ScheduleRequestPayload {
+  schedule_id: string;
+  notes?: string;
+}
+
+export interface ScheduleRequest {
+  id: string;
+  schedule_id: string;
+  notes?: string | null;
+  created_at?: string;
 }
 
 export interface Publish {

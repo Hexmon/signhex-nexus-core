@@ -1,9 +1,15 @@
 import { apiClient } from "../apiClient";
 import { endpoints } from "../endpoints";
-import type { PaginatedResponse, PaginationParams, Presentation } from "../types";
+import type {
+  PaginatedResponse,
+  PaginationParams,
+  Presentation,
+  PresentationSlot,
+  PresentationSlotPayload,
+} from "../types";
 
 export const presentationsApi = {
-  create: (payload: { name: string; description?: string }) =>
+  create: (payload: { name: string; description?: string; layout_id: string }) =>
     apiClient.request<Presentation>({
       path: endpoints.presentations.base,
       method: "POST",
@@ -34,5 +40,12 @@ export const presentationsApi = {
     apiClient.request<void>({
       path: endpoints.presentations.byId(presentationId),
       method: "DELETE",
+    }),
+
+  createSlot: (presentationId: string, payload: PresentationSlotPayload) =>
+    apiClient.request<PresentationSlot>({
+      path: endpoints.presentations.slots(presentationId),
+      method: "POST",
+      body: payload,
     }),
 };

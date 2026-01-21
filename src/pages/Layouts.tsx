@@ -60,6 +60,25 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
+export interface LayoutSlot {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Layout {
+  id: string;
+  name: string;
+  description: string;
+  aspect_ratio: string;
+  spec: {
+    slots: LayoutSlot[];
+  };
+  updated_at: string;
+}
+
 const Layouts = () => {
   const navigate = useNavigate();
   const { toast } = useToast();

@@ -12,6 +12,7 @@ import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ScheduleQueue from "./pages/ScheduleQueue";
+import ScheduleCreator from "./pages/ScheduleCreator";
 import Departments from "./pages/Departments";
 import Conversations from "./pages/Conversations";
 import Screens from "./pages/Screens";
@@ -68,9 +69,10 @@ const App = () => (
                       <Routes>
                         <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/schedule" element={<ScheduleQueue />} />
+                        <Route path="/schedule/new" element={<ScheduleCreator />} />
                         <Route path="/layouts" element={<Layouts />} />
                         <Route path="/layouts/new" element={<LayoutEditor />} />
-                        <Route path="/layouts/:id" element={<LayoutEditor />} /> 
+                        <Route path="/layouts/:id" element={<LayoutEditor />} />
                         <Route path="/requests" element={<Requests />} />
                         <Route path="/departments" element={<Departments />} />
                         <Route path="/operators" element={<Operators />} />

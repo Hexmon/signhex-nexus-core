@@ -44,9 +44,9 @@ const navItems = [
 ];
 
 const sidebarTheme: CSSProperties & Record<string, string> = {
-  "--sidebar-background": "0 0% 100%",
+  "--sidebar-background": "210 20% 97%",
   "--sidebar-foreground": "217 33% 17%",
-  "--sidebar-accent": "0 34% 95%",
+  "--sidebar-accent": "210 20% 94%",
   "--sidebar-accent-foreground": "0 100% 25%",
 };
 

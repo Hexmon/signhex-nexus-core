@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Plus, Copy, Trash2, Save, Grid3X3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,10 @@ import type { LayoutCreatePayload, LayoutItem, LayoutSlot, ScreenAspectRatio } f
 
 const defaultAspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
 
+type LayoutEditorLocationState = {
+  returnTo?: string;
+};
+
 function getAspectRatioDimensions(ratio: string, maxWidth: number): { width: number; height: number } {
   const [w, h] = ratio.split(":").map(Number);
   const aspectRatio = w / h;
@@ -51,10 +55,14 @@ function checkOverlap(slot1: LayoutSlot, slot2: LayoutSlot): boolean {
 const LayoutEditor = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const isEditMode = !!id && id !== "new";
+  const locationState = location.state as LayoutEditorLocationState | null;
+  const returnTo = locationState?.returnTo;
+  const defaultReturnPath = returnTo ?? "/layouts";
 
   // Form state
   const [name, setName] = useState("");
@@ -197,7 +205,11 @@ const LayoutEditor = () => {
         description: `"${name}" has been saved successfully.`,
       });
       setIsDirty(false);
-      navigate("/layouts");
+      if (returnTo && !isEditMode) {
+        navigate(returnTo);
+      } else {
+        navigate("/layouts");
+      }
     } catch {
       // errors handled by useSafeMutation toast
     }
@@ -205,10 +217,10 @@ const LayoutEditor = () => {
 
   const handleCancel = () => {
     if (isDirty) {
-      setPendingNavigation("/layouts");
+      setPendingNavigation(defaultReturnPath);
       setShowUnsavedDialog(true);
     } else {
-      navigate("/layouts");
+      navigate(defaultReturnPath);
     }
   };
 
