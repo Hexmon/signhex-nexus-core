@@ -11,6 +11,7 @@ import {
   FileBarChart,
   Settings,
   HelpCircle,
+  PanelsTopLeft
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
@@ -25,26 +26,27 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import signhexLogo from "@/assets/signhex-logo.png";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Media Library", url: "/media", icon: FolderOpen },
+  { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
+  { title: "Screens", url: "/screens", icon: Monitor },
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
   { title: "Requests", url: "/requests", icon: MessageSquare },
+  { title: "Conversations", url: "/conversations", icon: Kanban },
+  { title: "Operators", url: "/operators", icon: Users },
   { title: "Departments", url: "/departments", icon: Building2 },
   { title: "Users", url: "/users", icon: Users },
-  { title: "Operators", url: "/operators", icon: Users },
-  { title: "Conversations", url: "/conversations", icon: Kanban },
-  { title: "Screens", url: "/screens", icon: Monitor },
-  { title: "Media Library", url: "/media", icon: FolderOpen },
   { title: "Reports & Logs", url: "/reports", icon: FileBarChart },
   { title: "Site Settings", url: "/settings", icon: Settings },
 ];
 
-const sidebarTheme: CSSProperties = {
-  // Force a light shell with dark text, even if the rest of the app theme changes.
-  "--sidebar-background": "0 0% 100%",
+const sidebarTheme: CSSProperties & Record<string, string> = {
+  "--sidebar-background": "210 20% 97%",
   "--sidebar-foreground": "217 33% 17%",
-  "--sidebar-accent": "0 34% 95%",
+  "--sidebar-accent": "210 20% 94%",
   "--sidebar-accent-foreground": "0 100% 25%",
 };
 
@@ -76,17 +78,30 @@ export function AppSidebar() {
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       end={item.url === "/"}
                       className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-foreground font-semibold hover:bg-sidebar-accent"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent"
+                        cn(
+                          "group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-200",
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+                        )
                       }
                     >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      {({ isActive }) => (
+                        <>
+                          <span
+                            className={cn(
+                              "h-6 w-1 rounded-full bg-primary transition-all duration-200",
+                              isActive ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span>{item.title}</span>
+                        </>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -40,6 +40,53 @@ export interface ApiKey {
   revoked_at?: string | null;
 }
 
+export interface LayoutSlot {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface LayoutSpec {
+  slots: LayoutSlot[];
+}
+
+export interface LayoutItem {
+  id: string;
+  name: string;
+  description: string;
+  aspect_ratio: string;
+  spec: LayoutSpec;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LayoutPagination {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface LayoutListResponse {
+  items: LayoutItem[];
+  pagination: LayoutPagination;
+}
+
+export interface LayoutListParams extends PaginationParams {
+  search?: string;
+  aspect_ratio?: string;
+}
+
+export interface LayoutCreatePayload {
+  name: string;
+  description?: string;
+  aspect_ratio: string;
+  spec: LayoutSpec;
+}
+
+export type LayoutUpdatePayload = LayoutCreatePayload;
+
 export interface Webhook {
   id: string;
   name: string;
@@ -221,8 +268,34 @@ export interface Presentation {
   id: string;
   name: string;
   description?: string | null;
+  layout_id?: string;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export type PresentationFitMode = "cover" | "contain";
+
+export interface PresentationSlotPayload {
+  slot_id: string;
+  media_id: string;
+  order: number;
+  duration_seconds: number;
+  fit_mode: PresentationFitMode;
+  audio_enabled: boolean;
+}
+
+export interface PresentationSlot {
+  id: string;
+  presentation_id: string;
+  slot_id: string;
+  media_id: string;
+  order: number;
+  duration_seconds: number;
+  fit_mode: PresentationFitMode;
+  audio_enabled: boolean;
+  created_at?: string;
+  media?: MediaAsset;
 }
 
 export interface Screen {
@@ -234,6 +307,16 @@ export interface Screen {
   last_heartbeat_at?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ScreenAspectRatio {
+  id: string;
+  name: string;
+  aspect_ratio: string;
+}
+
+export interface ScreenAspectRatioListResponse {
+  items: ScreenAspectRatio[];
 }
 
 export interface ScreenStatus {
@@ -379,6 +462,39 @@ export interface Schedule {
   start_at: string;
   end_at: string;
   is_active?: boolean;
+}
+
+export interface ScheduleItemPayload {
+  presentation_id: string;
+  start_at: string;
+  end_at: string;
+  priority: number;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+}
+
+export interface ScheduleItem {
+  id: string;
+  schedule_id: string;
+  presentation_id: string;
+  start_at: string;
+  end_at: string;
+  priority: number;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+  created_at?: string;
+}
+
+export interface ScheduleRequestPayload {
+  schedule_id: string;
+  notes?: string;
+}
+
+export interface ScheduleRequest {
+  id: string;
+  schedule_id: string;
+  notes?: string | null;
+  created_at?: string;
 }
 
 export interface Publish {

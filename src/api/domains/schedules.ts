@@ -1,6 +1,13 @@
 import { apiClient } from "../apiClient";
 import { endpoints } from "../endpoints";
-import type { PaginatedResponse, PaginationParams, Publish, Schedule } from "../types";
+import type {
+  PaginatedResponse,
+  PaginationParams,
+  Publish,
+  Schedule,
+  ScheduleItem,
+  ScheduleItemPayload,
+} from "../types";
 
 export interface SchedulePayload {
   name: string;
@@ -31,7 +38,7 @@ export const schedulesApi = {
       body: payload,
     }),
 
-  list: (params?: PaginationParams & { is_active?: boolean }) =>
+  list: (params?: PaginationParams & { page: number; limit: number; is_active?: boolean }) =>
     apiClient.request<PaginatedResponse<Schedule>>({
       path: endpoints.schedules.base,
       method: "GET",
@@ -75,5 +82,12 @@ export const schedulesApi = {
     apiClient.request<void>({
       path: endpoints.schedules.byId(scheduleId),
       method: "DELETE",
+    }),
+
+  createItem: (scheduleId: string, payload: ScheduleItemPayload) =>
+    apiClient.request<ScheduleItem>({
+      path: endpoints.schedules.items(scheduleId),
+      method: "POST",
+      body: payload,
     }),
 };

@@ -61,9 +61,14 @@ export const endpoints = {
     markRead: (notificationId: string) => `/notifications/${notificationId}/read`,
     markAllRead: "/notifications/read-all",
   },
+  layouts: {
+    base: "/layouts",
+    byId: (layoutId: string) => `/layouts/${layoutId}`,
+  },
   presentations: {
     base: "/presentations",
     byId: (presentationId: string) => `/presentations/${presentationId}`,
+    slots: (presentationId: string) => `/presentations/${presentationId}/slots`,
   },
   proofOfPlay: {
     base: "/proof-of-play",
@@ -75,7 +80,7 @@ export const endpoints = {
     requestsByDepartment: "/reports/requests-by-department",
     offlineScreens: "/reports/offline-screens",
     storage: "/reports/storage",
-    systemHealth: "/reports/system-health",
+    systemHealth: "/health",
   },
   requests: {
     base: "/requests",
@@ -86,16 +91,20 @@ export const endpoints = {
     base: "/schedules",
     byId: (scheduleId: string) => `/schedules/${scheduleId}`,
     publish: (scheduleId: string) => `/schedules/${scheduleId}/publish`,
+    items: (scheduleId: string) => `/schedules/${scheduleId}/items`,
     publishById: (publishId: string) => `/publishes/${publishId}`,
     publishesForSchedule: (scheduleId: string) => `/schedules/${scheduleId}/publishes`,
-    publishTarget: (publishId: string, targetId: string) =>
-      `/publishes/${publishId}/targets/${targetId}`,
+    publishTarget: (publishId: string, targetId: string) => `/publishes/${publishId}/targets/${targetId}`,
+  },
+  scheduleRequests: {
+    base: "/schedule-requests",
   },
   screens: {
     base: "/screens",
     byId: (screenId: string) => `/screens/${screenId}`,
     groups: "/screen-groups",
     groupById: (groupId: string) => `/screen-groups/${groupId}`,
+    aspectRatios: "/screens/aspect-ratios",
   },
   settings: {
     base: "/settings",

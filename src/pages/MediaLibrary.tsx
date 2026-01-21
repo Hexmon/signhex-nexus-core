@@ -13,10 +13,21 @@ import type { MediaAsset, MediaType } from "@/api/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation, useNavigate } from "react-router-dom";
+
+type MediaLibraryLocationState = {
+  returnTo?: string;
+  returnStep?: number;
+  restoreDraft?: boolean;
+  openUpload?: boolean;
+};
 
 export default function MediaLibrary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locationState = location.state as MediaLibraryLocationState | null;
   const [activeTab, setActiveTab] = useState("all");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -123,6 +134,14 @@ export default function MediaLibrary() {
       setIsUploadOpen(false);
       setSelectedFile(null);
       void queryClient.invalidateQueries({ queryKey: ["media"] });
+      if (locationState?.returnTo) {
+        navigate(locationState.returnTo, {
+          state: {
+            step: locationState.returnStep ?? 2,
+            restoreDraft: true,
+          },
+        });
+      }
     },
     onError: (err) => {
       const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Upload failed.";
@@ -221,6 +240,12 @@ export default function MediaLibrary() {
   useEffect(() => {
     if (!isUploadOpen) setSelectedFile(null);
   }, [isUploadOpen]);
+
+  useEffect(() => {
+    if (locationState?.openUpload) {
+      setIsUploadOpen(true);
+    }
+  }, [locationState?.openUpload]);
 
   useEffect(() => {
     if (isError) {
