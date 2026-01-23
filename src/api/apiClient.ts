@@ -16,30 +16,52 @@ export interface ApiRequestOptions<TBody = unknown> {
 
 export interface ApiErrorShape {
   status: number;
+  code?: string;
   message: string;
   details?: unknown;
+  traceId?: string;
 }
 
 export class ApiError extends Error {
   status: number;
   details?: unknown;
+  code?: string;
+  traceId?: string;
   constructor(payload: ApiErrorShape) {
     super(payload.message);
     this.name = "ApiError";
     this.status = payload.status;
     this.details = payload.details;
+    this.code = payload.code;
+    this.traceId = payload.traceId;
   }
 }
 
 type TokenProvider = () => string | undefined | null;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const inferredOrigin = typeof window !== "undefined" && window.location.origin;
-const baseURL = `${"http://localhost:3000"}${API_BASE_PATH}`;
+const inferredOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+const envBaseUrl = import.meta.env.VITE_API_BASE_URL;
+const baseURL = `${envBaseUrl ?? inferredOrigin}${API_BASE_PATH}`;
 const POST_LOGIN_REDIRECT_KEY = "postLoginRedirect";
 
 const sanitizeMessage = (message: unknown) =>
   typeof message === "string" ? message : "Request failed. Please try again.";
+
+type ErrorEnvelope = {
+  success?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+    traceId?: string;
+  };
+};
+
+const parseErrorEnvelope = (payload: unknown): ErrorEnvelope | undefined => {
+  if (!payload || typeof payload !== "object") return undefined;
+  return payload as ErrorEnvelope;
+};
 
 const fillPathParams = (path: string, params?: Record<string, string | number>) =>
   !params
@@ -118,12 +140,14 @@ export class ApiClient {
         const payload = isJson ? await response.json() : await response.text();
 
         if (!response.ok) {
+          const envelope = isJson ? parseErrorEnvelope(payload) : undefined;
+          const envelopeMessage = envelope?.error?.message;
           throw new ApiError({
             status: response.status,
-            message:
-              (isJson && typeof (payload as any)?.error === "string" && (payload as any).error) ||
-              sanitizeMessage(payload),
-            details: isJson ? payload : undefined,
+            code: envelope?.error?.code,
+            traceId: envelope?.error?.traceId,
+            message: envelopeMessage || sanitizeMessage(payload),
+            details: envelope?.error?.details ?? (isJson ? payload : undefined),
           });
         }
 

@@ -17,6 +17,22 @@ type ChartContextProps = {
   config: ChartConfig;
 };
 
+type ChartValue = number | string;
+
+type ChartTooltipPayloadItem = {
+  name?: string;
+  dataKey?: string | number;
+  value?: ChartValue;
+  payload?: { fill?: string };
+  color?: string;
+};
+
+type ChartLegendPayloadItem = {
+  value?: string | number;
+  dataKey?: string | number;
+  color?: string;
+};
+
 const ChartContext = React.createContext<ChartContextProps | null>(null);
 
 function useChart() {
@@ -93,15 +109,20 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     active?: boolean;
-    payload?: any[];
+    payload?: ChartTooltipPayloadItem[];
     label?: string;
     hideLabel?: boolean;
     hideIndicator?: boolean;
     indicator?: "line" | "dot" | "dashed";
     nameKey?: string;
     labelKey?: string;
-    labelFormatter?: (value: any, payload: any[]) => string;
-    formatter?: (value: any, name: any, item: any, index: number) => React.ReactNode;
+    labelFormatter?: (value: React.ReactNode, payload: ChartTooltipPayloadItem[]) => React.ReactNode;
+    formatter?: (
+      value: ChartValue,
+      name: string,
+      item: ChartTooltipPayloadItem,
+      index: number,
+    ) => React.ReactNode;
     color?: string;
     labelClassName?: string;
   }
@@ -169,7 +190,7 @@ const ChartTooltipContent = React.forwardRef<
           {payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
-            const indicatorColor = color || item.payload.fill || item.color;
+            const indicatorColor = color || item.payload?.fill || item.color;
 
             return (
               <div
@@ -236,7 +257,7 @@ const ChartLegend = RechartsPrimitive.Legend;
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
-    payload?: any[];
+    payload?: ChartLegendPayloadItem[];
     verticalAlign?: "top" | "bottom";
     hideIcon?: boolean;
     nameKey?: string;

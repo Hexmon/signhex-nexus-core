@@ -61,6 +61,9 @@ export const endpoints = {
     markRead: (notificationId: string) => `/notifications/${notificationId}/read`,
     markAllRead: "/notifications/read-all",
   },
+  permissions: {
+    metadata: "/permissions/metadata",
+  },
   layouts: {
     base: "/layouts",
     byId: (layoutId: string) => `/layouts/${layoutId}`,
@@ -86,6 +89,10 @@ export const endpoints = {
     base: "/requests",
     byId: (requestId: string) => `/requests/${requestId}`,
     messages: (requestId: string) => `/requests/${requestId}/messages`,
+  },
+  roles: {
+    base: "/roles",
+    byId: (roleId: string) => `/roles/${roleId}`,
   },
   schedules: {
     base: "/schedules",

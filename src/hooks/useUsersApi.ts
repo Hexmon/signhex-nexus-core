@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { usersApi } from "@/api/domains/users";
+import { usersApi, type UpdateUserPayload } from "@/api/domains/users";
 import { ApiError } from "@/api/apiClient";
-import type { User, Role } from "@/api/types";
+import type { RoleId } from "@/api/types";
 
 export const useUsersApi = () => {
     const queryClient = useQueryClient();
@@ -43,7 +43,7 @@ export const useUsersApi = () => {
             password: string;
             first_name: string;
             last_name: string;
-            role: Role;
+            role_id: RoleId;
             department_id?: string;
         }) => usersApi.create(payload),
         retry: false,
@@ -67,7 +67,7 @@ export const useUsersApi = () => {
     const inviteUser = useMutation({
         mutationFn: (payload: {
             email: string;
-            role: Role;
+            role_id: RoleId;
             department_id?: string;
         }) => usersApi.invite(payload),
         retry: false,
@@ -94,7 +94,7 @@ export const useUsersApi = () => {
             payload,
         }: {
             userId: string;
-            payload: Partial<User>;
+            payload: UpdateUserPayload;
         }) => usersApi.update(userId, payload),
         retry: false,
         onSuccess: async () => {

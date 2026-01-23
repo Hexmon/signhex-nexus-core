@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usersApi } from "@/api/domains/users";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { User as ApiUser } from "@/api/types";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/api/apiClient";
@@ -26,12 +25,8 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
-
-const roleColor: Record<string, string> = {
-  ADMIN: "bg-purple-500/10 text-purple-700",
-  OPERATOR: "bg-blue-500/10 text-blue-700",
-  DEPARTMENT: "bg-emerald-500/10 text-emerald-700",
-};
+import { useRolesList } from "@/hooks/useRolesApi";
+import { getRoleBadgeClass } from "@/lib/roleBadges";
 
 export default function Operators() {
   const [showPassword, setShowPassword] = useState(false);
@@ -44,7 +39,7 @@ export default function Operators() {
     email: "",
     first_name: "",
     last_name: "",
-    role: "OPERATOR",
+    role_id: "",
     department_id: "",
     password: "",
   });
@@ -57,6 +52,9 @@ export default function Operators() {
     queryKey: queryKeys.users,
     queryFn: () => usersApi.list({ page: 1, limit: 100 }),
   });
+
+  const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
+  const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
 
   useEffect(() => {
     if (isError) {
@@ -87,7 +85,7 @@ export default function Operators() {
         email: selectedUser.email,
         first_name: selectedUser.first_name ?? "",
         last_name: selectedUser.last_name ?? "",
-        role: selectedUser.role,
+        role_id: selectedUser.role_id,
         department_id: selectedUser.department_id ?? "",
         password: "",
       });
@@ -96,12 +94,18 @@ export default function Operators() {
         email: "",
         first_name: "",
         last_name: "",
-        role: "OPERATOR",
+        role_id: "",
         department_id: "",
         password: "",
       });
     }
   }, [selectedUser, isFormOpen]);
+
+  useEffect(() => {
+    if (!formData.role_id && roles.length > 0) {
+      setFormData((prev) => ({ ...prev, role_id: roles[0].id }));
+    }
+  }, [formData.role_id, roles]);
 
   const createOrUpdate = useSafeMutation({
     mutationFn: async () => {
@@ -111,7 +115,7 @@ export default function Operators() {
           email: formData.email.trim(),
           first_name: formData.first_name.trim() || undefined,
           last_name: formData.last_name.trim() || undefined,
-          role: formData.role as ApiUser["role"],
+          role_id: formData.role_id,
           department_id: formData.department_id.trim() || undefined,
         };
         return usersApi.update(selectedUser.id, payload);
@@ -122,7 +126,7 @@ export default function Operators() {
         email: formData.email.trim(),
         first_name: formData.first_name.trim() || undefined,
         last_name: formData.last_name.trim() || undefined,
-        role: formData.role as ApiUser["role"],
+        role_id: formData.role_id,
         department_id: formData.department_id.trim() || undefined,
         password: formData.password,
       };
@@ -264,7 +268,7 @@ export default function Operators() {
               </CardHeader>
               <CardContent className="pt-0 space-y-3">
                 <div className="flex items-center justify-between">
-                  <Badge className={roleColor[operator.role] ?? "bg-secondary"}>
+                  <Badge className={getRoleBadgeClass(operator.role)}>
                     <Shield className="h-3 w-3 mr-1" />
                     {operator.role}
                   </Badge>
@@ -361,20 +365,32 @@ export default function Operators() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(val) => setFormData((p) => ({ ...p, role: val }))}
-                  disabled={createOrUpdate.isPending}
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="OPERATOR">Operator</SelectItem>
-                    <SelectItem value="DEPARTMENT">Department</SelectItem>
-                  </SelectContent>
-                </Select>
+                {isRolesLoading ? (
+                  <div className="flex items-center gap-2 p-2 border rounded-md">
+                    <span className="text-sm text-muted-foreground">Loading roles...</span>
+                  </div>
+                ) : roles.length === 0 ? (
+                  <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                    No roles available
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.role_id}
+                    onValueChange={(val) => setFormData((p) => ({ ...p, role_id: val }))}
+                    disabled={createOrUpdate.isPending}
+                  >
+                    <SelectTrigger id="role">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="department">Department ID</Label>
@@ -397,7 +413,8 @@ export default function Operators() {
               disabled={
                 createOrUpdate.isPending ||
                 !formData.email.trim() ||
-                (!selectedUser && !formData.password.trim())
+                (!selectedUser && !formData.password.trim()) ||
+                !formData.role_id
               }
             >
               {createOrUpdate.isPending ? "Saving..." : selectedUser ? "Update" : "Create"}

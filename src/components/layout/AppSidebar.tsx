@@ -12,6 +12,7 @@ import {
   HelpCircle,
   PanelsTopLeft
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -26,8 +27,19 @@ import {
 } from "@/components/ui/sidebar";
 import signhexLogo from "@/assets/signhex-logo.png";
 import { cn } from "@/lib/utils";
+import { useAuthorization } from "@/hooks/useAuthorization";
+import { useAppSelector } from "@/store/hooks";
 
-const navItems = [
+type NavItem = {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  permissions?: Array<{ action: string; subject: string }>;
+  requireAny?: boolean;
+  allowRoles?: string[];
+};
+
+const navItems: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Media Library", url: "/media", icon: FolderOpen },
   { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
@@ -38,13 +50,41 @@ const navItems = [
   { title: "Operators", url: "/operators", icon: Users },
   { title: "Departments", url: "/departments", icon: Building2 },
   { title: "Users", url: "/users", icon: Users },
-  { title: "Reports & Logs", url: "/reports", icon: FileBarChart },
-  { title: "Site Settings", url: "/settings", icon: Settings },
+  {
+    title: "Reports & Logs",
+    url: "/reports",
+    icon: FileBarChart,
+    permissions: [
+      { action: "read", subject: "Report" },
+      { action: "read", subject: "AuditLog" },
+    ],
+    requireAny: true,
+  },
+  {
+    title: "Site Settings",
+    url: "/settings",
+    icon: Settings,
+    permissions: [{ action: "read", subject: "Settings" }],
+    requireAny: true,
+    allowRoles: ["SUPER_ADMIN", "ADMIN"],
+  },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { can, isLoading: isAuthzLoading } = useAuthorization();
+  const user = useAppSelector((appState) => appState.auth.user);
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.allowRoles?.length && user?.role && item.allowRoles.includes(user.role)) return true;
+    if (!item.permissions?.length) return true;
+    if (isAuthzLoading) return false;
+    const requireAny = item.requireAny ?? true;
+    return requireAny
+      ? item.permissions.some((perm) => can(perm.action, perm.subject))
+      : item.permissions.every((perm) => can(perm.action, perm.subject));
+  });
 
   return (
     <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
@@ -63,7 +103,9 @@ export function AppSidebar() {
               >
                 Signhex
               </span>
-              <span className="text-xs text-muted-foreground">Super Admin</span>
+              <span className="text-xs text-muted-foreground">
+                {user?.role ?? "User"}
+              </span>
             </div>
           )}
         </div>
@@ -72,7 +114,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink

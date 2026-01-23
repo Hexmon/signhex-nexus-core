@@ -4,21 +4,33 @@ import type { PaginatedResponse, PaginationParams, User } from "../types";
 
 export interface InviteUserPayload {
   email: string;
-  role: User["role"];
+  role_id: User["role_id"];
   department_id?: string;
 }
 
 export interface UserInvitation {
   id: string;
   email?: string;
+  role_id?: User["role_id"];
   role?: User["role"];
   invited_at?: string;
   expires_at?: string;
   status?: string;
 }
 
+export interface CreateUserPayload {
+  email: string;
+  role_id: User["role_id"];
+  department_id?: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export type UpdateUserPayload = Partial<Omit<User, "role">> & { role_id?: User["role_id"] };
+
 export const usersApi = {
-  create: (payload: { email: string; role: User["role"]; department_id?: string; password?: string }) =>
+  create: (payload: CreateUserPayload) =>
     apiClient.request<User>({
       path: endpoints.users.base,
       method: "POST",
@@ -32,14 +44,16 @@ export const usersApi = {
       body: payload,
     }),
 
-  listInvitations: (params?: PaginationParams & { status?: string; email?: string; invited_after?: string }) =>
+  listInvitations: (
+    params?: PaginationParams & { status?: string; email?: string; invited_after?: string; role_id?: string },
+  ) =>
     apiClient.request<PaginatedResponse<UserInvitation>>({
-      path: "/users/invite",
+      path: endpoints.users.invite,
       method: "GET",
       query: params,
     }),
 
-  activate: (payload: { token: string; password: string }) =>
+  activate: (payload: { token: string; password: string; role_id?: User["role_id"] }) =>
     apiClient.request<void>({
       path: endpoints.users.activate,
       method: "POST",
@@ -52,7 +66,7 @@ export const usersApi = {
       method: "POST",
     }),
 
-  list: (params?: PaginationParams & { role?: string; department_id?: string; is_active?: boolean }) =>
+  list: (params?: PaginationParams & { role_id?: string; department_id?: string; is_active?: boolean }) =>
     apiClient.request<PaginatedResponse<User>>({
       path: endpoints.users.base,
       method: "GET",
@@ -65,7 +79,7 @@ export const usersApi = {
       method: "GET",
     }),
 
-  update: (userId: string, payload: Partial<User>) =>
+  update: (userId: string, payload: UpdateUserPayload) =>
     apiClient.request<User>({
       path: endpoints.users.byId(userId),
       method: "PATCH",

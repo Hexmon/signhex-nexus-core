@@ -167,7 +167,12 @@ export function EmergencyTakeoverModal({
           {/* Scope */}
           <div className="space-y-2">
             <Label htmlFor="scope">Scope</Label>
-            <Select value={config.scope} onValueChange={(value: any) => setConfig({ ...config, scope: value })}>
+            <Select
+              value={config.scope}
+              onValueChange={(value) =>
+                setConfig({ ...config, scope: value as TakeoverConfig["scope"] })
+              }
+            >
               <SelectTrigger id="scope">
                 <SelectValue />
               </SelectTrigger>

@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { ContentTypeBadge } from "@/components/dashboard/ContentTypeBadge";
+import { ContentTypeBadge, type ContentType } from "@/components/dashboard/ContentTypeBadge";
+import { useAuthorization } from "@/hooks/useAuthorization";
 
 interface Request {
   id: string;
@@ -31,6 +32,17 @@ interface RequestDetailDrawerProps {
 }
 
 export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerProps) {
+  const { can, isLoading: isAuthzLoading } = useAuthorization();
+  const canApprove = can("approve", "ScheduleRequest") || can("manage", "ScheduleRequest");
+  const canPublish = can("publish", "Schedule") || can("manage", "Schedule");
+  const allowApprovePublish = !isAuthzLoading && canApprove && canPublish;
+  const mediaItems: Array<{ name: string; type: ContentType; duration: string }> = [
+    { name: "welcome_banner.png", type: "image", duration: "00:15" },
+    { name: "product_video.mp4", type: "video", duration: "01:30" },
+    { name: "pricing_slide.pdf", type: "pdf", duration: "00:20" },
+    { name: "testimonials.mp4", type: "video", duration: "00:40" },
+  ];
+
   return (
     <div className="w-[480px] border-l border-border bg-background flex flex-col">
       {/* Header */}
@@ -51,7 +63,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
             <XCircle className="h-4 w-4 mr-2" />
             Request Changes
           </Button>
-          <Button size="sm" variant="default">
+          <Button size="sm" variant="default" disabled={!allowApprovePublish}>
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Approve & Publish
           </Button>
@@ -187,12 +199,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
             </div>
 
             <div className="space-y-3">
-              {[
-                { name: "welcome_banner.png", type: "image", duration: "00:15" },
-                { name: "product_video.mp4", type: "video", duration: "01:30" },
-                { name: "pricing_slide.pdf", type: "pdf", duration: "00:20" },
-                { name: "testimonials.mp4", type: "video", duration: "00:40" },
-              ].map((media, index) => (
+              {mediaItems.map((media, index) => (
                 <Card key={index}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
@@ -202,7 +209,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
                       <div className="flex-1">
                         <p className="font-medium text-sm">{media.name}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <ContentTypeBadge type={media.type as any} />
+                          <ContentTypeBadge type={media.type} />
                           <span className="text-xs text-muted-foreground">Duration: {media.duration}</span>
                         </div>
                       </div>

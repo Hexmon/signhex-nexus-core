@@ -80,8 +80,32 @@ const App = () => (
                         <Route path="/conversations" element={<Conversations />} />
                         <Route path="/screens" element={<Screens />} />
                         <Route path="/media" element={<MediaLibrary />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/settings" element={<Settings />} />
+                        <Route
+                          path="/reports"
+                          element={
+                            <ProtectedRoute
+                              requirePermissions={[
+                                { action: "read", subject: "Report" },
+                                { action: "read", subject: "AuditLog" },
+                              ]}
+                              requireAny
+                            >
+                              <Reports />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/settings"
+                          element={
+                            <ProtectedRoute
+                              requirePermissions={[{ action: "read", subject: "Settings" }]}
+                              allowRoles={["SUPER_ADMIN", "ADMIN"]}
+                              requireAny
+                            >
+                              <Settings />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/api-keys" element={<ApiKeys />} />
                         <Route path="/webhooks" element={<Webhooks />} />
                         <Route path="/sso-config" element={<SsoConfig />} />

@@ -18,12 +18,6 @@ export const ROUTES = {
   proofOfPlay: "/proof-of-play",
 } as const;
 
-export const ROLES = {
-  admin: "ADMIN",
-  operator: "OPERATOR",
-  department: "DEPARTMENT",
-} as const;
-
 export const STORAGE_KEYS = {
   postLoginRedirect: "postLoginRedirect",
 } as const;

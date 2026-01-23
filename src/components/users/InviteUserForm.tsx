@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,8 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info, Loader2 } from "lucide-react";
 import { departmentsApi } from "@/api/domains/departments";
-import type { Role } from "@/api/types";
 import type { InviteFormData } from "@/types/user";
+import { useRolesList } from "@/hooks/useRolesApi";
 
 interface InviteUserFormProps {
     onSubmit: (data: InviteFormData) => void;
@@ -20,7 +20,7 @@ interface InviteUserFormProps {
 export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserFormProps) {
     const [formData, setFormData] = useState<InviteFormData>({
         email: "",
-        role: "OPERATOR",
+        role_id: "",
         department_id: "",
     });
 
@@ -28,6 +28,15 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
         queryKey: ["departments"],
         queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
     });
+
+    const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
+    const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+
+    useEffect(() => {
+        if (!formData.role_id && roles.length > 0) {
+            setFormData((prev) => ({ ...prev, role_id: roles[0].id }));
+        }
+    }, [formData.role_id, roles]);
 
     const departments = departmentsData?.items || [];
 
@@ -39,7 +48,7 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const isValid = formData.email.trim();
+    const isValid = formData.email.trim() && Boolean(formData.role_id);
 
     return (
         <div className="space-y-4 py-2">
@@ -63,19 +72,32 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
 
             <div className="space-y-2">
                 <Label htmlFor="invite-role">Role</Label>
-                <Select
-                    value={formData.role}
-                    onValueChange={(value: Role) => updateField("role", value)}
-                >
-                    <SelectTrigger id="invite-role">
-                        <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ADMIN">Admin</SelectItem>
-                        <SelectItem value="OPERATOR">Operator</SelectItem>
-                        <SelectItem value="DEPARTMENT">Department</SelectItem>
-                    </SelectContent>
-                </Select>
+                {isRolesLoading ? (
+                    <div className="flex items-center gap-2 p-2 border rounded-md">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Loading roles...</span>
+                    </div>
+                ) : roles.length === 0 ? (
+                    <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                        No roles available
+                    </div>
+                ) : (
+                    <Select
+                        value={formData.role_id}
+                        onValueChange={(value: string) => updateField("role_id", value)}
+                    >
+                        <SelectTrigger id="invite-role">
+                            <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {roles.map((role) => (
+                                <SelectItem key={role.id} value={role.id}>
+                                    {role.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
 
             <div className="space-y-2">

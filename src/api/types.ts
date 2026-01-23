@@ -1,11 +1,38 @@
-export type Role = "ADMIN" | "OPERATOR" | "DEPARTMENT";
+export type RoleId = string;
+export type RoleName = string;
+
+export interface RolePermissionGrant {
+  action: string;
+  subject: string;
+}
+
+export interface RolePermissions {
+  inherits: RoleId[];
+  grants: RolePermissionGrant[];
+}
+
+export interface Role {
+  id: RoleId;
+  name: RoleName;
+  description: string | null;
+  permissions: RolePermissions;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PermissionsMetadata {
+  actions: string[];
+  subjects: string[];
+}
 
 export interface User {
   id: string;
   email: string;
   first_name?: string;
   last_name?: string;
-  role: Role;
+  role_id: RoleId;
+  role: RoleName;
   department_id?: string | null;
   is_active?: boolean;
 }
@@ -32,7 +59,7 @@ export interface PaginatedResponse<T> {
 export interface ApiKey {
   id: string;
   name: string;
-  roles?: Role[];
+  roles?: RoleName[];
   scopes?: string[];
   expires_at?: string | null;
   secret?: string;

@@ -38,7 +38,7 @@ export default function Users() {
             email.toLowerCase().includes(query) ||
             (first_name || "").toLowerCase().includes(query) ||
             (last_name || "").toLowerCase().includes(query) ||
-            role.toLowerCase().includes(query)
+                (role || "").toLowerCase().includes(query)
         );
     });
 
@@ -60,7 +60,7 @@ export default function Users() {
                 password: formData.password || "",
                 first_name: formData.first_name,
                 last_name: formData.last_name,
-                role: formData.role,
+                role_id: formData.role_id,
                 department_id: formData.department_id || undefined,
             },
             {
@@ -75,7 +75,7 @@ export default function Users() {
         inviteUser.mutate(
             {
                 email: formData.email,
-                role: formData.role,
+                role_id: formData.role_id,
                 department_id: formData.department_id || undefined,
             },
             {
@@ -95,7 +95,7 @@ export default function Users() {
                 payload: {
                     first_name: formData.first_name,
                     last_name: formData.last_name,
-                    role: formData.role,
+                    role_id: formData.role_id,
                     department_id: formData.department_id || undefined,
                     is_active: formData.is_active,
                 },

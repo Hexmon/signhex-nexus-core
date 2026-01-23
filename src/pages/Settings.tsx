@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Save, Bell, Lock, Palette, Globe, Database, Zap, Key, Webhook, Shield, FileBarChart } from "lucide-react";
+import { Save, Bell, Lock, Palette, Globe, Database, Zap, Key, Webhook, Shield, FileBarChart, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { RolesPermissionsTab } from "@/components/settings/RolesPermissionsTab";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -68,6 +69,10 @@ const Settings = () => {
           <TabsTrigger value="advanced">
             <Zap className="mr-2 h-4 w-4" />
             Advanced
+          </TabsTrigger>
+          <TabsTrigger value="roles">
+            <Users className="mr-2 h-4 w-4" />
+            Roles
           </TabsTrigger>
           <TabsTrigger value="enterprise">
             <Shield className="mr-2 h-4 w-4" />
@@ -367,6 +372,10 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="roles" className="space-y-4">
+          <RolesPermissionsTab />
         </TabsContent>
 
         <TabsContent value="enterprise" className="space-y-4">
