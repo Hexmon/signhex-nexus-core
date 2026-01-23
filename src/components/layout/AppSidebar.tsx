@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import {
   LayoutDashboard,
   Calendar,
@@ -34,7 +33,7 @@ const navItems = [
   { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
   { title: "Screens", url: "/screens", icon: Monitor },
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
-  { title: "Requests", url: "/requests", icon: MessageSquare },
+  // { title: "Requests", url: "/requests", icon: MessageSquare },
   { title: "Conversations", url: "/conversations", icon: Kanban },
   { title: "Operators", url: "/operators", icon: Users },
   { title: "Departments", url: "/departments", icon: Building2 },
@@ -43,19 +42,12 @@ const navItems = [
   { title: "Site Settings", url: "/settings", icon: Settings },
 ];
 
-const sidebarTheme: CSSProperties & Record<string, string> = {
-  "--sidebar-background": "210 20% 97%",
-  "--sidebar-foreground": "217 33% 17%",
-  "--sidebar-accent": "210 20% 94%",
-  "--sidebar-accent-foreground": "0 100% 25%",
-};
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   return (
-    <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground" style={sidebarTheme}>
+    <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
       <SidebarContent>
         <div className={`flex items-center px-4 py-6 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
           <img 
@@ -65,7 +57,12 @@ export function AppSidebar() {
           />
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-bold text-lg text-primary">Signhex</span>
+              <span
+                className="font-bold text-lg"
+                style={{ color: "hsl(var(--sidebar-primary))" }}
+              >
+                Signhex
+              </span>
               <span className="text-xs text-muted-foreground">Super Admin</span>
             </div>
           )}
@@ -94,7 +91,7 @@ export function AppSidebar() {
                         <>
                           <span
                             className={cn(
-                              "h-6 w-1 rounded-full bg-primary transition-all duration-200",
+                              "h-6 w-1 rounded-full bg-sidebar-foreground transition-all duration-200",
                               isActive ? "opacity-100" : "opacity-0",
                             )}
                           />
