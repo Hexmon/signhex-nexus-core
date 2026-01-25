@@ -17,6 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { RolesPermissionsTab } from "@/components/settings/RolesPermissionsTab";
+import { DefaultMediaSection } from "@/components/settings/DefaultMediaSection";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -130,6 +131,7 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+          <DefaultMediaSection />
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-4">

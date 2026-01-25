@@ -105,6 +105,10 @@ export const endpoints = {
   },
   scheduleRequests: {
     base: "/schedule-requests",
+    statusSummary: "/schedule-requests/status-summary",
+    approve: (requestId: string) => `/schedule-requests/${requestId}/approve`,
+    publish: (requestId: string) => `/schedule-requests/${requestId}/publish`,
+    reject: (requestId: string) => `/schedule-requests/${requestId}/reject`,
   },
   screens: {
     base: "/screens",
@@ -113,8 +117,12 @@ export const endpoints = {
     groupById: (groupId: string) => `/screen-groups/${groupId}`,
     aspectRatios: "/screens/aspect-ratios",
   },
+  screenGroups: {
+    snapshot: (groupId: string) => `/screen-groups/${groupId}/snapshot`,
+  },
   settings: {
     base: "/settings",
+    defaultMedia: "/settings/default-media",
   },
   ssoConfig: {
     base: "/sso-config",

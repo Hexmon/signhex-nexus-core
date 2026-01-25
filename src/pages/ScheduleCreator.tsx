@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Check, LayoutGrid, Image, Monitor, Calendar, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,10 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
+import { useQueries } from "@tanstack/react-query";
 import { presentationsApi } from "@/api/domains/presentations";
 import { schedulesApi } from "@/api/domains/schedules";
 import { scheduleRequestsApi } from "@/api/domains/scheduleRequests";
-import type { PresentationSlotPayload, ScheduleItemPayload } from "@/api/types";
+import { screensApi } from "@/api/domains/screens";
+import { queryKeys } from "@/api/queryKeys";
+import type { PresentationSlotPayload, ScheduleItemPayload, ScreenSnapshot } from "@/api/types";
 
 import { StepLayoutSelect } from "@/components/schedule-creator/StepLayoutSelect";
 import { StepMediaAssign } from "@/components/schedule-creator/StepMediaAssign";
@@ -109,6 +112,100 @@ export default function ScheduleCreator() {
   const [hasRestored, setHasRestored] = useState(false);
 
   const progress = (currentStep / STEPS.length) * 100;
+  const isScheduleStep = currentStep === 4;
+
+  const screenSnapshotQueries = useQueries({
+    queries: isScheduleStep
+      ? wizardState.selectedScreenIds.map((screenId) => ({
+          queryKey: queryKeys.screenSnapshot(screenId),
+          queryFn: () => screensApi.getSnapshot(screenId, true),
+          enabled: isScheduleStep,
+          staleTime: 30_000,
+        }))
+      : [],
+  });
+
+  const groupSnapshotQueries = useQueries({
+    queries: isScheduleStep
+      ? wizardState.selectedGroupIds.map((groupId) => ({
+          queryKey: queryKeys.screenGroupSnapshot(groupId),
+          queryFn: () => screensApi.getGroupSnapshot(groupId, true),
+          enabled: isScheduleStep,
+          staleTime: 30_000,
+        }))
+      : [],
+  });
+
+  const scheduleTimingValidation = useMemo(() => {
+    const errors: string[] = [];
+    const nowMs = Date.now();
+    const startMs = wizardState.startAt ? new Date(wizardState.startAt).getTime() : NaN;
+    const endMs = wizardState.endAt ? new Date(wizardState.endAt).getTime() : NaN;
+
+    if (wizardState.startAt && Number.isNaN(startMs)) {
+      errors.push("Start time is invalid.");
+    }
+    if (wizardState.endAt && Number.isNaN(endMs)) {
+      errors.push("End time is invalid.");
+    }
+    if (wizardState.startAt && !Number.isNaN(startMs) && startMs <= nowMs) {
+      errors.push("Start time must be in the future.");
+    }
+    if (
+      wizardState.startAt &&
+      wizardState.endAt &&
+      !Number.isNaN(startMs) &&
+      !Number.isNaN(endMs) &&
+      endMs <= startMs
+    ) {
+      errors.push("End time must be after the start time.");
+    }
+
+    const isChecking = isScheduleStep
+      ? [...screenSnapshotQueries, ...groupSnapshotQueries].some((query) => query.isLoading)
+      : false;
+
+    const snapshotError = isScheduleStep
+      ? [...screenSnapshotQueries, ...groupSnapshotQueries].find((query) => query.isError)?.error
+      : undefined;
+
+    const scheduleItems = [...screenSnapshotQueries, ...groupSnapshotQueries].flatMap((query) => {
+      const data = query.data as ScreenSnapshot | undefined;
+      return data?.snapshot?.schedule?.items ?? [];
+    });
+
+    const BUFFER_MS = 30_000;
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && scheduleItems.length > 0) {
+      const conflictCount = scheduleItems.filter((item) => {
+        const itemStart = item.start_at ? Date.parse(item.start_at) : NaN;
+        const itemEnd = item.end_at ? Date.parse(item.end_at) : NaN;
+        if (Number.isNaN(itemStart) || Number.isNaN(itemEnd)) return false;
+        return startMs < itemEnd + BUFFER_MS && endMs > itemStart - BUFFER_MS;
+      }).length;
+
+      if (conflictCount > 0) {
+        errors.push(
+          `Selected timing overlaps existing schedules (${conflictCount}). Keep a 30-second gap from the previous or next schedule.`,
+        );
+      }
+    }
+
+    if (snapshotError) {
+      errors.push("Unable to verify schedule conflicts. Please try again.");
+    }
+
+    return {
+      errors,
+      isChecking,
+      isValid: errors.length === 0 && !isChecking,
+    };
+  }, [
+    wizardState.startAt,
+    wizardState.endAt,
+    screenSnapshotQueries,
+    groupSnapshotQueries,
+    isScheduleStep,
+  ]);
 
   const createPresentationMutation = useSafeMutation(
     {
@@ -202,7 +299,8 @@ export default function ScheduleCreator() {
         return (
           wizardState.scheduleName.trim() !== "" &&
           wizardState.startAt !== "" &&
-          wizardState.endAt !== ""
+          wizardState.endAt !== "" &&
+          scheduleTimingValidation.isValid
         );
       case 5:
         return true;
@@ -285,6 +383,17 @@ export default function ScheduleCreator() {
     }
 
     if (currentStep === 4) {
+      if (!scheduleTimingValidation.isValid) {
+        if (scheduleTimingValidation.errors.length > 0) {
+          toast({
+            title: "Schedule timing issue",
+            description: scheduleTimingValidation.errors[0],
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
       if (!wizardState.presentationId) {
         toast({
           title: "Missing presentation",
@@ -535,6 +644,8 @@ export default function ScheduleCreator() {
             startAt={wizardState.startAt}
             endAt={wizardState.endAt}
             priority={wizardState.priority}
+            validationErrors={scheduleTimingValidation.errors}
+            isCheckingAvailability={scheduleTimingValidation.isChecking}
             onUpdate={(details) =>
               updateState({
                 ...details,

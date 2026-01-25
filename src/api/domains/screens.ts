@@ -81,6 +81,13 @@ export const screensApi = {
       query: { include_urls: includeUrls },
     }),
 
+  getGroupSnapshot: (groupId: string, includeUrls = true) =>
+    apiClient.request<ScreenSnapshot>({
+      path: endpoints.screenGroups.snapshot(groupId),
+      method: "GET",
+      query: { include_urls: includeUrls },
+    }),
+
   // Screen Groups
   createGroup: (payload: { name: string; description?: string; screen_ids?: string[] }) =>
     apiClient.request<ScreenGroup>({

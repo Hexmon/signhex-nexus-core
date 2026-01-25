@@ -10,6 +10,7 @@ export type Status =
   | "published"
   | "live" 
   | "expired" 
+  | "rejected"
   | "failed"
   | "online"
   | "offline"
@@ -29,6 +30,7 @@ const statusConfig: Record<Status, { label: string; variant: "default" | "second
   published: { label: "Published", variant: "default", className: "bg-primary text-primary-foreground" },
   live: { label: "Live", variant: "default", className: "bg-success text-success-foreground" },
   expired: { label: "Expired", variant: "secondary" },
+  rejected: { label: "Rejected", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
   online: { label: "Online", variant: "default", className: "bg-success text-success-foreground" },
   offline: { label: "Offline", variant: "secondary" },

@@ -144,6 +144,8 @@ const LayoutEditor = () => {
 
   // Validation
   const nameError = !name.trim();
+  const aspectRatioError = !aspectRatio.trim();
+  const slotsError = slots.length === 0;
   const duplicateIds = slots.filter(
     (s, i) => slots.findIndex((o) => o.id === s.id) !== i
   );
@@ -170,6 +172,24 @@ const LayoutEditor = () => {
       toast({
         title: "Validation error",
         description: "Please provide a layout name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (aspectRatioError) {
+      toast({
+        title: "Validation error",
+        description: "Please select an aspect ratio.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (slotsError) {
+      toast({
+        title: "Validation error",
+        description: "Add at least one slot before saving this layout.",
         variant: "destructive",
       });
       return;
@@ -431,7 +451,17 @@ const LayoutEditor = () => {
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saveLayoutMutation.isPending || isLayoutLoading || hasOverlaps}>
+          <Button
+            onClick={handleSave}
+            disabled={
+              saveLayoutMutation.isPending ||
+              isLayoutLoading ||
+              hasOverlaps ||
+              nameError ||
+              aspectRatioError ||
+              slotsError
+            }
+          >
             <Save className="mr-2 h-4 w-4" />
             {saveLayoutMutation.isPending ? "Saving..." : "Save"}
           </Button>
@@ -525,6 +555,9 @@ const LayoutEditor = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                {aspectRatioError && isDirty && (
+                  <p className="text-sm text-destructive">Aspect ratio is required.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -565,6 +598,11 @@ const LayoutEditor = () => {
                     </div>
                   ))}
                 </div>
+              )}
+              {slotsError && isDirty && (
+                <p className="mt-3 text-sm text-destructive text-center">
+                  At least one slot is required before saving.
+                </p>
               )}
             </CardContent>
           </Card>

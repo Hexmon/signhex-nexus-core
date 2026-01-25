@@ -17,6 +17,8 @@ interface StepScheduleDetailsProps {
   startAt: string;
   endAt: string;
   priority: number;
+  validationErrors?: string[];
+  isCheckingAvailability?: boolean;
   onUpdate: (updates: Partial<{
     scheduleName: string;
     scheduleDescription: string;
@@ -38,8 +40,25 @@ export function StepScheduleDetails({
   startAt,
   endAt,
   priority,
+  validationErrors,
+  isCheckingAvailability,
   onUpdate,
 }: StepScheduleDetailsProps) {
+  const formatLocalDateTime = (value: Date) => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    const hours = String(value.getHours()).padStart(2, "0");
+    const minutes = String(value.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const minDate = new Date();
+  minDate.setSeconds(0, 0);
+  minDate.setMinutes(minDate.getMinutes() + 1);
+  const minStartAt = formatLocalDateTime(minDate);
+  const minEndAt = startAt || minStartAt;
+
   return (
     <div className="space-y-6">
       <div>
@@ -120,6 +139,7 @@ export function StepScheduleDetails({
                 type="datetime-local"
                 value={startAt}
                 onChange={(e) => onUpdate({ startAt: e.target.value })}
+                min={minStartAt}
               />
             </div>
 
@@ -130,9 +150,26 @@ export function StepScheduleDetails({
                 type="datetime-local"
                 value={endAt}
                 onChange={(e) => onUpdate({ endAt: e.target.value })}
-                min={startAt}
+                min={minEndAt}
               />
             </div>
+
+            {isCheckingAvailability && (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                Checking selected screens and groups for schedule conflicts...
+              </div>
+            )}
+
+            {validationErrors && validationErrors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <p className="font-medium">Schedule timing needs attention</p>
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {validationErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {startAt && endAt && (
               <div className="p-3 bg-muted/50 rounded-lg">
@@ -176,22 +213,19 @@ export function StepScheduleDetails({
                     if (preset.days > 0) {
                       start.setDate(start.getDate() + (preset.days === 1 ? 1 : 0));
                     }
+                    if (start <= now) {
+                      start.setTime(now.getTime() + 60 * 1000);
+                    }
                     const end = new Date(start);
                     end.setDate(end.getDate() + preset.days);
                     end.setHours(18, 0, 0, 0);
-
-                    const formatDateTime = (d: Date) => {
-                      const year = d.getFullYear();
-                      const month = String(d.getMonth() + 1).padStart(2, "0");
-                      const day = String(d.getDate()).padStart(2, "0");
-                      const hours = String(d.getHours()).padStart(2, "0");
-                      const mins = String(d.getMinutes()).padStart(2, "0");
-                      return `${year}-${month}-${day}T${hours}:${mins}`;
-                    };
+                    if (end <= start) {
+                      end.setTime(start.getTime() + 60 * 60 * 1000);
+                    }
 
                     onUpdate({
-                      startAt: formatDateTime(start),
-                      endAt: formatDateTime(end),
+                      startAt: formatLocalDateTime(start),
+                      endAt: formatLocalDateTime(end),
                     });
                   }}
                   className="px-3 py-1 text-sm border rounded-full hover:bg-muted transition-colors"

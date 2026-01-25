@@ -342,7 +342,7 @@ export default function Dashboard() {
             <Calendar className="mr-2 h-4 w-4" />
             Schedule Report
           </Button>
-          <Button>
+          <Button variant="default" onClick={() => navigate("/schedule/new")}>
             <Plus className="mr-2 h-4 w-4" />
             New Request
           </Button>

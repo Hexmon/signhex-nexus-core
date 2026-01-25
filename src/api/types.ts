@@ -73,6 +73,7 @@ export interface LayoutSlot {
   y: number;
   w: number;
   h: number;
+  z?: number;
 }
 
 export interface LayoutSpec {
@@ -87,6 +88,16 @@ export interface LayoutItem {
   spec: LayoutSpec;
   created_at: string;
   updated_at: string;
+}
+
+export interface LayoutSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  aspect_ratio?: string;
+  spec: LayoutSlot[] | LayoutSpec;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LayoutPagination {
@@ -140,6 +151,11 @@ export interface SsoConfig {
 export interface OrgSetting {
   key: string;
   value: unknown;
+}
+
+export interface DefaultMediaSetting {
+  media_id: string | null;
+  media?: MediaAsset | null;
 }
 
 export interface Conversation {
@@ -272,6 +288,8 @@ export interface Department {
   id: string;
   name: string;
   description?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuditLog {
@@ -296,6 +314,7 @@ export interface Presentation {
   name: string;
   description?: string | null;
   layout_id?: string;
+  layout?: LayoutSummary;
   created_by?: string;
   created_at?: string;
   updated_at?: string;
@@ -368,9 +387,39 @@ export interface ScreenAvailability {
   next_available_at?: string | null;
 }
 
+export interface ScreenSnapshotScheduleItem extends ScheduleItem {
+  presentation?: Presentation & {
+    items?: Array<{ id: string; media_id: string; duration_seconds?: number }>;
+    slots?: unknown[];
+  };
+}
+
 export interface ScreenSnapshot {
-  screen_id: string;
-  snapshot_at: string;
+  screen_id?: string;
+  group_id?: string;
+  name?: string;
+  description?: string;
+  screen_ids?: string[];
+  publish?: {
+    publish_id?: string;
+    schedule_id?: string;
+    snapshot_id?: string;
+    published_at?: string;
+  } | null;
+  snapshot?: {
+    schedule?: {
+      id?: string;
+      start_at?: string;
+      end_at?: string;
+      items?: ScreenSnapshotScheduleItem[];
+    };
+    presentations?: Presentation[];
+    layouts?: LayoutSummary[];
+  } | null;
+  media_urls?: Record<string, string>;
+  emergency?: unknown;
+  default_media?: unknown;
+  snapshot_at?: string;
   current_media?: {
     id: string;
     name: string;
@@ -470,6 +519,7 @@ export interface MediaAsset {
   name?: string;
   type?: MediaType;
   content_type?: string;
+  source_content_type?: string;
   size?: number;
   status?: string;
   duration_seconds?: number;
@@ -522,6 +572,126 @@ export interface ScheduleRequest {
   schedule_id: string;
   notes?: string | null;
   created_at?: string;
+}
+
+export type ScheduleRequestStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "PUBLISHED"
+  | "EXPIRED"
+  | string;
+
+export interface ScheduleRequestUser {
+  id: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  role_id?: string;
+  department_id?: string | null;
+  department?: Department | null;
+}
+
+export interface ScheduleTimeStatus {
+  now?: string;
+  status?: string;
+  is_expired?: boolean;
+}
+
+export interface ScheduleRequestListItem {
+  id: string;
+  status: ScheduleRequestStatus;
+  notes?: string | null;
+  review_notes?: string | null;
+  reviewed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  requested_by_user?: ScheduleRequestUser | null;
+  reviewed_by_user?: ScheduleRequestUser | null;
+  schedule?: Schedule | null;
+  schedule_time_status?: ScheduleTimeStatus | null;
+  schedule_items?: ScheduleItem[];
+  presentations?: Presentation[];
+  presentation_slots?: PresentationSlot[];
+  media?: MediaAsset[];
+  screens?: Screen[];
+  screen_groups?: ScreenGroup[];
+}
+
+export interface ScheduleRequestPagination {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface ScheduleRequestListResponse {
+  items: ScheduleRequestListItem[];
+  pagination: ScheduleRequestPagination;
+}
+
+export interface ScheduleRequestListParams extends PaginationParams {
+  status?: ScheduleRequestStatus;
+  include?: string;
+}
+
+export interface ScheduleRequestStatusSummary {
+  counts: {
+    pending: number;
+    approved: number;
+    rejected: number;
+    published: number;
+    expired: number;
+  };
+}
+
+export interface DeviceScheduleItem {
+  id: string;
+  media_id: string;
+  type: "image" | "video" | "pdf" | string;
+  display_ms?: number;
+  fit?: "cover" | "contain" | string;
+  media_url?: string;
+  sha256?: string;
+  muted?: boolean;
+  [key: string]: unknown;
+}
+
+export interface DeviceScheduleSnapshot {
+  id: string;
+  version?: number;
+  generated_at?: string;
+  fetched_at?: string;
+  schedule?: {
+    id?: string;
+    version?: number;
+    items?: DeviceScheduleItem[];
+  };
+  media_urls?: Record<string, string>;
+  media?: Array<{
+    media_id: string;
+    url?: string;
+    type?: string;
+  }>;
+  emergency?: unknown;
+  default_media?: unknown;
+}
+
+export interface ScheduleRequestReviewResponse {
+  id: string;
+  status: ScheduleRequestStatus;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  review_notes?: string | null;
+}
+
+export interface ScheduleRequestPublishResponse {
+  message?: string;
+  schedule_request_id?: string;
+  schedule_id?: string;
+  publish_id?: string;
+  snapshot_id?: string;
+  resolved_screen_ids?: string[];
+  targets?: number;
 }
 
 export interface Publish {
