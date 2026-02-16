@@ -55,7 +55,9 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["device-pairings"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
-      toast.success(`Screen "${data.screen.name}" paired successfully`);
+      const screenName = confirmForm.name.trim() || "Screen";
+      const message = data?.message || `Pairing approved for "${screenName}". Waiting for device to complete.`;
+      toast.success(message);
       setConfirmForm({ pairingCode: "", name: "", location: "" });
       onOpenChange(false);
     },

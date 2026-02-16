@@ -478,6 +478,7 @@ export interface DevicePairing {
   status?: "pending" | "used" | "expired";
   used_at?: string | null;
   expires_at?: string;
+  confirmed_at?: string;
   created_at?: string;
 }
 

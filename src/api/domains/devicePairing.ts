@@ -35,9 +35,9 @@ export const devicePairingApi = {
       body: payload,
     }),
 
-  // Confirm pairing and create screen (from CMS)
+  // Confirm pairing (from CMS)
   confirm: (payload: { pairing_code: string; name: string; location?: string }) =>
-    apiClient.request<{ screen: { id: string; name: string }; pairing: DevicePairing }>({
+    apiClient.request<{ message: string; pairing: DevicePairing }>({
       path: "/device-pairing/confirm",
       method: "POST",
       body: payload,
