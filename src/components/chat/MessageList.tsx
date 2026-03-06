@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { ChatMessage, MediaAsset } from "@/api/types";
 import type { ChatPendingUiMessage } from "@/components/chat/types";
 import { MessageItem } from "@/components/chat/MessageItem";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import { formatChatTime } from "@/lib/chatTime";
 
 interface MessageListProps {
@@ -18,15 +19,23 @@ interface MessageListProps {
   pendingMessages?: ChatPendingUiMessage[];
   attachmentMediaById?: Record<string, MediaAsset>;
   isLoading?: boolean;
-  hasNextPage?: boolean;
-  onLoadMore?: () => void;
-  onLoadOlderForFocus?: () => void;
+  canFetchNewer?: boolean;
+  isFetchingNewer?: boolean;
+  isUpToDate?: boolean;
+  onFetchNewer?: () => void;
   onRetryPendingMessage?: (localId: string) => void;
   onDiscardPendingMessage?: (localId: string) => void;
+  onMentionClick?: (userId: string) => void;
   onReply?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string, op: "add" | "remove") => void;
   onEdit?: (messageId: string, text: string) => void;
   onDelete?: (messageId: string) => void;
+  onTogglePin?: (messageId: string, shouldPin: boolean) => void;
+  onBookmark?: (messageId: string) => void;
+  isMessagePinned?: (messageId: string) => boolean;
+  isMessageBookmarked?: (messageId: string) => boolean;
+  canEditMessage?: (message: ChatMessage) => boolean;
+  canDeleteMessage?: (message: ChatMessage) => boolean;
 }
 
 const WINDOW_SIZE = 300;
@@ -44,25 +53,35 @@ export function MessageList({
   pendingMessages = [],
   attachmentMediaById = {},
   isLoading = false,
-  hasNextPage = false,
-  onLoadMore,
-  onLoadOlderForFocus,
+  canFetchNewer = true,
+  isFetchingNewer = false,
+  isUpToDate = false,
+  onFetchNewer,
   onRetryPendingMessage,
   onDiscardPendingMessage,
+  onMentionClick,
   onReply,
   onReact,
   onEdit,
   onDelete,
+  onTogglePin,
+  onBookmark,
+  isMessagePinned,
+  isMessageBookmarked,
+  canEditMessage,
+  canDeleteMessage,
 }: MessageListProps) {
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [visibleCount, setVisibleCount] = useState(WINDOW_SIZE);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [focusNotLoaded, setFocusNotLoaded] = useState(false);
+  const [focusCalloutDismissed, setFocusCalloutDismissed] = useState(false);
 
   useEffect(() => {
     setVisibleCount(WINDOW_SIZE);
     setHighlightedMessageId(null);
     setFocusNotLoaded(false);
+    setFocusCalloutDismissed(false);
   }, [conversationId]);
 
   const sortedMessages = useMemo(() => [...messages].sort((a, b) => a.seq - b.seq), [messages]);
@@ -82,6 +101,7 @@ export function MessageList({
     if (!focusMessageId) {
       setHighlightedMessageId(null);
       setFocusNotLoaded(false);
+      setFocusCalloutDismissed(false);
       return;
     }
 
@@ -112,39 +132,42 @@ export function MessageList({
 
   return (
     <div className="space-y-3 p-3">
-      {(hasLocalOlder || hasNextPage) && (
+      {(hasLocalOlder || canFetchNewer) && (
         <div className="flex flex-wrap items-center justify-center gap-2">
           {hasLocalOlder && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setVisibleCount((prev) => prev + WINDOW_SIZE)}
-              aria-label="Load older visible messages"
+              aria-label="Show more loaded messages"
             >
-              Load older visible messages
+              Show more loaded messages
             </Button>
           )}
-          {hasNextPage && (
-            <Button variant="outline" size="sm" onClick={onLoadMore} aria-label="Load older messages from server">
-              Load older messages
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onFetchNewer}
+            disabled={!canFetchNewer || isFetchingNewer}
+            aria-label="Check for new messages"
+          >
+            {isFetchingNewer ? "Checking..." : "Check for new messages"}
+          </Button>
+          {isUpToDate && <span className="text-xs text-muted-foreground">Up to date</span>}
         </div>
       )}
 
-      {focusMessageId && focusNotLoaded && (
+      {focusMessageId && focusNotLoaded && !focusCalloutDismissed && (
         <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary">
-          <p>Message not loaded yet.</p>
-          <Button
-            className="mt-2"
-            size="sm"
-            variant="outline"
-            onClick={onLoadOlderForFocus}
-            disabled={!hasNextPage}
-            aria-label="Load older messages to find focused message"
-          >
-            Load older messages
-          </Button>
+          <p>Message not loaded. Older-pagination support is required to fetch earlier messages.</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={onFetchNewer} aria-label="Check for new messages">
+              Check for new messages
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setFocusCalloutDismissed(true)} aria-label="Dismiss focus warning">
+              Dismiss
+            </Button>
+          </div>
         </div>
       )}
 
@@ -190,12 +213,19 @@ export function MessageList({
                 message={message}
                 currentUserId={currentUserId}
                 canMutate={canMutate}
+                isPinned={isMessagePinned?.(message.id) ?? false}
+                isBookmarked={isMessageBookmarked?.(message.id) ?? false}
+                canEditMessage={canEditMessage?.(message)}
+                canDeleteMessage={canDeleteMessage?.(message)}
                 mentionDisplayById={mentionDisplayById}
+                onMentionClick={onMentionClick}
                 attachmentMediaById={attachmentMediaById}
                 onReply={onReply}
                 onReact={onReact}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onTogglePin={onTogglePin}
+                onBookmark={onBookmark}
               />
             </div>
           </Fragment>
@@ -209,6 +239,27 @@ export function MessageList({
             <span>{formatChatTime(pending.createdAt, { includeDate: false })}</span>
           </div>
           <p className="mt-2 whitespace-pre-wrap break-words text-sm">{pending.text || "(attachment message)"}</p>
+          {pending.attachmentMediaIds.length > 0 && (
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {pending.attachmentMediaIds.map((mediaId) => {
+                const media = attachmentMediaById[mediaId];
+                return (
+                  <div key={`${pending.localId}-${mediaId}`} className="rounded-md border p-2">
+                    <MediaPreview
+                      media={media}
+                      url={media?.media_url}
+                      type={media?.content_type}
+                      alt={media?.filename || mediaId}
+                      className="h-20 w-full"
+                    />
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {media?.filename || mediaId}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {pending.errorMessage && (
             <p className="mt-2 flex items-center gap-1 text-xs text-destructive">
               <AlertCircle className="h-3.5 w-3.5" />

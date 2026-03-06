@@ -47,7 +47,7 @@ export function ConversationList({
   });
 
   return (
-    <div className="h-full rounded-lg border bg-card">
+    <div className="flex h-full min-h-0 flex-col rounded-lg border bg-card">
       <div className="border-b p-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -60,7 +60,7 @@ export function ConversationList({
         </div>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-15rem)]">
+      <ScrollArea className="flex-1">
         <div className="space-y-4 p-3">
           {GROUPS.map((group) => {
             const items = filtered.filter((conversation) => conversation.type === group.key);

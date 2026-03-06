@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,11 +24,12 @@ interface ThreadPanelProps {
   currentUserId?: string;
   canMutate?: boolean;
   mentionDisplayById?: Record<string, string>;
+  onMentionClick?: (userId: string) => void;
   statusBannerMode?: "READ_ONLY" | "MUTED" | "BANNED";
   statusBannerMessage?: string;
   statusBannerUntil?: string;
   attachmentMediaById?: Record<string, MediaAsset>;
-  onReplySubmit: (payload: { text: string; replyTo: string; alsoSendToMain: boolean }) => Promise<void> | void;
+  onReplySubmit: (payload: { text: string; replyTo: string; alsoToChannel: boolean }) => Promise<void> | void;
 }
 
 export function ThreadPanel({
@@ -40,6 +41,7 @@ export function ThreadPanel({
   currentUserId,
   canMutate = true,
   mentionDisplayById = {},
+  onMentionClick,
   statusBannerMode,
   statusBannerMessage,
   statusBannerUntil,
@@ -47,14 +49,18 @@ export function ThreadPanel({
   onReplySubmit,
 }: ThreadPanelProps) {
   const [draft, setDraft] = useState("");
-  const [alsoSendToMain, setAlsoSendToMain] = useState(false);
+  const [alsoToChannel, setAlsoToChannel] = useState(false);
   const threadQuery = useChatThread(conversationId, threadRootId);
+  const orderedReplies = useMemo(
+    () => [...threadQuery.items].sort((a, b) => b.seq - a.seq),
+    [threadQuery.items],
+  );
 
   const submit = async () => {
     if (!threadRootId || !draft.trim() || !canMutate) return;
-    await onReplySubmit({ text: draft.trim(), replyTo: threadRootId, alsoSendToMain });
+    await onReplySubmit({ text: draft.trim(), replyTo: threadRootId, alsoToChannel });
     setDraft("");
-    setAlsoSendToMain(false);
+    setAlsoToChannel(false);
   };
 
   return (
@@ -65,7 +71,7 @@ export function ThreadPanel({
           <SheetDescription>Replies stay grouped under the selected message.</SheetDescription>
         </SheetHeader>
 
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           {statusBannerMode && (
             <ChatStatusBanner
               mode={statusBannerMode}
@@ -74,7 +80,7 @@ export function ThreadPanel({
               className="mx-3 mt-3"
             />
           )}
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
             {rootMessage && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Parent Message</p>
@@ -83,26 +89,44 @@ export function ThreadPanel({
                   currentUserId={currentUserId}
                   canMutate={canMutate}
                   mentionDisplayById={mentionDisplayById}
+                  onMentionClick={onMentionClick}
                   attachmentMediaById={attachmentMediaById}
                 />
               </div>
             )}
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Replies</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Replies</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void threadQuery.fetchNewer()}
+                    disabled={threadQuery.isFetchingNewer}
+                    aria-label="Check for new thread replies"
+                  >
+                    {threadQuery.isFetchingNewer ? "Checking..." : "Check for new"}
+                  </Button>
+                  {threadQuery.isUpToDate && (
+                    <span className="text-xs text-muted-foreground">Up to date</span>
+                  )}
+                </div>
+              </div>
               {threadQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">Loading thread...</p>
-              ) : threadQuery.items.length === 0 ? (
+              ) : orderedReplies.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No replies yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {threadQuery.items.map((message) => (
+                  {orderedReplies.map((message) => (
                     <MessageItem
                       key={message.id}
                       message={message}
                       currentUserId={currentUserId}
                       canMutate={canMutate}
                       mentionDisplayById={mentionDisplayById}
+                      onMentionClick={onMentionClick}
                       attachmentMediaById={attachmentMediaById}
                     />
                   ))}
@@ -133,9 +157,9 @@ export function ThreadPanel({
             <div className="mt-2 flex items-center justify-between gap-3">
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox
-                  checked={alsoSendToMain}
-                  onCheckedChange={(checked) => setAlsoSendToMain(Boolean(checked))}
-                  disabled={!canMutate}
+                  checked={alsoToChannel}
+                  onCheckedChange={(checked) => setAlsoToChannel(Boolean(checked))}
+                  disabled={!canMutate || !threadRootId}
                   aria-label="Also send thread reply to main chat"
                 />
                 Also send to main chat

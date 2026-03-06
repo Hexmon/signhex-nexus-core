@@ -18,6 +18,7 @@ import { clearAuth } from "@/store/authSlice";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/api/domains/auth";
 import { ApiError } from "@/api/apiClient";
+import { useNotificationUnreadCount } from "@/hooks/notifications/useNotificationUnreadCount";
 
 const getInitials = (name?: string, email?: string) => {
   if (name) {
@@ -39,6 +40,7 @@ export function AppHeader() {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
   const { toast } = useToast();
+  const { unreadTotal, isLoadingInitial } = useNotificationUnreadCount();
 
   const handleLogout = async () => {
     try {
@@ -73,14 +75,22 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            aria-label="Open notifications"
+            onClick={() => navigate("/notifications")}
+          >
             <Bell className="h-5 w-5" />
-            <Badge 
-              variant="destructive" 
-              className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]"
-            >
-              3
-            </Badge>
+            {!isLoadingInitial && unreadTotal > 0 ? (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full px-1 flex items-center justify-center text-[10px]"
+              >
+                {unreadTotal > 99 ? "99+" : unreadTotal}
+              </Badge>
+            ) : null}
           </Button>
 
           <DropdownMenu>

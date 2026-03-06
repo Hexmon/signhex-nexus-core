@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MediaAsset } from "@/api/types";
 
@@ -11,17 +12,40 @@ type MediaPreviewProps = {
 
 export function MediaPreview({ media, url, type, alt, className }: MediaPreviewProps) {
   const sourceUrl = url ?? media?.media_url ?? media?.thumbnail_object_id;
-  const resolvedType = (type ?? media?.type ?? "").toUpperCase();
-  const contentType =
-    media?.content_type || media?.source_content_type || "";
+  const [pdfLoaded, setPdfLoaded] = useState(false);
+  const normalizedType = (
+    type ??
+    media?.content_type ??
+    media?.source_content_type ??
+    media?.type ??
+    ""
+  ).toLowerCase();
+  const mediaType = (media?.type ?? "").toLowerCase();
+  const extension = sourceUrl
+    ? sourceUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? ""
+    : "";
+
   const showVideo =
     Boolean(sourceUrl) &&
-    (resolvedType === "VIDEO" || contentType.startsWith("video/"));
+    (normalizedType.startsWith("video/") ||
+      normalizedType === "video" ||
+      mediaType === "video" ||
+      ["mp4", "mov", "webm", "m4v", "ogg"].includes(extension));
+
+  const showPdf =
+    Boolean(sourceUrl) &&
+    (normalizedType.includes("pdf") || extension === "pdf");
+
   const showImage =
     Boolean(sourceUrl) &&
-    (resolvedType === "IMAGE" ||
-      contentType.startsWith("image/") ||
-      (!showVideo && Boolean(sourceUrl)));
+    (normalizedType.startsWith("image/") ||
+      normalizedType === "image" ||
+      mediaType === "image" ||
+      ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(extension));
+
+  useEffect(() => {
+    setPdfLoaded(false);
+  }, [showPdf, sourceUrl]);
 
   if (showVideo) {
     return (
@@ -32,6 +56,20 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
         preload="metadata"
         muted
       />
+    );
+  }
+
+  if (showPdf) {
+    return (
+      <div className={cn("relative overflow-hidden rounded-md bg-muted", className)}>
+        {!pdfLoaded && <div className="absolute inset-0 animate-pulse bg-muted" />}
+        <iframe
+          src={sourceUrl}
+          title={alt ?? media?.name ?? media?.filename ?? "PDF preview"}
+          onLoad={() => setPdfLoaded(true)}
+          className={cn("h-full w-full border-0 transition-opacity", pdfLoaded ? "opacity-100" : "opacity-0")}
+        />
+      </div>
     );
   }
 

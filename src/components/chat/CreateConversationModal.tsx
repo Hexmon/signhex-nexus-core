@@ -53,7 +53,7 @@ export function CreateConversationModal({
 
   const usersQuery = useQuery({
     queryKey: ["chat", "create", "users"],
-    queryFn: () => usersApi.list({ page: 1, limit: 200, is_active: true }),
+    queryFn: () => usersApi.list({ page: 1, limit: 100, is_active: true }),
     enabled: open,
   });
 

@@ -2,17 +2,28 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { InfiniteData, useQueryClient } from "@tanstack/react-query";
 import { chatApi } from "@/api/domains/chat";
 import type {
+  ChatBookmarkUpdateEvent,
+  ChatBookmarksListResponse,
   ChatConversationUpdatedEvent,
   ChatListMessagesResponse,
   ChatMessage,
   ChatMessageDeletedEvent,
   ChatMessageNewEvent,
+  ChatPinUpdateEvent,
+  ChatPinsListResponse,
   ChatSubscribeAck,
   ChatMessageUpdatedEvent,
   ChatThreadResponse,
   ChatTypingEvent,
 } from "@/api/types";
 import { chatQueryKeys } from "@/hooks/chat/useChatQueries";
+import {
+  appendMessageInInfiniteData,
+  flattenMessagePages,
+  getLastSeenSeq,
+  patchMessageInInfiniteData,
+  tombstonePatch,
+} from "@/hooks/chat/cursorUtils";
 import { connectChatSocket } from "@/lib/chatSocket";
 import { useAppSelector } from "@/store/hooks";
 
@@ -21,45 +32,6 @@ interface UseChatRealtimeOptions {
   subscribedConversationIds?: string[];
   onActiveConversationRejected?: (conversationId: string) => void;
 }
-
-const normalizeMessageList = (items: ChatMessage[]) => {
-  const dedupedMap = new Map<string, ChatMessage>();
-  items.forEach((item) => {
-    dedupedMap.set(item.id, item);
-  });
-  return Array.from(dedupedMap.values()).sort((a, b) => a.seq - b.seq);
-};
-
-const appendMessageData = <T extends { items: ChatMessage[] }>(
-  current: InfiniteData<T> | undefined,
-  message: ChatMessage,
-): InfiniteData<T> | undefined => {
-  if (!current) return current;
-  if (current.pages.length === 0) return current;
-
-  const pages = [...current.pages];
-  const lastPage = pages[pages.length - 1];
-  pages[pages.length - 1] = {
-    ...lastPage,
-    items: normalizeMessageList([...(lastPage.items ?? []), message]),
-  };
-  return { ...current, pages };
-};
-
-const patchMessageData = <T extends { items: ChatMessage[] }>(
-  current: InfiniteData<T> | undefined,
-  messageId: string,
-  patch: Partial<ChatMessage>,
-): InfiniteData<T> | undefined => {
-  if (!current) return current;
-  return {
-    ...current,
-    pages: current.pages.map((page) => ({
-      ...page,
-      items: page.items.map((item) => (item.id === messageId ? { ...item, ...patch } : item)),
-    })),
-  };
-};
 
 const getLastSeenSeqFromCache = (queryClient: ReturnType<typeof useQueryClient>, conversationId: string) => {
   const entries = queryClient.getQueriesData({
@@ -70,11 +42,8 @@ const getLastSeenSeqFromCache = (queryClient: ReturnType<typeof useQueryClient>,
   entries.forEach((entry) => {
     const value = entry[1] as InfiniteData<ChatListMessagesResponse> | undefined;
     const pages = value?.pages ?? [];
-    pages.forEach((page) => {
-      page.items?.forEach((item) => {
-        if (item.seq > maxSeq) maxSeq = item.seq;
-      });
-    });
+    const seq = getLastSeenSeq(flattenMessagePages(pages));
+    if (seq > maxSeq) maxSeq = seq;
   });
 
   return maxSeq;
@@ -92,6 +61,13 @@ const normalizeRejectedIds = (ack?: Partial<ChatSubscribeAck> | null) => {
       return undefined;
     })
     .filter((value): value is string => Boolean(value));
+};
+
+const includeInMainTimeline = (message: ChatMessage) => {
+  if (!message.reply_to_message_id) return true;
+  if (typeof message.also_to_channel === "boolean") return message.also_to_channel;
+  if (typeof message.alsoToChannel === "boolean") return message.alsoToChannel;
+  return false;
 };
 
 export const useChatRealtime = ({
@@ -137,19 +113,29 @@ export const useChatRealtime = ({
     const onDisconnect = () => setIsConnected(false);
 
     const onMessageNew = (payload: ChatMessageNewEvent) => {
-      queryClient.setQueriesData(
-        { queryKey: ["chat", "messages", payload.conversationId] },
-        (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
-          appendMessageData(current, payload.message),
-      );
+      if (includeInMainTimeline(payload.message)) {
+        queryClient.setQueriesData(
+          { queryKey: ["chat", "messages", payload.conversationId] },
+          (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
+            appendMessageInInfiniteData(current, payload.message),
+        );
+      }
 
       if (payload.message.thread_root_id) {
         queryClient.setQueriesData(
           { queryKey: ["chat", "thread", payload.conversationId, payload.message.thread_root_id] },
           (current: InfiniteData<ChatThreadResponse> | undefined) =>
-            appendMessageData(current, payload.message),
+            appendMessageInInfiniteData(current, payload.message),
         );
       }
+
+      queryClient.setQueryData(
+        chatQueryKeys.messagesCursor(payload.conversationId),
+        (current: { lastSeenSeq?: number; lastFetchCount?: number } | undefined) => ({
+          lastSeenSeq: Math.max(current?.lastSeenSeq ?? 0, payload.message.seq ?? 0),
+          lastFetchCount: current?.lastFetchCount ?? 0,
+        }),
+      );
 
       void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
     };
@@ -158,32 +144,26 @@ export const useChatRealtime = ({
       queryClient.setQueriesData(
         { queryKey: ["chat", "messages", payload.conversationId] },
         (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
-          patchMessageData(current, payload.messageId, payload.patch),
+          patchMessageInInfiniteData(current, payload.messageId, payload.patch),
       );
       queryClient.setQueriesData(
         { queryKey: ["chat", "thread", payload.conversationId] },
         (current: InfiniteData<ChatThreadResponse> | undefined) =>
-          patchMessageData(current, payload.messageId, payload.patch),
+          patchMessageInInfiniteData(current, payload.messageId, payload.patch),
       );
     };
 
     const onMessageDeleted = (payload: ChatMessageDeletedEvent) => {
-      const tombstonePatch: Partial<ChatMessage> = {
-        deleted_at: new Date().toISOString(),
-        body_text: null,
-        body_rich: null,
-        attachments: [],
-        reactions: [],
-      };
+      const patch = tombstonePatch();
       queryClient.setQueriesData(
         { queryKey: ["chat", "messages", payload.conversationId] },
         (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
-          patchMessageData(current, payload.messageId, tombstonePatch),
+          patchMessageInInfiniteData(current, payload.messageId, patch),
       );
       queryClient.setQueriesData(
         { queryKey: ["chat", "thread", payload.conversationId] },
         (current: InfiniteData<ChatThreadResponse> | undefined) =>
-          patchMessageData(current, payload.messageId, tombstonePatch),
+          patchMessageInInfiniteData(current, payload.messageId, patch),
       );
     };
 
@@ -193,12 +173,53 @@ export const useChatRealtime = ({
         return {
           ...current,
           items: current.items.map((item) => {
-            const typedItem = item as { id: string };
+            const typedItem = item as { id: string; metadata?: { settings?: unknown } | null };
             if (typedItem.id !== payload.conversationId) return item;
-            return { ...item, ...payload.patch };
+            if (!payload.patch.settings) return { ...item, ...payload.patch };
+            return {
+              ...item,
+              ...payload.patch,
+              settings: payload.patch.settings,
+              metadata: {
+                ...(typedItem.metadata || {}),
+                settings: payload.patch.settings,
+              },
+            };
           }),
         };
       });
+    };
+
+    const onPinUpdate = (payload: ChatPinUpdateEvent) => {
+      if (!subscriptionIds.includes(payload.conversationId)) return;
+
+      queryClient.setQueryData(chatQueryKeys.pins(payload.conversationId), (current: ChatPinsListResponse | undefined) => {
+        const currentItems = current?.items ?? [];
+        if (!payload.pinned) {
+          return { items: currentItems.filter((item) => item.message_id !== payload.messageId) };
+        }
+        if (!payload.pin) return current;
+        const exists = currentItems.some((item) => item.id === payload.pin?.id);
+        if (exists) return current;
+        return { items: [payload.pin, ...currentItems] };
+      });
+    };
+
+    const onBookmarkUpdate = (payload: ChatBookmarkUpdateEvent) => {
+      if (!subscriptionIds.includes(payload.conversationId)) return;
+
+      if (payload.op === "remove") {
+        queryClient.setQueryData(
+          chatQueryKeys.bookmarks(payload.conversationId),
+          (current: ChatBookmarksListResponse | undefined) => {
+            const currentItems = current?.items ?? [];
+            return { items: currentItems.filter((item) => item.id !== payload.bookmarkId) };
+          },
+        );
+        return;
+      }
+
+      void queryClient.invalidateQueries({ queryKey: chatQueryKeys.bookmarks(payload.conversationId) });
     };
 
     const onTyping = (payload: ChatTypingEvent) => {
@@ -237,14 +258,21 @@ export const useChatRealtime = ({
 
       const lastSeenSeq = getLastSeenSeqFromCache(queryClient, activeConversationId);
       chatApi
-        .listMessages(activeConversationId, { afterSeq: lastSeenSeq, limit: 100 })
+        .listMessages(activeConversationId, { afterSeq: lastSeenSeq, limit: 50 })
         .then((response) => {
-          response.items.forEach((message) => {
-            queryClient.setQueriesData(
-              { queryKey: ["chat", "messages", activeConversationId] },
-              (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
-                appendMessageData(current, message),
-            );
+          queryClient.setQueriesData(
+            { queryKey: ["chat", "messages", activeConversationId] },
+            (current: InfiniteData<ChatListMessagesResponse> | undefined) => {
+              let next = current;
+              response.items.forEach((message) => {
+                next = appendMessageInInfiniteData(next, message);
+              });
+              return next;
+            },
+          );
+          queryClient.setQueryData(chatQueryKeys.messagesCursor(activeConversationId), {
+            lastSeenSeq: Math.max(lastSeenSeq, ...response.items.map((item) => item.seq)),
+            lastFetchCount: response.items.length,
           });
           void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
         })
@@ -260,6 +288,8 @@ export const useChatRealtime = ({
     socket.on("chat:message:updated", onMessageUpdated);
     socket.on("chat:message:deleted", onMessageDeleted);
     socket.on("chat:conversation:updated", onConversationUpdated);
+    socket.on("chat:pin:update", onPinUpdate);
+    socket.on("chat:bookmark:update", onBookmarkUpdate);
     socket.on("chat:typing", onTyping);
 
     if (socket.connected) onConnect();
@@ -273,6 +303,8 @@ export const useChatRealtime = ({
       socket.off("chat:message:updated", onMessageUpdated);
       socket.off("chat:message:deleted", onMessageDeleted);
       socket.off("chat:conversation:updated", onConversationUpdated);
+      socket.off("chat:pin:update", onPinUpdate);
+      socket.off("chat:bookmark:update", onBookmarkUpdate);
       socket.off("chat:typing", onTyping);
     };
   }, [activeConversationId, authToken, onActiveConversationRejected, queryClient, selfUserId, subscriptionIds]);

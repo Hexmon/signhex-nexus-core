@@ -312,6 +312,10 @@ export interface Notification {
   created_at?: string;
 }
 
+export interface NotificationUnreadCountResponse {
+  unread_total: number;
+}
+
 export interface Presentation {
   id: string;
   name: string;
@@ -721,6 +725,21 @@ export type ChatInvitePolicy =
   | "ADMINS_ONLY_CAN_INVITE"
   | "INVITES_DISABLED";
 export type ChatViewerRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER" | null;
+export type ChatMentionAudience = "everyone" | "channel" | "here";
+export type ChatMentionRule = "ANY_MEMBER" | "ADMINS_ONLY" | "DISABLED";
+export type ChatEditDeletePolicy = "OWN" | "ADMINS_ONLY" | "DISABLED";
+
+export interface ChatMentionPolicy {
+  everyone: ChatMentionRule;
+  channel: ChatMentionRule;
+  here: ChatMentionRule;
+}
+
+export interface ChatConversationSettings {
+  mention_policy: ChatMentionPolicy;
+  edit_policy: ChatEditDeletePolicy;
+  delete_policy: ChatEditDeletePolicy;
+}
 
 export interface ChatConversationSummary {
   id: string;
@@ -732,6 +751,10 @@ export interface ChatConversationSummary {
   title?: string | null;
   topic?: string | null;
   purpose?: string | null;
+  settings?: ChatConversationSettings;
+  metadata?: {
+    settings?: ChatConversationSettings;
+  } | null;
 }
 
 export interface ChatConversationListItem extends ChatConversationSummary {
@@ -775,6 +798,33 @@ export interface ChatMessage {
   deleted_at?: string | null;
   attachments?: Array<string | ChatMessageAttachment>;
   reactions?: ChatReaction[];
+  also_to_channel?: boolean;
+  alsoToChannel?: boolean;
+}
+
+export interface ChatPin {
+  id: string;
+  conversation_id: string;
+  message_id: string;
+  pinned_by: string;
+  pinned_at: string;
+  message?: Partial<ChatMessage>;
+}
+
+export type ChatBookmarkType = "LINK" | "FILE" | "MESSAGE";
+
+export interface ChatBookmark {
+  id: string;
+  conversation_id: string;
+  type: ChatBookmarkType;
+  label: string;
+  emoji?: string | null;
+  url?: string | null;
+  media_asset_id?: string | null;
+  message_id?: string | null;
+  created_by: string;
+  metadata?: unknown;
+  created_at: string;
 }
 
 export interface ChatReadReceipt {
@@ -866,6 +916,22 @@ export interface ChatModerationResponse {
   moderation: ChatModerationRecord;
 }
 
+export interface ChatPinResponse {
+  pin: ChatPin;
+}
+
+export interface ChatPinsListResponse {
+  items: ChatPin[];
+}
+
+export interface ChatBookmarkResponse {
+  bookmark: ChatBookmark;
+}
+
+export interface ChatBookmarksListResponse {
+  items: ChatBookmark[];
+}
+
 export interface ChatSubscribeAck {
   subscribed: string[];
   rejected: string[];
@@ -891,7 +957,9 @@ export interface ChatMessageDeletedEvent {
 
 export interface ChatConversationUpdatedEvent {
   conversationId: string;
-  patch: Partial<ChatConversationListItem>;
+  patch: Partial<ChatConversationListItem> & {
+    settings?: ChatConversationSettings;
+  };
 }
 
 export interface ChatTypingEvent {
@@ -899,4 +967,17 @@ export interface ChatTypingEvent {
   userId: string;
   isTyping: boolean;
   ttlSeconds?: number;
+}
+
+export interface ChatPinUpdateEvent {
+  conversationId: string;
+  messageId: string;
+  pinned: boolean;
+  pin?: ChatPin;
+}
+
+export interface ChatBookmarkUpdateEvent {
+  conversationId: string;
+  bookmarkId: string;
+  op: "add" | "remove";
 }

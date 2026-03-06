@@ -26,6 +26,12 @@ Contract source: `CHAT_FRONTEND_IMPLEMENTATION_GUIDE.md`
 2. Verify day separators render.
 3. Verify unread marker placement around `last_read_seq` boundary.
 4. Verify deleted message tombstone shows and body/attachments/reactions are hidden.
+5. Verify cursor-forward behavior:
+   - initial request uses `afterSeq=0&limit=50`,
+   - no fake `Load older` from server UI is shown,
+   - `Check for new messages` is available.
+6. Click `Check for new messages` when no new events exist and verify empty response (`items.length=0`) with `Up to date` indicator.
+7. If deep-linked `focusMessageId` is missing, verify callout explains older-pagination is required (no fake backfill).
 
 ## Composer + Attachments
 1. Send plain text message.
@@ -37,9 +43,38 @@ Contract source: `CHAT_FRONTEND_IMPLEMENTATION_GUIDE.md`
 
 ## Threads
 1. Click Reply on message; thread panel opens.
-2. Send reply with `replyTo`.
-3. Enable “also send to main chat” and verify both messages appear.
+2. Send reply with `replyTo` and toggle off “Also send to main chat”:
+   - verify reply appears in thread only, not in main channel timeline.
+3. Send reply with `replyTo` and toggle on “Also send to main chat”:
+   - verify same reply appears in both thread and channel timeline.
 4. Open deep link thread route and verify same thread loads.
+5. Click `Check for new` in thread panel and verify it fetches replies with `seq > lastSeenSeq`.
+
+## Pins
+1. Pin a message from message actions.
+2. Open details drawer -> Pins tab and verify pinned message appears.
+3. Unpin from message actions or Pins tab and verify removal.
+4. Pin a message then delete it; verify Pins tab shows safe deleted placeholder.
+
+## Bookmarks
+1. Open details drawer -> Bookmarks tab.
+2. Create LINK bookmark and verify open-in-new-tab works.
+3. Create FILE bookmark and verify media preview resolves.
+4. Create MESSAGE bookmark from message action and verify deep-link opens target conversation with focus.
+5. Delete bookmark and verify list updates.
+
+## Policies (mention/edit/delete)
+1. In details drawer -> Settings tab, update:
+   - mention policy (`everyone/channel/here`)
+   - edit policy
+   - delete policy
+2. For mention policy:
+   - member blocked on restricted `@everyone/@channel/@here`
+   - admin allowed where configured `ADMINS_ONLY`
+3. For edit/delete policies:
+   - `DISABLED` blocks action with policy toast
+   - `ADMINS_ONLY` blocks member and allows admin
+   - `OWN` allows own messages only (plus admin override where backend applies)
 
 ## Reactions / Edit / Delete
 1. Add reaction and verify count updates.
@@ -52,6 +87,11 @@ Contract source: `CHAT_FRONTEND_IMPLEMENTATION_GUIDE.md`
 2. Send message in A and verify near-real-time render in B.
 3. Trigger typing in A and verify transient typing indicator in B.
 4. Disconnect/reconnect browser and verify catch-up messages fetched by `afterSeq`.
+5. Verify reconnect catch-up uses only `afterSeq=lastSeenSeq` and does not refetch full history.
+6. Verify no duplicate messages after WS events and a manual `Check for new messages`.
+7. Pin/unpin in A and verify pins updates in B (`chat:pin:update`).
+8. Add/remove bookmark in A and verify bookmarks update in B (`chat:bookmark:update`).
+9. Update conversation settings in A and verify policy state refreshes in B (`chat:conversation:updated`).
 
 ## Read Receipts
 1. Open conversation with unread messages.

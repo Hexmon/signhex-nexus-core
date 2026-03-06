@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Paperclip, Send, Trash2, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { MediaPreview } from "@/components/common/MediaPreview";
 import { AttachmentPicker } from "@/components/chat/AttachmentPicker";
+import { mediaApi } from "@/api/domains/media";
 import {
   createLocalPreviewUrl,
   getFriendlyUploadError,
@@ -15,13 +17,15 @@ import {
 import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/chat/types";
 import { useToast } from "@/hooks/use-toast";
 import { useChatUserDirectory } from "@/hooks/chat/useChatQueries";
-import type { User } from "@/api/types";
+import type { ChatMentionPolicy, User } from "@/api/types";
 
 interface ComposerProps {
   disabled?: boolean;
   disabledReason?: string;
   isSending?: boolean;
   replyTo?: string;
+  mentionPolicy?: ChatMentionPolicy;
+  isAdminMentionAllowed?: boolean;
   onSubmitKeySend?: boolean;
   onTyping?: (isTyping: boolean) => void;
   onSend: (payload: { text: string; replyTo?: string; attachmentMediaIds: string[] }) => Promise<void> | void;
@@ -34,6 +38,8 @@ export function Composer({
   disabledReason,
   isSending = false,
   replyTo,
+  mentionPolicy,
+  isAdminMentionAllowed = false,
   onSubmitKeySend = true,
   onTyping,
   onSend,
@@ -63,6 +69,38 @@ export function Composer({
     () => uploadItems.some((item) => item.status === "uploading" || item.status === "queued"),
     [uploadItems],
   );
+
+  const unresolvedAttachmentIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          attachments
+            .filter((attachment) => !attachment.previewUrl)
+            .map((attachment) => attachment.mediaId)
+            .filter((id) => Boolean(id)),
+        ),
+      ),
+    [attachments],
+  );
+
+  const unresolvedAttachmentQueries = useQueries({
+    queries: unresolvedAttachmentIds.map((mediaId) => ({
+      queryKey: ["media", "composer", mediaId],
+      queryFn: () => mediaApi.getById(mediaId),
+      staleTime: 60_000,
+      retry: 1,
+      enabled: Boolean(mediaId),
+    })),
+  });
+
+  const unresolvedAttachmentById = useMemo(() => {
+    const map: Record<string, Awaited<ReturnType<typeof mediaApi.getById>>> = {};
+    unresolvedAttachmentIds.forEach((mediaId, index) => {
+      const data = unresolvedAttachmentQueries[index]?.data;
+      if (data) map[mediaId] = data;
+    });
+    return map;
+  }, [unresolvedAttachmentIds, unresolvedAttachmentQueries]);
 
   const mentionUsers = useMemo(() => {
     const users = usersDirectoryQuery.data?.users ?? [];
@@ -253,6 +291,33 @@ export function Composer({
     if (!trimmed && attachments.length === 0) return;
     if (isUploading) return;
 
+    const specialMentionError = (() => {
+      const policy = mentionPolicy;
+      if (!policy) return null;
+      const checks: Array<{ token: "@everyone" | "@channel" | "@here"; rule: "ANY_MEMBER" | "ADMINS_ONLY" | "DISABLED" }> = [
+        { token: "@everyone", rule: policy.everyone },
+        { token: "@channel", rule: policy.channel },
+        { token: "@here", rule: policy.here },
+      ];
+      for (const check of checks) {
+        const pattern = new RegExp(`(^|\\s)${check.token}(\\s|$)`, "i");
+        if (!pattern.test(trimmed)) continue;
+        if (check.rule === "ANY_MEMBER") continue;
+        if (check.rule === "ADMINS_ONLY" && isAdminMentionAllowed) continue;
+        return `${check.token} mention is not allowed in this conversation.`;
+      }
+      return null;
+    })();
+
+    if (specialMentionError) {
+      toast({
+        title: "Mention blocked",
+        description: specialMentionError,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await onSend({
         text: trimmed,
@@ -289,23 +354,29 @@ export function Composer({
             <Badge variant="secondary">{attachments.length}</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {attachments.map((attachment) => (
-              <div key={attachment.mediaId} className="rounded-md border p-2 flex items-center gap-2">
-                <MediaPreview
-                  url={attachment.previewUrl ?? undefined}
-                  type={attachment.contentType}
-                  alt={attachment.fileName}
-                  className="h-12 w-12"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium truncate">{attachment.fileName}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{attachment.mediaId}</p>
+            {attachments.map((attachment) => {
+              const resolvedMedia = unresolvedAttachmentById[attachment.mediaId];
+              return (
+                <div key={attachment.mediaId} className="rounded-md border p-2 flex items-center gap-2">
+                  <MediaPreview
+                    media={resolvedMedia}
+                    url={attachment.previewUrl ?? resolvedMedia?.media_url ?? undefined}
+                    type={attachment.contentType ?? resolvedMedia?.content_type}
+                    alt={attachment.fileName || resolvedMedia?.filename}
+                    className="h-12 w-12"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">
+                      {attachment.fileName || resolvedMedia?.filename}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">{attachment.mediaId}</p>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeAttachment(attachment.mediaId)}>
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => removeAttachment(attachment.mediaId)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

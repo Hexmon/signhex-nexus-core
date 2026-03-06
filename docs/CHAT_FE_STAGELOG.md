@@ -217,3 +217,92 @@
 - Known limitations:
   - Thread deep-link focus is best-effort; exact historical message targeting depends on loaded pages.
   - Moderation panel still uses manual `userId` entry (member picker deferred).
+
+## D1 - Delta types/endpoints/domain alignment (pins/bookmarks/policies/alsoToChannel)
+- Completed: Yes
+- What changed:
+  - Added delta chat types for settings, pins, bookmarks, and WS payloads in `src/api/types.ts`.
+  - Added chat endpoints for pins/bookmarks in `src/api/endpoints.ts`.
+  - Extended chat domain in `src/api/domains/chat.ts`:
+    - pin/unpin/list pins
+    - create/list/delete bookmarks
+    - patch conversation settings
+    - send `alsoToChannel` only when `replyTo` exists.
+  - Added query-key scaffolding in `src/hooks/chat/useChatQueries.ts`.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - API console smoke pending runtime backend checks.
+- Next stage: D2
+
+## D2 - Pin/Unpin actions + pins panel
+- Completed: Yes
+- What changed:
+  - Added pin hooks (`usePins`, `usePinMessage`, `useUnpinMessage`) in `useChatQueries.ts`.
+  - Replaced `Pin (soon)` placeholder with real Pin/Unpin actions in `MessageItem.tsx`.
+  - Added new `PinsPanel.tsx`.
+  - Added settings drawer tabs (`Settings | Pins | Bookmarks`) in `ConversationSettingsPanel.tsx`.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - Pin/unpin end-to-end pending backend runtime validation.
+- Next stage: D3
+
+## D3 - Bookmarks panel + create/delete
+- Completed: Yes
+- What changed:
+  - Added bookmark hooks (`useBookmarks`, `useCreateBookmark`, `useDeleteBookmark`) in `useChatQueries.ts`.
+  - Added `BookmarksPanel.tsx` with LINK/FILE create flows and MESSAGE deep-link open support.
+  - Added message-level bookmark action in `MessageItem.tsx` and page wiring in `Conversations.tsx`.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - LINK/FILE/MESSAGE bookmark runtime checks pending backend environment.
+- Next stage: D4
+
+## D4 - Conversation policies + enforcement UX
+- Completed: Yes
+- What changed:
+  - Extended settings UI with mention/edit/delete policy controls in `ConversationSettingsPanel.tsx`.
+  - Added policy defaults + normalization path (`settings` vs `metadata.settings`) in `Conversations.tsx`.
+  - Added policy-aware edit/delete button gating in message actions.
+  - Added mention-policy send guard in `Composer.tsx` for `@everyone/@channel/@here`.
+  - Extended centralized chat error mapping for policy-related backend codes in `src/lib/chatErrors.ts`.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - Policy enforcement scenarios pending backend role-based runtime checks.
+- Next stage: D5
+
+## D5 - Thread replies alsoToChannel + visibility rules
+- Completed: Yes
+- What changed:
+  - Fixed thread reply behavior: now single send with `{ replyTo, alsoToChannel }` (no duplicate second message).
+  - Updated send cache merge (`useSendChatMessage`) and realtime merge (`useChatRealtime`) to keep thread-only replies out of main timeline unless explicit `also_to_channel/alsoToChannel=true`.
+  - Updated `ThreadPanel.tsx` contract payload to `alsoToChannel`.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - Thread visibility (thread-only vs also-to-channel) pending two-client runtime verification.
+- Next stage: D6
+
+## D6 - Realtime delta events + docs/checklists
+- Completed: Yes
+- What changed:
+  - Added WS handlers in `useChatRealtime.ts` for:
+    - `chat:pin:update`
+    - `chat:bookmark:update`
+    - `chat:conversation:updated` settings harmonization.
+  - Added pins/bookmarks/settings wiring in `Conversations.tsx` + settings tabs.
+  - Updated stage log, gap report, and QA checklist for delta coverage.
+- Tests:
+  - `npm run lint` ✅
+  - `npm run build` ✅
+- Manual smoke:
+  - Multi-client realtime sync validation pending backend environment.
+- Next stage: Delta release candidate

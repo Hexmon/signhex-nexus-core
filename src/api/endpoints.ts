@@ -26,6 +26,9 @@ export const endpoints = {
     messages: (conversationId: string) => `/chat/conversations/${conversationId}/messages`,
     thread: (conversationId: string, parentMessageId: string) =>
       `/chat/conversations/${conversationId}/thread/${parentMessageId}`,
+    listPins: (conversationId: string) => `/chat/conversations/${conversationId}/pins`,
+    createBookmark: (conversationId: string) => `/chat/conversations/${conversationId}/bookmarks`,
+    listBookmarks: (conversationId: string) => `/chat/conversations/${conversationId}/bookmarks`,
     read: (conversationId: string) => `/chat/conversations/${conversationId}/read`,
     invite: (conversationId: string) => `/chat/conversations/${conversationId}/invite`,
     removeMember: (conversationId: string) => `/chat/conversations/${conversationId}/members/remove`,
@@ -36,6 +39,9 @@ export const endpoints = {
     moderateConversation: (conversationId: string) => `/chat/conversations/${conversationId}/moderation`,
     messageById: (messageId: string) => `/chat/messages/${messageId}`,
     reactions: (messageId: string) => `/chat/messages/${messageId}/reactions`,
+    pinMessage: (messageId: string) => `/chat/messages/${messageId}/pin`,
+    unpinMessage: (messageId: string) => `/chat/messages/${messageId}/unpin`,
+    deleteBookmark: (bookmarkId: string) => `/chat/bookmarks/${bookmarkId}`,
   },
   departments: {
     base: "/departments",
@@ -74,6 +80,7 @@ export const endpoints = {
   },
   notifications: {
     base: "/notifications",
+    unreadCount: "/notifications/unread-count",
     byId: (notificationId: string) => `/notifications/${notificationId}`,
     markRead: (notificationId: string) => `/notifications/${notificationId}/read`,
     markAllRead: "/notifications/read-all",

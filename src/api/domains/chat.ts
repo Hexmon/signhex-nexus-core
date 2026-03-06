@@ -1,13 +1,18 @@
 import { ApiError, apiClient } from "@/api/apiClient";
 import { endpoints } from "@/api/endpoints";
 import type {
+  ChatBookmark,
+  ChatBookmarksListResponse,
   ChatConversationResponse,
   ChatInvitePolicy,
+  ChatConversationSettings,
   ChatListConversationsResponse,
   ChatListMessagesResponse,
   ChatMarkReadResponse,
   ChatModerationResponse,
   ChatNormalizedError,
+  ChatPinResponse,
+  ChatPinsListResponse,
   ChatReactionsResponse,
   ChatSendMessageResponse,
   ChatThreadResponse,
@@ -19,6 +24,10 @@ import type {
 export interface ChatCursorParams {
   afterSeq?: number;
   limit?: number;
+}
+
+interface ChatCursorRequestParams extends ChatCursorParams {
+  signal?: AbortSignal;
 }
 
 export interface CreateChatConversationInput {
@@ -35,6 +44,7 @@ export interface SendChatMessageInput {
   text?: string;
   replyTo?: string | null;
   attachmentMediaIds?: string[];
+  alsoToChannel?: boolean;
 }
 
 export interface UpdateChatConversationInput {
@@ -43,6 +53,7 @@ export interface UpdateChatConversationInput {
   purpose?: string | null;
   invite_policy?: ChatInvitePolicy;
   state?: "ACTIVE" | "ARCHIVED" | "DELETED";
+  settings?: ChatConversationSettings;
 }
 
 export interface ChatModerationInput {
@@ -52,10 +63,35 @@ export interface ChatModerationInput {
   reason?: string;
 }
 
-const withCursorDefaults = (params?: ChatCursorParams) => ({
-  afterSeq: params?.afterSeq ?? 0,
-  limit: params?.limit ?? 50,
-});
+export interface CreateBookmarkInput {
+  type: "LINK" | "FILE" | "MESSAGE";
+  label: string;
+  emoji?: string;
+  url?: string;
+  mediaAssetId?: string;
+  messageId?: string;
+}
+
+const DEFAULT_CURSOR_LIMIT = 50;
+const MAX_CURSOR_LIMIT = 100;
+
+const normalizeAfterSeq = (afterSeq?: number) => {
+  const parsed = Number(afterSeq);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
+};
+
+export const normalizeCursorParams = (params?: ChatCursorParams) => {
+  const parsedLimit = Number(params?.limit);
+  const normalizedLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? Math.floor(parsedLimit)
+    : DEFAULT_CURSOR_LIMIT;
+
+  return {
+    afterSeq: normalizeAfterSeq(params?.afterSeq),
+    limit: Math.min(MAX_CURSOR_LIMIT, normalizedLimit),
+  };
+};
 
 export const normalizeChatError = (error: unknown): ChatNormalizedError => {
   if (error instanceof ApiError) {
@@ -100,30 +136,44 @@ export const chatApi = {
       method: "GET",
     }),
 
-  listMessages: (conversationId: string, params?: ChatCursorParams) =>
+  listMessages: (conversationId: string, params?: ChatCursorRequestParams) =>
     apiClient.request<ChatListMessagesResponse>({
       path: endpoints.chat.messages(conversationId),
       method: "GET",
-      query: withCursorDefaults(params),
+      query: normalizeCursorParams(params),
+      signal: params?.signal,
     }),
 
-  listThread: (conversationId: string, parentMessageId: string, params?: ChatCursorParams) =>
+  listThread: (conversationId: string, parentMessageId: string, params?: ChatCursorRequestParams) =>
     apiClient.request<ChatThreadResponse>({
       path: endpoints.chat.thread(conversationId, parentMessageId),
       method: "GET",
-      query: withCursorDefaults(params),
+      query: normalizeCursorParams(params),
+      signal: params?.signal,
     }),
 
-  sendMessage: ({ conversationId, text, replyTo, attachmentMediaIds }: SendChatMessageInput) =>
-    apiClient.request<ChatSendMessageResponse>({
+  sendMessage: ({ conversationId, text, replyTo, attachmentMediaIds, alsoToChannel }: SendChatMessageInput) => {
+    const normalizedText = typeof text === "string" ? text.trim() : undefined;
+    const normalizedAttachmentIds = (attachmentMediaIds ?? []).filter(Boolean);
+    const body: {
+      text?: string;
+      replyTo?: string;
+      attachmentMediaIds: string[];
+      alsoToChannel?: boolean;
+    } = {
+      text: normalizedText || undefined,
+      replyTo: replyTo ?? undefined,
+      attachmentMediaIds: normalizedAttachmentIds,
+    };
+    if (replyTo && typeof alsoToChannel === "boolean") {
+      body.alsoToChannel = alsoToChannel;
+    }
+    return apiClient.request<ChatSendMessageResponse>({
       path: endpoints.chat.messages(conversationId),
       method: "POST",
-      body: {
-        text,
-        replyTo: replyTo ?? undefined,
-        attachmentMediaIds: attachmentMediaIds ?? [],
-      },
-    }),
+      body,
+    });
+  },
 
   editMessage: (messageId: string, text: string) =>
     apiClient.request<ChatUpdateMessageResponse>({
@@ -143,6 +193,43 @@ export const chatApi = {
       path: endpoints.chat.reactions(messageId),
       method: "POST",
       body: payload,
+    }),
+
+  pinMessage: (messageId: string) =>
+    apiClient.request<ChatPinResponse>({
+      path: endpoints.chat.pinMessage(messageId),
+      method: "POST",
+    }),
+
+  unpinMessage: (messageId: string) =>
+    apiClient.request<{ success: boolean }>({
+      path: endpoints.chat.unpinMessage(messageId),
+      method: "POST",
+    }),
+
+  listPins: (conversationId: string) =>
+    apiClient.request<ChatPinsListResponse>({
+      path: endpoints.chat.listPins(conversationId),
+      method: "GET",
+    }),
+
+  createBookmark: (conversationId: string, payload: CreateBookmarkInput) =>
+    apiClient.request<{ bookmark: ChatBookmark }>({
+      path: endpoints.chat.createBookmark(conversationId),
+      method: "POST",
+      body: payload,
+    }),
+
+  listBookmarks: (conversationId: string) =>
+    apiClient.request<ChatBookmarksListResponse>({
+      path: endpoints.chat.listBookmarks(conversationId),
+      method: "GET",
+    }),
+
+  deleteBookmark: (bookmarkId: string) =>
+    apiClient.request<{ success: boolean }>({
+      path: endpoints.chat.deleteBookmark(bookmarkId),
+      method: "DELETE",
     }),
 
   markRead: (conversationId: string, lastReadSeq: number) =>
@@ -171,6 +258,13 @@ export const chatApi = {
       path: endpoints.chat.updateConversation(conversationId),
       method: "PATCH",
       body: payload,
+    }),
+
+  patchConversationSettings: (conversationId: string, settings: ChatConversationSettings) =>
+    apiClient.request<ChatConversationResponse>({
+      path: endpoints.chat.updateConversation(conversationId),
+      method: "PATCH",
+      body: { settings },
     }),
 
   archiveConversation: (conversationId: string) =>

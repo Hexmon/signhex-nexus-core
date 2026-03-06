@@ -38,11 +38,17 @@ Source of truth: `CHAT_FRONTEND_IMPLEMENTATION_GUIDE.md`
 - Chat timestamp formatting centralized via `src/lib/chatTime.ts` and applied across chat surfaces.
 - Centralized chat error-to-UX mapping added in `src/lib/chatErrors.ts`.
 - Reusable sticky status banner added in `src/components/chat/ChatStatusBanner.tsx` and reused in main/thread views.
+- Delta features integrated from `CHAT_FRONTEND_DELTA_GUIDE_PINS_BOOKMARKS_POLICIES.md`:
+  - Pins: domain + hooks + message actions + pins panel + WS sync.
+  - Bookmarks: domain + hooks + create/list/delete UI + WS sync.
+  - Policies: mention/edit/delete controls in settings + centralized error mapping.
+  - Thread replies: `alsoToChannel` payload support and thread-only visibility guard in query+WS cache merges.
 
 ## Remaining / Partial Gaps
 - Thread deep-link message focus/scroll-to-message best-effort is not yet implemented.
 - Moderation controls currently use manual `userId` input (member picker can be improved).
 - Playwright suite command executes and skips correctly when env credentials are absent; full authenticated run is still pending configured E2E creds.
+- Delta manual QA matrix is pending runtime verification against backend (pins/bookmarks/policy scenarios across roles and multi-client realtime).
 
 ## Risk Notes
 - Backend payload variations (attachments as IDs vs objects) are handled defensively, but final QA should confirm exact runtime shapes in all chat routes.

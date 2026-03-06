@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { CornerDownRight, Pencil, Pin, SmilePlus, Trash2 } from "lucide-react";
+import { BookmarkPlus, CornerDownRight, Pencil, Pin, PinOff, SmilePlus, Trash2 } from "lucide-react";
 import { MediaPreview } from "@/components/common/MediaPreview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { formatChatTime } from "@/lib/chatTime";
 import type { ChatMessage, MediaAsset } from "@/api/types";
@@ -13,16 +14,27 @@ interface MessageItemProps {
   canMutate?: boolean;
   attachmentMediaById?: Record<string, MediaAsset>;
   mentionDisplayById?: Record<string, string>;
+  onMentionClick?: (userId: string) => void;
+  isPinned?: boolean;
+  isBookmarked?: boolean;
+  canEditMessage?: boolean;
+  canDeleteMessage?: boolean;
   onReply?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string, op: "add" | "remove") => void;
   onEdit?: (messageId: string, text: string) => void;
   onDelete?: (messageId: string) => void;
+  onTogglePin?: (messageId: string, shouldPin: boolean) => void;
+  onBookmark?: (messageId: string) => void;
 }
 
 const mentionPattern = /(@[0-9a-fA-F-]{36})/g;
 const mentionTokenPattern = /^@([0-9a-fA-F-]{36})$/;
 
-const renderMessageText = (content: string, mentionDisplayById: Record<string, string>) => {
+const renderMessageText = (
+  content: string,
+  mentionDisplayById: Record<string, string>,
+  onMentionClick?: (userId: string) => void,
+) => {
   const parts = content.split(mentionPattern);
   return parts.map((part, index) => {
     const tokenMatch = part.match(mentionTokenPattern);
@@ -31,11 +43,17 @@ const renderMessageText = (content: string, mentionDisplayById: Record<string, s
     }
 
     const userId = tokenMatch[1];
-    const label = mentionDisplayById[userId] ? `@${mentionDisplayById[userId]}` : part;
+    const label = `@${mentionDisplayById[userId] || "User"}`;
     return (
-      <span key={`${part}-${index}`} className="font-medium text-primary">
+      <button
+        key={`${part}-${index}`}
+        type="button"
+        className="font-medium text-primary hover:underline"
+        onClick={() => onMentionClick?.(userId)}
+        aria-label={`Open DM with ${label}`}
+      >
         {label}
-      </span>
+      </button>
     );
   });
 };
@@ -51,16 +69,31 @@ export function MessageItem({
   canMutate = true,
   attachmentMediaById = {},
   mentionDisplayById = {},
+  onMentionClick,
+  isPinned = false,
+  isBookmarked = false,
+  canEditMessage,
+  canDeleteMessage,
   onReply,
   onReact,
   onEdit,
   onDelete,
+  onTogglePin,
+  onBookmark,
 }: MessageItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(message.body_text || "");
+  const [viewer, setViewer] = useState<{
+    media?: MediaAsset;
+    url?: string;
+    type?: string;
+    alt?: string;
+  } | null>(null);
   const attachments = Array.isArray(message.attachments) ? message.attachments : [];
   const isDeleted = Boolean(message.deleted_at);
   const isMine = currentUserId ? currentUserId === message.sender_id : false;
+  const canEditResolved = canMutate && (typeof canEditMessage === "boolean" ? canEditMessage : isMine);
+  const canDeleteResolved = canMutate && (typeof canDeleteMessage === "boolean" ? canDeleteMessage : isMine);
 
   const reactionsByEmoji = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -71,11 +104,13 @@ export function MessageItem({
     return map;
   }, [message.reactions]);
 
+  const senderLabel = mentionDisplayById[message.sender_id] || message.sender_id;
+
   return (
     <div className="space-y-2 rounded-md border bg-background p-3">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">{message.sender_id}</span>
+          <span className="font-medium text-foreground">{senderLabel}</span>
           <span>#{message.seq}</span>
           {message.edited_at && !isDeleted && (
             <Badge variant="outline" aria-label="Message edited">
@@ -83,6 +118,7 @@ export function MessageItem({
             </Badge>
           )}
           {message.thread_reply_count ? <Badge variant="secondary">{message.thread_reply_count} replies</Badge> : null}
+          {isPinned && <Badge variant="secondary">Pinned</Badge>}
         </div>
         <span>{formatChatTime(message.created_at)}</span>
       </div>
@@ -110,7 +146,7 @@ export function MessageItem({
         </div>
       ) : (
         <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
-          {renderMessageText(message.body_text || "", mentionDisplayById)}
+          {renderMessageText(message.body_text || "", mentionDisplayById, onMentionClick)}
         </div>
       )}
 
@@ -138,6 +174,27 @@ export function MessageItem({
                 <div className="truncate text-xs text-muted-foreground">
                   {media?.filename || (typeof attachment === "object" ? attachment.filename : attachmentId)}
                 </div>
+                {trustedUrl && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setViewer({
+                        media,
+                        url: trustedUrl,
+                        type:
+                          media?.content_type ||
+                          (typeof attachment === "object" ? attachment.content_type : undefined),
+                        alt:
+                          media?.filename ||
+                          (typeof attachment === "object" ? attachment.filename : "Attachment"),
+                      })
+                    }
+                    aria-label="View attachment in wide modal"
+                  >
+                    View
+                  </Button>
+                )}
               </div>
             );
           })}
@@ -174,14 +231,14 @@ export function MessageItem({
             React
           </Button>
 
-          {isMine && (
+          {canEditResolved && (
             <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)} disabled={!canMutate} aria-label="Edit message">
               <Pencil className="mr-1 h-3.5 w-3.5" />
               Edit
             </Button>
           )}
 
-          {isMine && (
+          {canDeleteResolved && (
             <Button
               size="sm"
               variant="ghost"
@@ -195,12 +252,58 @@ export function MessageItem({
             </Button>
           )}
 
-          <Button size="sm" variant="ghost" disabled>
-            <Pin className="mr-1 h-3.5 w-3.5" />
-            Pin (soon)
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!canMutate}
+            onClick={() => onTogglePin?.(message.id, !isPinned)}
+            aria-label={isPinned ? "Unpin message" : "Pin message"}
+          >
+            {isPinned ? <PinOff className="mr-1 h-3.5 w-3.5" /> : <Pin className="mr-1 h-3.5 w-3.5" />}
+            {isPinned ? "Unpin" : "Pin"}
           </Button>
+
+          {!isBookmarked ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!canMutate}
+              onClick={() => onBookmark?.(message.id)}
+              aria-label="Add bookmark"
+            >
+              <BookmarkPlus className="mr-1 h-3.5 w-3.5" />
+              Bookmark
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled
+              aria-label="Already bookmarked"
+            >
+              <BookmarkPlus className="mr-1 h-3.5 w-3.5" />
+              Bookmarked
+            </Button>
+          )}
         </div>
       )}
+
+      <Dialog open={Boolean(viewer)} onOpenChange={(open) => !open && setViewer(null)}>
+        <DialogContent className="h-[90vh] w-[95vw] max-w-6xl p-4">
+          <DialogHeader>
+            <DialogTitle>{viewer?.alt || "Attachment preview"}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1">
+            <MediaPreview
+              media={viewer?.media}
+              url={viewer?.url}
+              type={viewer?.type}
+              alt={viewer?.alt}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

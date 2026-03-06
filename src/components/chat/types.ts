@@ -26,6 +26,7 @@ export interface ChatPendingUiMessage {
   text: string;
   attachmentMediaIds: string[];
   replyTo?: string;
+  alsoToChannel?: boolean;
   createdAt: string;
   status: "sending" | "failed";
   errorCode?: string;

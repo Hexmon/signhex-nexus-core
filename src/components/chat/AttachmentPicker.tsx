@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileUp, Loader2, Plus, Search, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { mediaApi } from "@/api/domains/media";
 import type { MediaAsset, MediaType } from "@/api/types";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import { useToast } from "@/hooks/use-toast";
 import {
   createLocalPreviewUrl,
@@ -22,6 +23,7 @@ import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/cha
 
 interface AttachmentPickerProps {
   open: boolean;
+  initialTab?: "existing" | "upload";
   onOpenChange: (open: boolean) => void;
   onAddAttachments: (attachments: ChatPendingAttachment[]) => void;
 }
@@ -43,15 +45,25 @@ const resolveType = (media: MediaAsset): string => {
   return "DOCUMENT";
 };
 
-export function AttachmentPicker({ open, onOpenChange, onAddAttachments }: AttachmentPickerProps) {
+export function AttachmentPicker({
+  open,
+  initialTab = "existing",
+  onOpenChange,
+  onAddAttachments,
+}: AttachmentPickerProps) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("existing");
+  const [activeTab, setActiveTab] = useState<"existing" | "upload">(initialTab);
   const [mediaType, setMediaType] = useState<"all" | "image" | "video" | "document">("all");
   const [uploadItems, setUploadItems] = useState<ComposerUploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const typeFilter = (mediaType === "all" ? undefined : mediaType.toUpperCase()) as MediaType | undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveTab(initialTab);
+  }, [initialTab, open]);
 
   const mediaQuery = useQuery({
     queryKey: ["chat", "attachment-picker", typeFilter],
@@ -224,6 +236,13 @@ export function AttachmentPicker({ open, onOpenChange, onAddAttachments }: Attac
                   <div className="grid grid-cols-2 gap-3">
                     {mediaItems.map((media) => (
                       <div key={media.id} className="rounded-md border p-3 space-y-2">
+                        <MediaPreview
+                          media={media}
+                          url={media.media_url ?? undefined}
+                          type={media.content_type}
+                          alt={media.filename}
+                          className="h-24 w-full"
+                        />
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-medium">{media.filename}</span>
                           <Badge variant="outline">{resolveType(media)}</Badge>
@@ -292,6 +311,12 @@ export function AttachmentPicker({ open, onOpenChange, onAddAttachments }: Attac
                     {uploadItems.map((item) => (
                       <div key={item.localId} className="rounded-md border p-3 space-y-2">
                         <div className="flex items-center justify-between gap-3">
+                          <MediaPreview
+                            url={item.previewUrl}
+                            type={item.contentType}
+                            alt={item.fileName}
+                            className="h-14 w-14"
+                          />
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{item.fileName}</p>
                             <p className="text-xs text-muted-foreground">

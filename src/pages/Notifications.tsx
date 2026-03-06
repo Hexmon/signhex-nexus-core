@@ -4,6 +4,7 @@ import { BellRing, CheckCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "@/api/domains/notifications";
 import type { ChatNotificationData, Notification } from "@/api/types";
+import { notificationUnreadCountQueryKey } from "@/hooks/notifications/useNotificationUnreadCount";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,6 +54,7 @@ export default function Notifications() {
     mutationFn: (notificationId: string) => notificationsApi.markRead(notificationId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: notificationUnreadCountQueryKey });
     },
   });
 
@@ -60,6 +62,7 @@ export default function Notifications() {
     mutationFn: () => notificationsApi.markAllRead(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: notificationUnreadCountQueryKey });
     },
   });
 

@@ -59,6 +59,14 @@ export const mapChatErrorToUx = (error: unknown): ChatUxError => {
       return { ...base, retryable: true, severity: "warning", toastTitle: "Rate limited" };
     case "CHAT_TOO_MANY_ATTACHMENTS":
       return { ...base, retryable: false, severity: "warning", toastTitle: "Too many attachments" };
+    case "CHAT_MENTION_POLICY_VIOLATION":
+      return { ...base, retryable: false, severity: "warning", toastTitle: "Mention blocked" };
+    case "CHAT_EDIT_POLICY_DISABLED":
+    case "CHAT_EDIT_POLICY_FORBIDDEN":
+      return { ...base, retryable: false, severity: "warning", toastTitle: "Edit blocked" };
+    case "CHAT_DELETE_POLICY_DISABLED":
+    case "CHAT_DELETE_POLICY_FORBIDDEN":
+      return { ...base, retryable: false, severity: "warning", toastTitle: "Delete blocked" };
     default:
       return base;
   }

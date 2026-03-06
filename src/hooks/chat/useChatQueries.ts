@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   InfiniteData,
   useInfiniteQuery,
@@ -16,75 +16,45 @@ import {
 } from "@/api/domains/chat";
 import { usersApi } from "@/api/domains/users";
 import type {
+  ChatBookmarksListResponse,
   ChatConversationListItem,
   ChatListMessagesResponse,
   ChatMessage,
+  ChatPinsListResponse,
   ChatThreadResponse,
   User,
 } from "@/api/types";
-
-const DEFAULT_LIMIT = 50;
+import {
+  clampChatCursorLimit,
+  flattenMessagePages,
+  getLastSeenSeq,
+  appendMessageInInfiniteData,
+  patchMessageInInfiniteData,
+} from "@/hooks/chat/cursorUtils";
 
 export const chatQueryKeys = {
   conversations: ["chat", "conversations"] as const,
   usersDirectory: ["chat", "users-directory"] as const,
-  messages: (conversationId?: string, afterSeq = 0, limit = DEFAULT_LIMIT) =>
-    ["chat", "messages", conversationId, afterSeq, limit] as const,
-  thread: (conversationId?: string, threadRootId?: string, afterSeq = 0, limit = DEFAULT_LIMIT) =>
-    ["chat", "thread", conversationId, threadRootId, afterSeq, limit] as const,
+  pins: (conversationId?: string) => ["chat", "pins", conversationId] as const,
+  bookmarks: (conversationId?: string) => ["chat", "bookmarks", conversationId] as const,
+  messages: (conversationId?: string) => ["chat", "messages", conversationId] as const,
+  messagesCursor: (conversationId?: string) => ["chat", "messages-cursor", conversationId] as const,
+  thread: (conversationId?: string, threadRootId?: string) =>
+    ["chat", "thread", conversationId, threadRootId] as const,
+  threadCursor: (conversationId?: string, threadRootId?: string) =>
+    ["chat", "thread-cursor", conversationId, threadRootId] as const,
 };
 
-const dedupeMessages = (items: ChatMessage[]) => {
-  const seen = new Set<string>();
-  const deduped = items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-  return deduped.sort((a, b) => a.seq - b.seq);
-};
-
-const flattenMessagePages = (pages?: Array<{ items: ChatMessage[] }>) =>
-  dedupeMessages((pages ?? []).flatMap((page) => page.items ?? []));
-
-const patchMessageList = (
-  list: ChatMessage[],
-  messageId: string,
-  patch: Partial<ChatMessage>,
-) =>
-  list.map((item) => (item.id === messageId ? { ...item, ...patch } : item));
-
-const patchMessageInInfiniteData = (
-  data: InfiniteData<ChatListMessagesResponse> | InfiniteData<ChatThreadResponse> | undefined,
-  messageId: string,
-  patch: Partial<ChatMessage>,
-) => {
-  if (!data) return data;
-  return {
-    ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: patchMessageList(page.items ?? [], messageId, patch),
-    })),
-  };
-};
-
-const appendMessageInInfiniteData = <T extends { items: ChatMessage[] }>(
-  data: InfiniteData<T> | undefined,
+const includeInMainTimeline = (
   message: ChatMessage,
-): InfiniteData<T> | undefined => {
-  if (!data) return data;
-  if (data.pages.length === 0) return data;
-
-  const pages = [...data.pages];
-  const lastPage = pages[pages.length - 1];
-  const merged = dedupeMessages([...(lastPage.items ?? []), message]);
-  pages[pages.length - 1] = { ...lastPage, items: merged };
-  return { ...data, pages };
+  alsoToChannelHint?: boolean,
+) => {
+  if (!message.reply_to_message_id) return true;
+  if (typeof alsoToChannelHint === "boolean") return alsoToChannelHint;
+  if (typeof message.also_to_channel === "boolean") return message.also_to_channel;
+  if (typeof message.alsoToChannel === "boolean") return message.alsoToChannel;
+  return false;
 };
-
-const findLatestSeq = (items: ChatMessage[]) =>
-  items.length ? Math.max(...items.map((item) => item.seq ?? 0)) : 0;
 
 export const useChatConversationsList = () =>
   useQuery({
@@ -106,13 +76,29 @@ export const useConversationSettings = (conversationId?: string) => {
   };
 };
 
+export const usePins = (conversationId?: string) =>
+  useQuery({
+    queryKey: chatQueryKeys.pins(conversationId),
+    enabled: Boolean(conversationId),
+    queryFn: () => chatApi.listPins(conversationId!),
+    staleTime: 20_000,
+  });
+
+export const useBookmarks = (conversationId?: string) =>
+  useQuery({
+    queryKey: chatQueryKeys.bookmarks(conversationId),
+    enabled: Boolean(conversationId),
+    queryFn: () => chatApi.listBookmarks(conversationId!),
+    staleTime: 20_000,
+  });
+
 export const useChatUserDirectory = (enabled = true) =>
   useQuery({
     queryKey: chatQueryKeys.usersDirectory,
     enabled,
     staleTime: 120_000,
     queryFn: async () => {
-      const response = await usersApi.list({ page: 1, limit: 500, is_active: true });
+      const response = await usersApi.list({ page: 1, limit: 100, is_active: true });
       const users = response.items ?? [];
       const byId = users.reduce<Record<string, User>>((acc, user) => {
         acc[user.id] = user;
@@ -126,34 +112,53 @@ export const useChatUserDirectory = (enabled = true) =>
   });
 
 export const useChatMessages = (conversationId?: string, params?: ChatCursorParams) => {
-  const limit = params?.limit ?? DEFAULT_LIMIT;
-  const afterSeq = params?.afterSeq ?? 0;
+  const queryClient = useQueryClient();
+  const limit = clampChatCursorLimit(params?.limit);
+  const initialAfterSeq = params?.afterSeq ?? 0;
 
   const query = useInfiniteQuery({
-    queryKey: chatQueryKeys.messages(conversationId, afterSeq, limit),
+    queryKey: chatQueryKeys.messages(conversationId),
     enabled: Boolean(conversationId),
-    initialPageParam: afterSeq,
-    queryFn: ({ pageParam }) =>
+    initialPageParam: initialAfterSeq,
+    queryFn: ({ pageParam, signal }) =>
       chatApi.listMessages(conversationId!, {
         afterSeq: Number(pageParam ?? 0),
         limit,
+        signal,
       }),
     getNextPageParam: (lastPage) => {
-      const lastSeq = lastPage.items?.length
-        ? lastPage.items[lastPage.items.length - 1].seq
-        : undefined;
-      if (!lastSeq || (lastPage.items?.length ?? 0) < limit) return undefined;
-      return lastSeq;
+      if (!lastPage.items?.length) return undefined;
+      return getLastSeenSeq(lastPage.items);
     },
   });
 
   const items = useMemo(() => flattenMessagePages(query.data?.pages), [query.data?.pages]);
-  const latestSeq = useMemo(() => findLatestSeq(items), [items]);
+  const latestSeq = useMemo(() => getLastSeenSeq(items), [items]);
+  const lastFetchCount = query.data?.pages?.[query.data.pages.length - 1]?.items?.length ?? 0;
+  const isUpToDate = !query.isLoading && !query.isFetching && lastFetchCount === 0;
+  const fetchNextPage = query.fetchNextPage;
+
+  useEffect(() => {
+    if (!conversationId) return;
+    queryClient.setQueryData(chatQueryKeys.messagesCursor(conversationId), {
+      lastSeenSeq: latestSeq,
+      lastFetchCount,
+    });
+  }, [conversationId, lastFetchCount, latestSeq, queryClient]);
+
+  const fetchNewer = useCallback(
+    () => fetchNextPage({ pageParam: latestSeq }),
+    [fetchNextPage, latestSeq],
+  );
 
   return {
     ...query,
     items,
     latestSeq,
+    fetchNewer,
+    isFetchingNewer: query.isFetchingNextPage,
+    isUpToDate,
+    lastFetchCount,
   };
 };
 
@@ -162,34 +167,53 @@ export const useChatThread = (
   threadRootId?: string,
   params?: ChatCursorParams,
 ) => {
-  const limit = params?.limit ?? DEFAULT_LIMIT;
-  const afterSeq = params?.afterSeq ?? 0;
+  const queryClient = useQueryClient();
+  const limit = clampChatCursorLimit(params?.limit);
+  const initialAfterSeq = params?.afterSeq ?? 0;
 
   const query = useInfiniteQuery({
-    queryKey: chatQueryKeys.thread(conversationId, threadRootId, afterSeq, limit),
+    queryKey: chatQueryKeys.thread(conversationId, threadRootId),
     enabled: Boolean(conversationId && threadRootId),
-    initialPageParam: afterSeq,
-    queryFn: ({ pageParam }) =>
+    initialPageParam: initialAfterSeq,
+    queryFn: ({ pageParam, signal }) =>
       chatApi.listThread(conversationId!, threadRootId!, {
         afterSeq: Number(pageParam ?? 0),
         limit,
+        signal,
       }),
     getNextPageParam: (lastPage) => {
-      const lastSeq = lastPage.items?.length
-        ? lastPage.items[lastPage.items.length - 1].seq
-        : undefined;
-      if (!lastSeq || (lastPage.items?.length ?? 0) < limit) return undefined;
-      return lastSeq;
+      if (!lastPage.items?.length) return undefined;
+      return getLastSeenSeq(lastPage.items);
     },
   });
 
   const items = useMemo(() => flattenMessagePages(query.data?.pages), [query.data?.pages]);
-  const latestSeq = useMemo(() => findLatestSeq(items), [items]);
+  const latestSeq = useMemo(() => getLastSeenSeq(items), [items]);
+  const lastFetchCount = query.data?.pages?.[query.data.pages.length - 1]?.items?.length ?? 0;
+  const isUpToDate = !query.isLoading && !query.isFetching && lastFetchCount === 0;
+  const fetchNextPage = query.fetchNextPage;
+
+  useEffect(() => {
+    if (!conversationId || !threadRootId) return;
+    queryClient.setQueryData(chatQueryKeys.threadCursor(conversationId, threadRootId), {
+      lastSeenSeq: latestSeq,
+      lastFetchCount,
+    });
+  }, [conversationId, lastFetchCount, latestSeq, queryClient, threadRootId]);
+
+  const fetchNewer = useCallback(
+    () => fetchNextPage({ pageParam: latestSeq }),
+    [fetchNextPage, latestSeq],
+  );
 
   return {
     ...query,
     items,
     latestSeq,
+    fetchNewer,
+    isFetchingNewer: query.isFetchingNextPage,
+    isUpToDate,
+    lastFetchCount,
   };
 };
 
@@ -217,13 +241,20 @@ export const useSendChatMessage = () => {
   return useMutation({
     mutationFn: (payload: SendChatMessageInput) => chatApi.sendMessage(payload),
     onSuccess: (response, payload) => {
-      const message = response.message;
+      const responseAttachments = Array.isArray(response.message.attachments) ? response.message.attachments : [];
+      const payloadAttachments = (payload.attachmentMediaIds ?? []).filter(Boolean);
+      const message =
+        responseAttachments.length === 0 && payloadAttachments.length > 0
+          ? { ...response.message, attachments: payloadAttachments }
+          : response.message;
 
-      queryClient.setQueriesData(
-        { queryKey: ["chat", "messages", payload.conversationId] },
-        (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
-          appendMessageInInfiniteData(current, message),
-      );
+      if (includeInMainTimeline(message, payload.alsoToChannel)) {
+        queryClient.setQueriesData(
+          { queryKey: ["chat", "messages", payload.conversationId] },
+          (current: InfiniteData<ChatListMessagesResponse> | undefined) =>
+            appendMessageInInfiniteData(current, message),
+        );
+      }
 
       if (message.thread_root_id) {
         queryClient.setQueriesData(
@@ -232,6 +263,14 @@ export const useSendChatMessage = () => {
             appendMessageInInfiniteData(current, message),
         );
       }
+
+      queryClient.setQueryData(
+        chatQueryKeys.messagesCursor(payload.conversationId),
+        (current: { lastSeenSeq?: number; lastFetchCount?: number } | undefined) => ({
+          lastSeenSeq: Math.max(current?.lastSeenSeq ?? 0, message.seq ?? 0),
+          lastFetchCount: current?.lastFetchCount ?? 0,
+        }),
+      );
 
       void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
     },
@@ -283,6 +322,81 @@ export const useReactToMessage = () => {
       })),
     onSuccess: ({ reactions, messageId, conversationId }) => {
       patchMessageCaches(queryClient, conversationId, messageId, { reactions });
+    },
+  });
+};
+
+export const usePinMessage = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
+      chatApi.pinMessage(messageId).then((result) => ({ ...result, conversationId })),
+    onSuccess: ({ pin, conversationId }) => {
+      queryClient.setQueryData(chatQueryKeys.pins(conversationId), (current: ChatPinsListResponse | undefined) => {
+        const items = current?.items ?? [];
+        if (items.some((item) => item.id === pin.id)) return current;
+        return { items: [pin, ...items] };
+      });
+    },
+  });
+};
+
+export const useUnpinMessage = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
+      chatApi.unpinMessage(messageId).then((result) => ({ ...result, conversationId, messageId })),
+    onSuccess: ({ conversationId, messageId }) => {
+      queryClient.setQueryData(chatQueryKeys.pins(conversationId), (current: ChatPinsListResponse | undefined) => {
+        const items = current?.items ?? [];
+        return { items: items.filter((item) => item.message_id !== messageId) };
+      });
+    },
+  });
+};
+
+export const useCreateBookmark = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      payload,
+    }: {
+      conversationId: string;
+      payload: {
+        type: "LINK" | "FILE" | "MESSAGE";
+        label: string;
+        emoji?: string;
+        url?: string;
+        mediaAssetId?: string;
+        messageId?: string;
+      };
+    }) => chatApi.createBookmark(conversationId, payload).then((res) => ({ ...res, conversationId })),
+    onSuccess: ({ bookmark, conversationId }) => {
+      queryClient.setQueryData(chatQueryKeys.bookmarks(conversationId), (current: ChatBookmarksListResponse | undefined) => {
+        const items = current?.items ?? [];
+        const existingIndex = items.findIndex((item) => item.id === bookmark.id);
+        if (existingIndex === -1) {
+          return { items: [bookmark, ...items] };
+        }
+        const nextItems = [...items];
+        nextItems[existingIndex] = bookmark;
+        return { items: nextItems };
+      });
+    },
+  });
+};
+
+export const useDeleteBookmark = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookmarkId, conversationId }: { bookmarkId: string; conversationId: string }) =>
+      chatApi.deleteBookmark(bookmarkId).then((res) => ({ ...res, bookmarkId, conversationId })),
+    onSuccess: ({ bookmarkId, conversationId }) => {
+      queryClient.setQueryData(chatQueryKeys.bookmarks(conversationId), (current: ChatBookmarksListResponse | undefined) => {
+        const items = current?.items ?? [];
+        return { items: items.filter((item) => item.id !== bookmarkId) };
+      });
     },
   });
 };
@@ -350,6 +464,30 @@ export const useUpdateConversationSettings = () => {
       conversationId: string;
       payload: UpdateChatConversationInput;
     }) => chatApi.updateConversation(conversationId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
+    },
+  });
+};
+
+export const usePatchConversationSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      settings,
+    }: {
+      conversationId: string;
+      settings: {
+        mention_policy: {
+          everyone: "ANY_MEMBER" | "ADMINS_ONLY" | "DISABLED";
+          channel: "ANY_MEMBER" | "ADMINS_ONLY" | "DISABLED";
+          here: "ANY_MEMBER" | "ADMINS_ONLY" | "DISABLED";
+        };
+        edit_policy: "OWN" | "ADMINS_ONLY" | "DISABLED";
+        delete_policy: "OWN" | "ADMINS_ONLY" | "DISABLED";
+      };
+    }) => chatApi.patchConversationSettings(conversationId, settings),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
     },

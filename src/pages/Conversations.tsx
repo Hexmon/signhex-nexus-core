@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { ArrowDown, Plus, ShieldAlert, UserPlus } from "lucide-react";
+import { ArrowDown, PanelLeftClose, PanelLeftOpen, Plus, ShieldAlert, UserPlus } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { mediaApi } from "@/api/domains/media";
-import type { ChatConversationListItem, ChatMessage } from "@/api/types";
+import type {
+  ChatBookmark,
+  ChatConversationListItem,
+  ChatConversationSettings,
+  ChatEditDeletePolicy,
+  ChatMentionPolicy,
+  ChatMessage,
+  ChatPin,
+} from "@/api/types";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { Composer } from "@/components/chat/Composer";
 import { ConversationList } from "@/components/chat/ConversationList";
@@ -19,25 +27,32 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   useArchiveConversation,
+  useBookmarks,
   useChatConversationsList,
   useChatMessages,
   useChatUserDirectory,
+  useCreateBookmark,
   useCreateChatConversation,
   useCreateDm,
   useDeleteChatMessage,
+  useDeleteBookmark,
   useDeleteConversation,
   useEditChatMessage,
   useInviteChatMembers,
   useMarkRead,
   useModerateConversation,
+  usePinMessage,
+  usePins,
   useReactToMessage,
   useSendChatMessage,
   useUnarchiveConversation,
+  useUnpinMessage,
   useUpdateConversationSettings,
 } from "@/hooks/chat/useChatQueries";
 import { useChatRealtime } from "@/hooks/chat/useChatRealtime";
 import { connectChatSocket } from "@/lib/chatSocket";
 import { mapChatErrorToUx, type ChatBlockMode } from "@/lib/chatErrors";
+import { cn } from "@/lib/utils";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { useAppSelector } from "@/store/hooks";
 import type { ChatPendingUiMessage } from "@/components/chat/types";
@@ -69,6 +84,45 @@ const asBannerMode = (mode: ChatBlockMode) => {
   return mode;
 };
 
+const DEFAULT_CHAT_SETTINGS: ChatConversationSettings = {
+  mention_policy: {
+    everyone: "ADMINS_ONLY",
+    channel: "ADMINS_ONLY",
+    here: "ANY_MEMBER",
+  },
+  edit_policy: "OWN",
+  delete_policy: "OWN",
+};
+
+const resolveSettings = (conversation?: ChatConversationListItem): ChatConversationSettings =>
+  conversation?.settings || conversation?.metadata?.settings || DEFAULT_CHAT_SETTINGS;
+
+const canPerformByPolicy = (
+  policy: ChatEditDeletePolicy,
+  isMine: boolean,
+  canManage: boolean,
+) => {
+  if (policy === "DISABLED") return false;
+  if (policy === "ADMINS_ONLY") return canManage;
+  return isMine || canManage;
+};
+
+const specialMentionAllowed = (
+  mentionPolicy: ChatMentionPolicy,
+  token: "@everyone" | "@channel" | "@here",
+  canManage: boolean,
+) => {
+  const rule = token === "@everyone"
+    ? mentionPolicy.everyone
+    : token === "@channel"
+    ? mentionPolicy.channel
+    : mentionPolicy.here;
+
+  if (rule === "ANY_MEMBER") return true;
+  if (rule === "ADMINS_ONLY") return canManage;
+  return false;
+};
+
 export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -94,19 +148,24 @@ export default function Conversations() {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [newMessagesFromSeq, setNewMessagesFromSeq] = useState<number | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isModerationPanelOpen, setIsModerationPanelOpen] = useState(false);
 
   const focusMessageId = searchParams.get("focusMessageId");
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const prevLatestSeqRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
 
   const conversationsQuery = useChatConversationsList();
   const conversations = useMemo(() => conversationsQuery.data?.items ?? [], [conversationsQuery.data?.items]);
   const selectedConversation = conversations.find((item) => item.id === params.conversationId);
-  const afterSeqStart = Math.max((selectedConversation?.last_seq ?? 0) - MESSAGES_LIMIT, 0);
   const messagesQuery = useChatMessages(selectedConversation?.id, {
-    afterSeq: afterSeqStart,
     limit: MESSAGES_LIMIT,
   });
+  const fetchNewerMessages = messagesQuery.fetchNewer;
+  const isFetchingNewerMessages = messagesQuery.isFetchingNewer;
+  const pinsQuery = usePins(selectedConversation?.id);
+  const bookmarksQuery = useBookmarks(selectedConversation?.id);
   const messages = messagesQuery.items;
   const latestMessageSeq = messagesQuery.latestSeq;
 
@@ -114,6 +173,10 @@ export default function Conversations() {
   const editMessage = useEditChatMessage();
   const deleteMessage = useDeleteChatMessage();
   const reactMessage = useReactToMessage();
+  const pinMessage = usePinMessage();
+  const unpinMessage = useUnpinMessage();
+  const createBookmark = useCreateBookmark();
+  const deleteBookmark = useDeleteBookmark();
   const markRead = useMarkRead();
   const createDm = useCreateDm();
   const createConversation = useCreateChatConversation();
@@ -187,6 +250,7 @@ export default function Conversations() {
     setShowJumpToLatest(false);
     setNewMessagesFromSeq(null);
     prevLatestSeqRef.current = 0;
+    didInitialScrollRef.current = false;
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -221,6 +285,18 @@ export default function Conversations() {
     }
   }, [isAtBottom, latestMessageSeq]);
 
+  useEffect(() => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    if (!activeConversationId || !messages.length) return;
+    if (focusMessageId) return;
+    if (didInitialScrollRef.current) return;
+    requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight;
+    });
+    didInitialScrollRef.current = true;
+  }, [activeConversationId, focusMessageId, messages.length]);
+
   const messageMediaIds = useMemo(
     () =>
       Array.from(
@@ -240,8 +316,30 @@ export default function Conversations() {
     [messages],
   );
 
+  const bookmarkFileMediaIds = useMemo(
+    () =>
+      (bookmarksQuery.data?.items ?? [])
+        .map((bookmark) => bookmark.media_asset_id)
+        .filter((id): id is string => Boolean(id)),
+    [bookmarksQuery.data?.items],
+  );
+  const pendingAttachmentMediaIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          pendingUiMessages.flatMap((item) => item.attachmentMediaIds).filter((id): id is string => Boolean(id)),
+        ),
+      ),
+    [pendingUiMessages],
+  );
+
+  const allMediaIds = useMemo(
+    () => Array.from(new Set([...messageMediaIds, ...bookmarkFileMediaIds, ...pendingAttachmentMediaIds])),
+    [bookmarkFileMediaIds, messageMediaIds, pendingAttachmentMediaIds],
+  );
+
   const mediaQueries = useQueries({
-    queries: messageMediaIds.map((mediaId) => ({
+    queries: allMediaIds.map((mediaId) => ({
       queryKey: ["media", "chat", mediaId],
       queryFn: () => mediaApi.getById(mediaId),
       enabled: Boolean(activeConversationId),
@@ -252,13 +350,13 @@ export default function Conversations() {
 
   const attachmentMediaById = useMemo(() => {
     const map: Record<string, Awaited<ReturnType<typeof mediaApi.getById>>> = {};
-    messageMediaIds.forEach((mediaId, index) => {
+    allMediaIds.forEach((mediaId, index) => {
       if (mediaQueries[index]?.data) {
         map[mediaId] = mediaQueries[index].data;
       }
     });
     return map;
-  }, [mediaQueries, messageMediaIds]);
+  }, [allMediaIds, mediaQueries]);
 
   const archivedStatus =
     selectedConversation?.state === "ARCHIVED"
@@ -267,6 +365,7 @@ export default function Conversations() {
   const effectiveStatus = chatStatus ?? archivedStatus;
 
   const canModerate = Boolean(isAdminOrSuperAdmin || currentRole === "ADMIN" || currentRole === "SUPER_ADMIN");
+  const canShowModeration = Boolean(canModerate && selectedConversation?.type !== "DM");
   const canManage =
     canModerate ||
     selectedConversation?.viewer_role === "ADMIN" ||
@@ -275,6 +374,20 @@ export default function Conversations() {
     selectedConversation?.type === "GROUP_CLOSED" &&
     selectedConversation.invite_policy !== "INVITES_DISABLED" &&
     (selectedConversation.invite_policy === "ANY_MEMBER_CAN_INVITE" ? true : canManage);
+  const conversationSettings = resolveSettings(selectedConversation);
+  const pinnedMessageIds = useMemo(
+    () => new Set((pinsQuery.data?.items ?? []).map((pin) => pin.message_id)),
+    [pinsQuery.data?.items],
+  );
+  const bookmarkedMessageIds = useMemo(
+    () =>
+      new Set(
+        (bookmarksQuery.data?.items ?? [])
+          .filter((bookmark) => bookmark.type === "MESSAGE" && Boolean(bookmark.message_id))
+          .map((bookmark) => bookmark.message_id as string),
+      ),
+    [bookmarksQuery.data?.items],
+  );
   const composerDisabled = Boolean(
     !selectedConversation ||
       effectiveStatus?.mode === "READ_ONLY" ||
@@ -282,6 +395,12 @@ export default function Conversations() {
       effectiveStatus?.mode === "BANNED" ||
       selectedConversation.state === "DELETED",
   );
+
+  useEffect(() => {
+    if (!canShowModeration) {
+      setIsModerationPanelOpen(false);
+    }
+  }, [canShowModeration]);
 
   const emitTyping = (isTyping: boolean) => {
     if (!activeConversationId || !authToken) return;
@@ -323,7 +442,7 @@ export default function Conversations() {
   };
 
   const sendWithPending = async (
-    payload: { text: string; replyTo?: string; attachmentMediaIds: string[] },
+    payload: { text: string; replyTo?: string; attachmentMediaIds: string[]; alsoToChannel?: boolean },
     localId?: string,
   ) => {
     if (!activeConversationId) return;
@@ -333,6 +452,7 @@ export default function Conversations() {
       conversationId: activeConversationId,
       text: payload.text,
       replyTo: payload.replyTo,
+      alsoToChannel: payload.alsoToChannel,
       attachmentMediaIds: payload.attachmentMediaIds,
       createdAt: new Date().toISOString(),
       status: "sending",
@@ -344,6 +464,7 @@ export default function Conversations() {
         conversationId: activeConversationId,
         text: payload.text,
         replyTo: payload.replyTo,
+        alsoToChannel: payload.alsoToChannel,
         attachmentMediaIds: payload.attachmentMediaIds,
       });
       removePendingMessage(id);
@@ -400,33 +521,149 @@ export default function Conversations() {
     setNewMessagesFromSeq(null);
   };
 
+  const canEditMessageByPolicy = (message: ChatMessage) => {
+    const isMine = message.sender_id === currentUserId;
+    return canPerformByPolicy(conversationSettings.edit_policy, isMine, Boolean(canManage));
+  };
+
+  const canDeleteMessageByPolicy = (message: ChatMessage) => {
+    const isMine = message.sender_id === currentUserId;
+    return canPerformByPolicy(conversationSettings.delete_policy, isMine, Boolean(canManage));
+  };
+
+  const handlePinToggle = async (messageId: string, shouldPin: boolean) => {
+    if (!selectedConversation?.id) return;
+    try {
+      if (shouldPin) {
+        await pinMessage.mutateAsync({ conversationId: selectedConversation.id, messageId });
+      } else {
+        await unpinMessage.mutateAsync({ conversationId: selectedConversation.id, messageId });
+      }
+    } catch (error) {
+      applyChatError(error);
+    }
+  };
+
+  const handleCreateMessageBookmark = async (messageId: string) => {
+    if (!selectedConversation?.id) return;
+    if (bookmarkedMessageIds.has(messageId)) return;
+    const message = messages.find((item) => item.id === messageId);
+    const label = (message?.body_text || "Message bookmark").slice(0, 60);
+    try {
+      await createBookmark.mutateAsync({
+        conversationId: selectedConversation.id,
+        payload: {
+          type: "MESSAGE",
+          label,
+          messageId,
+        },
+      });
+      toast({ title: "Bookmark added", description: "Message added to bookmarks." });
+    } catch (error) {
+      applyChatError(error);
+    }
+  };
+
+  const handleMentionClick = async (userId: string) => {
+    if (!userId) return;
+    if (userId === currentUserId) return;
+
+    try {
+      const response = await createDm.mutateAsync(userId);
+      navigate(`/chat/${response.conversation.id}`);
+    } catch (error) {
+      applyChatError(error);
+    }
+  };
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Button className="flex-1" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New chat
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setInviteOpen(true)}
-            disabled={!selectedConversation || !canInvite}
-            aria-label="Invite members"
-          >
-            <UserPlus className="h-4 w-4" />
-          </Button>
-        </div>
-        <ConversationList
-          conversations={conversations}
-          selectedConversationId={selectedConversation?.id}
-          search={search}
-          onSearch={setSearch}
-          onSelect={(conversationId) => navigate(`/chat/${conversationId}`)}
-        />
+    <div
+      className={cn(
+        "grid min-h-[calc(100vh-11rem)] gap-4 lg:h-[calc(100vh-11rem)]",
+        isSidebarCollapsed ? "lg:grid-cols-[68px,1fr]" : "lg:grid-cols-[320px,1fr]",
+      )}
+    >
+      <div className="min-h-0">
+        {isSidebarCollapsed ? (
+          <div className="flex h-full flex-col items-center gap-2 rounded-lg border bg-card p-2">
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => setIsSidebarCollapsed(false)}
+              aria-label="Expand chat list"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </Button>
+            <p className="text-xs text-muted-foreground">{conversations.length} chats</p>
+          </div>
+        ) : (
+          <div className="flex h-full min-h-0 flex-col space-y-3">
+            <div className="flex items-center gap-2">
+              <Button className="flex-1" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New chat
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsSidebarCollapsed(true)}
+                aria-label="Collapse chat list"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+              {canShowModeration && (
+                <Button
+                  variant={isModerationPanelOpen ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setIsModerationPanelOpen((prev) => !prev)}
+                  aria-label={isModerationPanelOpen ? "Hide moderation tools" : "Show moderation tools"}
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => setInviteOpen(true)}
+                disabled={!selectedConversation || !canInvite}
+                aria-label="Invite members"
+              >
+                <UserPlus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ConversationList
+                conversations={conversations}
+                selectedConversationId={selectedConversation?.id}
+                search={search}
+                onSearch={setSearch}
+                onSelect={(conversationId) => navigate(`/chat/${conversationId}`)}
+              />
+            </div>
+            {canShowModeration && isModerationPanelOpen && (
+              <div className="rounded-md border bg-card p-2">
+                <ModerationControls
+                  conversation={selectedConversation}
+                  canModerate={canModerate}
+                  onModerate={async (payload) => {
+                    if (!selectedConversation?.id) return;
+                    try {
+                      await moderateConversation.mutateAsync({
+                        conversationId: selectedConversation.id,
+                        payload,
+                      });
+                      toast({ title: "Moderation updated", description: `${payload.action} applied.` });
+                    } catch (error) {
+                      applyChatError(error);
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="relative flex min-h-[calc(100vh-11rem)] flex-col rounded-lg border bg-card">
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
         <ChatHeader conversation={selectedConversation} onOpenSettings={() => setSettingsOpen(true)} />
 
         {effectiveStatus?.mode && (
@@ -443,7 +680,7 @@ export default function Conversations() {
           </div>
         ) : (
           <>
-            <div ref={messageViewportRef} className="flex-1 overflow-y-auto">
+            <div ref={messageViewportRef} className="min-h-0 flex-1 overflow-y-auto">
               <MessageList
                 conversationId={selectedConversation.id}
                 messages={messages}
@@ -453,11 +690,13 @@ export default function Conversations() {
                 pendingMessages={pendingUiMessages.filter((item) => item.conversationId === selectedConversation.id)}
                 attachmentMediaById={attachmentMediaById}
                 isLoading={messagesQuery.isLoading}
-                hasNextPage={Boolean(messagesQuery.hasNextPage)}
+                canFetchNewer={!isFetchingNewerMessages}
+                isFetchingNewer={isFetchingNewerMessages}
+                isUpToDate={messagesQuery.isUpToDate}
                 focusMessageId={focusMessageId}
                 newMessagesFromSeq={newMessagesFromSeq}
-                onLoadMore={() => messagesQuery.fetchNextPage()}
-                onLoadOlderForFocus={() => messagesQuery.fetchNextPage()}
+                onFetchNewer={() => fetchNewerMessages()}
+                onMentionClick={handleMentionClick}
                 onRetryPendingMessage={(localId) => {
                   const pending = pendingUiMessages.find((item) => item.localId === localId);
                   if (!pending) return;
@@ -465,6 +704,7 @@ export default function Conversations() {
                     {
                       text: pending.text,
                       replyTo: pending.replyTo,
+                      alsoToChannel: pending.alsoToChannel,
                       attachmentMediaIds: pending.attachmentMediaIds,
                     },
                     localId,
@@ -493,6 +733,12 @@ export default function Conversations() {
                     applyChatError(error);
                   }
                 }}
+                onTogglePin={handlePinToggle}
+                onBookmark={handleCreateMessageBookmark}
+                isMessagePinned={(messageId) => pinnedMessageIds.has(messageId)}
+                isMessageBookmarked={(messageId) => bookmarkedMessageIds.has(messageId)}
+                canEditMessage={canEditMessageByPolicy}
+                canDeleteMessage={canDeleteMessageByPolicy}
               />
             </div>
 
@@ -508,13 +754,18 @@ export default function Conversations() {
               </Button>
             )}
 
-            <TypingIndicator userIds={realtime.typingByConversation[selectedConversation.id] ?? []} />
+            <TypingIndicator
+              userIds={realtime.typingByConversation[selectedConversation.id] ?? []}
+              userDisplayById={mentionDisplayById}
+            />
 
-            <div className="border-t p-3">
+            <div className="sticky bottom-0 z-10 border-t bg-card p-3">
               <Composer
                 disabled={composerDisabled}
                 disabledReason={effectiveStatus?.message}
                 isSending={sendMessage.isPending}
+                mentionPolicy={conversationSettings.mention_policy}
+                isAdminMentionAllowed={Boolean(canManage)}
                 onTyping={emitTyping}
                 onSend={handleSend}
               />
@@ -535,15 +786,13 @@ export default function Conversations() {
         currentUserId={currentUserId}
         canMutate={!composerDisabled}
         mentionDisplayById={mentionDisplayById}
+        onMentionClick={handleMentionClick}
         statusBannerMode={effectiveStatus?.mode}
         statusBannerMessage={effectiveStatus?.message}
         statusBannerUntil={effectiveStatus?.until}
         attachmentMediaById={attachmentMediaById}
-        onReplySubmit={async ({ text, replyTo, alsoSendToMain }) => {
-          await sendWithPending({ text, replyTo, attachmentMediaIds: [] });
-          if (alsoSendToMain) {
-            await sendWithPending({ text, attachmentMediaIds: [] });
-          }
+        onReplySubmit={async ({ text, replyTo, alsoToChannel }) => {
+          await sendWithPending({ text, replyTo, alsoToChannel, attachmentMediaIds: [] });
         }}
       />
 
@@ -552,7 +801,13 @@ export default function Conversations() {
         onOpenChange={setSettingsOpen}
         conversation={selectedConversation}
         canManage={Boolean(canManage)}
+        canMutateItems={!composerDisabled}
         isSuperAdmin={currentRole === "SUPER_ADMIN"}
+        pins={pinsQuery.data?.items ?? []}
+        pinsLoading={pinsQuery.isLoading}
+        bookmarks={bookmarksQuery.data?.items ?? []}
+        bookmarksLoading={bookmarksQuery.isLoading}
+        bookmarkMediaById={attachmentMediaById}
         onSave={async (payload) => {
           if (!selectedConversation?.id) return;
           try {
@@ -592,6 +847,37 @@ export default function Conversations() {
             applyChatError(error);
           }
         }}
+        onJumpToMessage={(messageId) => {
+          if (!selectedConversation?.id) return;
+          navigate(`/chat/${selectedConversation.id}?focusMessageId=${encodeURIComponent(messageId)}`);
+          setSettingsOpen(false);
+        }}
+        onUnpinMessage={async (messageId) => {
+          if (!selectedConversation?.id) return;
+          try {
+            await unpinMessage.mutateAsync({ conversationId: selectedConversation.id, messageId });
+          } catch (error) {
+            applyChatError(error);
+          }
+        }}
+        onCreateBookmark={async (payload) => {
+          if (!selectedConversation?.id) return;
+          try {
+            await createBookmark.mutateAsync({ conversationId: selectedConversation.id, payload });
+            toast({ title: "Bookmark added", description: "Bookmark created." });
+          } catch (error) {
+            applyChatError(error);
+          }
+        }}
+        onDeleteBookmark={async (bookmarkId) => {
+          if (!selectedConversation?.id) return;
+          try {
+            await deleteBookmark.mutateAsync({ bookmarkId, conversationId: selectedConversation.id });
+            toast({ title: "Bookmark deleted", description: "Bookmark removed." });
+          } catch (error) {
+            applyChatError(error);
+          }
+        }}
       />
 
       <CreateConversationModal
@@ -623,33 +909,6 @@ export default function Conversations() {
           toast({ title: "Invites sent", description: `${userIds.length} member(s) invited.` });
         }}
       />
-
-      <div className="fixed bottom-4 right-4 hidden md:block">
-        {canModerate && selectedConversation?.type !== "DM" && (
-          <div className="w-[330px]">
-            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <ShieldAlert className="h-4 w-4" />
-              Moderation tools
-            </div>
-            <ModerationControls
-              conversation={selectedConversation}
-              canModerate={canModerate}
-              onModerate={async (payload) => {
-                if (!selectedConversation?.id) return;
-                try {
-                  await moderateConversation.mutateAsync({
-                    conversationId: selectedConversation.id,
-                    payload,
-                  });
-                  toast({ title: "Moderation updated", description: `${payload.action} applied.` });
-                } catch (error) {
-                  applyChatError(error);
-                }
-              }}
-            />
-          </div>
-        )}
-      </div>
 
       <div className="hidden">
         {realtime.isConnected ? "socket-connected" : "socket-disconnected"}
