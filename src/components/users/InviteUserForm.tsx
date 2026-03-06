@@ -10,6 +10,7 @@ import { Info, Loader2 } from "lucide-react";
 import { departmentsApi } from "@/api/domains/departments";
 import type { InviteFormData } from "@/types/user";
 import { useRolesList } from "@/hooks/useRolesApi";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
 
 interface InviteUserFormProps {
     onSubmit: (data: InviteFormData) => void;
@@ -29,8 +30,9 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
         queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
     });
 
-    const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
+    const { data: rolesData, isLoading: isRolesLoading, error: rolesError } = useRolesList();
     const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+    const rolesErrorMessage = rolesError ? mapUsersErrorToUx(rolesError, "Failed to load roles") : null;
 
     useEffect(() => {
         if (!formData.role_id && roles.length > 0) {
@@ -77,6 +79,11 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Loading roles...</span>
                     </div>
+                ) : rolesErrorMessage ? (
+                    <Alert variant="destructive" className="py-2">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-xs">{rolesErrorMessage.message}</AlertDescription>
+                    </Alert>
                 ) : roles.length === 0 ? (
                     <div className="p-2 border rounded-md text-sm text-muted-foreground">
                         No roles available

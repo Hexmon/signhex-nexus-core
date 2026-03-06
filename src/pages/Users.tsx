@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { UserForm } from "@/components/users/UserForm";
 import { InviteUserForm } from "@/components/users/InviteUserForm";
 import { InvitationCard } from "@/components/users/InvitationCard";
@@ -14,6 +15,7 @@ import type { UserFormData, InviteFormData } from "@/types/user";
 import { useUsersApi } from "@/hooks/useUsersApi";
 import { UserCard } from "@/components/users/UserCard";
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
 
 export default function Users() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -24,10 +26,14 @@ export default function Users() {
     const [activeTab, setActiveTab] = useState("users");
 
     const { listUsers, createUser, updateUser, deleteUser, listInvitations, inviteUser } = useUsersApi();
-    const { data, isLoading } = listUsers;
-    const { data: invitationsData, isLoading: isLoadingInvitations } = listInvitations;
+    const { data, isLoading, error: usersError } = listUsers;
+    const { data: invitationsData, isLoading: isLoadingInvitations, error: invitationsError } = listInvitations;
     const users = data?.items || [];
     const invitations = invitationsData?.items || [];
+    const usersErrorMessage = usersError ? mapUsersErrorToUx(usersError, "Failed to load users") : null;
+    const invitationsErrorMessage = invitationsError
+        ? mapUsersErrorToUx(invitationsError, "Failed to load invitations")
+        : null;
 
     const filteredUsers = users.filter((user) => {
         const query = searchQuery.toLowerCase();
@@ -177,7 +183,13 @@ export default function Users() {
                 </div>
 
                 <TabsContent value="users" className="mt-6">
-                    {isLoading ? (
+                    {usersErrorMessage ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                {usersErrorMessage.message}
+                            </AlertDescription>
+                        </Alert>
+                    ) : isLoading ? (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, idx) => (
                                 <Skeleton key={idx} className="h-40" />
@@ -202,7 +214,13 @@ export default function Users() {
                 </TabsContent>
 
                 <TabsContent value="invitations" className="mt-6">
-                    {isLoadingInvitations ? (
+                    {invitationsErrorMessage ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                {invitationsErrorMessage.message}
+                            </AlertDescription>
+                        </Alert>
+                    ) : isLoadingInvitations ? (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {Array.from({ length: 3 }).map((_, idx) => (
                                 <Skeleton key={idx} className="h-32" />

@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Calendar,
-  MessageSquare,
   Building2,
   Users,
   Kanban,
@@ -10,7 +9,8 @@ import {
   FileBarChart,
   Settings,
   HelpCircle,
-  PanelsTopLeft
+  PanelsTopLeft,
+  BellRing,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -45,8 +45,8 @@ const navItems: NavItem[] = [
   { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
   { title: "Screens", url: "/screens", icon: Monitor },
   { title: "Schedule Queue", url: "/schedule", icon: Calendar },
-  // { title: "Requests", url: "/requests", icon: MessageSquare },
-  { title: "Conversations", url: "/conversations", icon: Kanban },
+  { title: "Conversations", url: "/chat", icon: Kanban },
+  { title: "Notifications", url: "/notifications", icon: BellRing },
   { title: "Operators", url: "/operators", icon: Users },
   { title: "Departments", url: "/departments", icon: Building2 },
   { title: "Users", url: "/users", icon: Users },

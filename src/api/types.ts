@@ -303,9 +303,12 @@ export interface AuditLog {
 
 export interface Notification {
   id: string;
+  type?: string;
   title?: string;
   body?: string;
   read?: boolean;
+  read_at?: string | null;
+  data?: Record<string, unknown> | ChatNotificationData;
   created_at?: string;
 }
 
@@ -709,4 +712,191 @@ export interface RequestTicket {
   priority?: "LOW" | "MEDIUM" | "HIGH";
   status?: string;
   assigned_to?: string | null;
+}
+
+export type ChatConversationType = "DM" | "GROUP_CLOSED" | "FORUM_OPEN";
+export type ChatConversationState = "ACTIVE" | "ARCHIVED" | "DELETED";
+export type ChatInvitePolicy =
+  | "ANY_MEMBER_CAN_INVITE"
+  | "ADMINS_ONLY_CAN_INVITE"
+  | "INVITES_DISABLED";
+export type ChatViewerRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER" | null;
+
+export interface ChatConversationSummary {
+  id: string;
+  type: ChatConversationType;
+  dm_pair_key?: string | null;
+  state: ChatConversationState;
+  invite_policy?: ChatInvitePolicy;
+  last_seq?: number;
+  title?: string | null;
+  topic?: string | null;
+  purpose?: string | null;
+}
+
+export interface ChatConversationListItem extends ChatConversationSummary {
+  unread_count?: number;
+  viewer_role?: ChatViewerRole;
+  viewer_is_member?: boolean;
+  last_message?: {
+    id: string;
+    seq: number;
+    body_text?: string | null;
+  } | null;
+}
+
+export interface ChatMessageAttachment {
+  media_id?: string;
+  mediaId?: string;
+  media_url?: string | null;
+  filename?: string;
+  content_type?: string;
+  size?: number;
+}
+
+export interface ChatReaction {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  sender_id: string;
+  body_text: string | null;
+  body_rich?: { mentions?: string[] } | null;
+  reply_to_message_id?: string | null;
+  thread_root_id?: string | null;
+  thread_reply_count?: number;
+  created_at: string;
+  edited_at?: string | null;
+  deleted_at?: string | null;
+  attachments?: Array<string | ChatMessageAttachment>;
+  reactions?: ChatReaction[];
+}
+
+export interface ChatReadReceipt {
+  conversation_id: string;
+  user_id: string;
+  last_read_seq: number;
+  last_delivered_seq: number;
+  updated_at: string;
+}
+
+export interface ChatModerationRecord {
+  conversation_id: string;
+  user_id: string;
+  muted_until?: string | null;
+  banned_until?: string | null;
+  reason?: string | null;
+}
+
+export interface ChatConversationMember {
+  user_id: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  is_system?: boolean;
+}
+
+export interface ChatErrorEnvelope {
+  success?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+    traceId?: string;
+  };
+}
+
+export interface ChatNormalizedError {
+  code?: string;
+  message: string;
+  details?: unknown;
+  httpStatus?: number;
+  traceId?: string;
+}
+
+export interface ChatNotificationData {
+  conversationId: string;
+  messageId?: string;
+  notificationType: "DM" | "MENTION" | "THREAD_REPLY";
+  snippet?: string;
+}
+
+export interface ChatListConversationsResponse {
+  items: ChatConversationListItem[];
+}
+
+export interface ChatListMessagesResponse {
+  items: ChatMessage[];
+}
+
+export interface ChatThreadResponse {
+  threadRootId: string;
+  items: ChatMessage[];
+}
+
+export interface ChatSendMessageResponse {
+  message: ChatMessage;
+}
+
+export interface ChatUpdateMessageResponse {
+  message: ChatMessage;
+}
+
+export interface ChatDeleteMessageResponse {
+  message: ChatMessage;
+}
+
+export interface ChatReactionsResponse {
+  message: { id: string };
+  reactions: ChatReaction[];
+}
+
+export interface ChatMarkReadResponse {
+  receipt: ChatReadReceipt;
+}
+
+export interface ChatConversationResponse {
+  conversation: ChatConversationSummary;
+}
+
+export interface ChatModerationResponse {
+  moderation: ChatModerationRecord;
+}
+
+export interface ChatSubscribeAck {
+  subscribed: string[];
+  rejected: string[];
+}
+
+export interface ChatMessageNewEvent {
+  conversationId: string;
+  seq: number;
+  message: ChatMessage;
+}
+
+export interface ChatMessageUpdatedEvent {
+  conversationId: string;
+  messageId: string;
+  patch: Partial<ChatMessage>;
+}
+
+export interface ChatMessageDeletedEvent {
+  conversationId: string;
+  messageId: string;
+  seq: number;
+}
+
+export interface ChatConversationUpdatedEvent {
+  conversationId: string;
+  patch: Partial<ChatConversationListItem>;
+}
+
+export interface ChatTypingEvent {
+  conversationId: string;
+  userId: string;
+  isTyping: boolean;
+  ttlSeconds?: number;
 }

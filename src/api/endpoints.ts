@@ -20,6 +20,23 @@ export const endpoints = {
     messages: (conversationId: string) => `/conversations/${conversationId}/messages`,
     markRead: (conversationId: string) => `/conversations/${conversationId}/read`,
   },
+  chat: {
+    dm: "/chat/dm",
+    conversations: "/chat/conversations",
+    messages: (conversationId: string) => `/chat/conversations/${conversationId}/messages`,
+    thread: (conversationId: string, parentMessageId: string) =>
+      `/chat/conversations/${conversationId}/thread/${parentMessageId}`,
+    read: (conversationId: string) => `/chat/conversations/${conversationId}/read`,
+    invite: (conversationId: string) => `/chat/conversations/${conversationId}/invite`,
+    removeMember: (conversationId: string) => `/chat/conversations/${conversationId}/members/remove`,
+    updateConversation: (conversationId: string) => `/chat/conversations/${conversationId}`,
+    archiveConversation: (conversationId: string) => `/chat/conversations/${conversationId}/archive`,
+    unarchiveConversation: (conversationId: string) => `/chat/conversations/${conversationId}/unarchive`,
+    deleteConversation: (conversationId: string) => `/chat/conversations/${conversationId}`,
+    moderateConversation: (conversationId: string) => `/chat/conversations/${conversationId}/moderation`,
+    messageById: (messageId: string) => `/chat/messages/${messageId}`,
+    reactions: (messageId: string) => `/chat/messages/${messageId}/reactions`,
+  },
   departments: {
     base: "/departments",
     byId: (departmentId: string) => `/departments/${departmentId}`,

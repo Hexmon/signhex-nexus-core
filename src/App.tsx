@@ -29,6 +29,7 @@ import NotFound from "./pages/NotFound";
 import Users from "./pages/Users";
 import Layouts from "./pages/Layouts";
 import LayoutEditor from "./pages/LayoutEditor";
+import Notifications from "./pages/Notifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,7 +78,13 @@ const App = () => (
                         <Route path="/departments" element={<Departments />} />
                         <Route path="/operators" element={<Operators />} />
                         <Route path="/users" element={<Users />} />
+                        <Route path="/chat" element={<Conversations />} />
+                        <Route path="/chat/:conversationId" element={<Conversations />} />
+                        <Route path="/chat/:conversationId/thread/:threadRootId" element={<Conversations />} />
                         <Route path="/conversations" element={<Conversations />} />
+                        <Route path="/conversations/:conversationId" element={<Conversations />} />
+                        <Route path="/conversations/:conversationId/thread/:threadRootId" element={<Conversations />} />
+                        <Route path="/notifications" element={<Notifications />} />
                         <Route path="/screens" element={<Screens />} />
                         <Route path="/media" element={<MediaLibrary />} />
                         <Route

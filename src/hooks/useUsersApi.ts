@@ -3,6 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usersApi, type UpdateUserPayload } from "@/api/domains/users";
 import { ApiError } from "@/api/apiClient";
 import type { RoleId } from "@/api/types";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
 
 export const useUsersApi = () => {
     const queryClient = useQueryClient();
@@ -56,9 +57,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to create user");
             toast({
-                title: "Failed to create user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -80,9 +82,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to send invitation");
             toast({
-                title: "Failed to send invitation",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -106,9 +109,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to update user");
             toast({
-                title: "Failed to update user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -127,9 +131,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to delete user");
             toast({
-                title: "Failed to delete user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
