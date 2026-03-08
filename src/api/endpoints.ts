@@ -23,9 +23,11 @@ export const endpoints = {
   chat: {
     dm: "/chat/dm",
     conversations: "/chat/conversations",
+    conversationById: (conversationId: string) => `/chat/conversations/${conversationId}`,
     messages: (conversationId: string) => `/chat/conversations/${conversationId}/messages`,
     thread: (conversationId: string, parentMessageId: string) =>
       `/chat/conversations/${conversationId}/thread/${parentMessageId}`,
+    shareLink: (conversationId: string) => `/chat/conversations/${conversationId}/share-link`,
     listPins: (conversationId: string) => `/chat/conversations/${conversationId}/pins`,
     createBookmark: (conversationId: string) => `/chat/conversations/${conversationId}/bookmarks`,
     listBookmarks: (conversationId: string) => `/chat/conversations/${conversationId}/bookmarks`,

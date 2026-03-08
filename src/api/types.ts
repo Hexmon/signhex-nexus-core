@@ -757,6 +757,17 @@ export interface ChatConversationSummary {
   } | null;
 }
 
+export interface ChatConversationMeta {
+  id: string;
+  type: ChatConversationType;
+  state: ChatConversationState;
+  title?: string | null;
+  topic?: string | null;
+  purpose?: string | null;
+  invite_policy?: ChatInvitePolicy;
+  last_seq?: number;
+}
+
 export interface ChatConversationListItem extends ChatConversationSummary {
   unread_count?: number;
   viewer_role?: ChatViewerRole;
@@ -910,6 +921,21 @@ export interface ChatMarkReadResponse {
 
 export interface ChatConversationResponse {
   conversation: ChatConversationSummary;
+}
+
+export interface ChatResolveViewer {
+  is_member: boolean;
+  role: string | null;
+}
+
+export interface ChatResolveResponse {
+  conversation: ChatConversationMeta;
+  viewer: ChatResolveViewer;
+}
+
+export interface ChatShareLinkResponse {
+  path: string;
+  url?: string;
 }
 
 export interface ChatModerationResponse {

@@ -113,6 +113,31 @@ test.describe("Chat E2E", () => {
     await firstNotification.click();
     await expect(page).toHaveURL(/\/chat\//);
   });
+
+  test("share link action copies chat permalink or shows manual copy fallback", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await login(page, USER_EMAIL!, USER_PASSWORD!);
+    await openOrCreateConversation(page);
+
+    const shareButton = page.getByRole("button", { name: /share link/i });
+    await expect(shareButton).toBeVisible();
+    await shareButton.click();
+
+    const copiedText = await page.evaluate(async () => {
+      try {
+        return await navigator.clipboard.readText();
+      } catch {
+        return "";
+      }
+    });
+
+    if (copiedText) {
+      expect(copiedText).toContain("/chat/");
+      return;
+    }
+
+    await expect(page.getByLabel("Conversation share link")).toBeVisible();
+  });
 });
 
 test.describe("Admin-only Chat Controls", () => {

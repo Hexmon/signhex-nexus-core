@@ -34,6 +34,7 @@ import {
 
 export const chatQueryKeys = {
   conversations: ["chat", "conversations"] as const,
+  resolveConversation: (conversationId?: string) => ["chat", "resolve-conversation", conversationId] as const,
   usersDirectory: ["chat", "users-directory"] as const,
   pins: (conversationId?: string) => ["chat", "pins", conversationId] as const,
   bookmarks: (conversationId?: string) => ["chat", "bookmarks", conversationId] as const,
@@ -75,6 +76,14 @@ export const useConversationSettings = (conversationId?: string) => {
     conversation,
   };
 };
+
+export const useResolveConversation = (conversationId?: string) =>
+  useQuery({
+    queryKey: chatQueryKeys.resolveConversation(conversationId),
+    enabled: Boolean(conversationId),
+    retry: false,
+    queryFn: () => chatApi.resolveConversation(conversationId!),
+  });
 
 export const usePins = (conversationId?: string) =>
   useQuery({
@@ -421,6 +430,11 @@ export const useCreateDm = () => {
     },
   });
 };
+
+export const useCreateShareLink = () =>
+  useMutation({
+    mutationFn: (conversationId: string) => chatApi.createShareLink(conversationId),
+  });
 
 export const useCreateChatConversation = () => {
   const queryClient = useQueryClient();

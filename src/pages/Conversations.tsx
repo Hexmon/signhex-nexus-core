@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { ArrowDown, PanelLeftClose, PanelLeftOpen, Plus, ShieldAlert, UserPlus } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ApiError } from "@/api/apiClient";
 import { mediaApi } from "@/api/domains/media";
 import type {
   ChatBookmark,
@@ -24,11 +25,22 @@ import { ThreadPanel } from "@/components/chat/ThreadPanel";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { ChatStatusBanner } from "@/components/chat/ChatStatusBanner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import {
   useArchiveConversation,
   useBookmarks,
   useChatConversationsList,
+  useCreateShareLink,
   useChatMessages,
   useChatUserDirectory,
   useCreateBookmark,
@@ -44,6 +56,7 @@ import {
   usePinMessage,
   usePins,
   useReactToMessage,
+  useResolveConversation,
   useSendChatMessage,
   useUnarchiveConversation,
   useUnpinMessage,
@@ -123,6 +136,71 @@ const specialMentionAllowed = (
   return false;
 };
 
+const resolveConversationFromRoute = (
+  listConversation: ChatConversationListItem | undefined,
+  resolvedConversation?: {
+    conversation: {
+      id: string;
+      type: ChatConversationListItem["type"];
+      state: ChatConversationListItem["state"];
+      title?: string | null;
+      topic?: string | null;
+      purpose?: string | null;
+      invite_policy?: ChatConversationListItem["invite_policy"];
+      last_seq?: number;
+    };
+    viewer: {
+      is_member: boolean;
+      role: string | null;
+    };
+  },
+) => {
+  if (!resolvedConversation) return undefined;
+
+  return {
+    ...listConversation,
+    ...resolvedConversation.conversation,
+    viewer_is_member: resolvedConversation.viewer.is_member,
+    viewer_role:
+      (resolvedConversation.viewer.role as ChatConversationListItem["viewer_role"]) ??
+      listConversation?.viewer_role ??
+      null,
+  } satisfies ChatConversationListItem;
+};
+
+const buildContextualSharePath = (
+  basePath: string,
+  threadRootId?: string,
+  focusMessageId?: string | null,
+) => {
+  const trimmedBasePath = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  if (threadRootId) {
+    return `${trimmedBasePath}/thread/${encodeURIComponent(threadRootId)}`;
+  }
+  if (focusMessageId) {
+    return `${trimmedBasePath}?focusMessageId=${encodeURIComponent(focusMessageId)}`;
+  }
+  return trimmedBasePath;
+};
+
+const buildShareLinkUrl = (
+  response: { path: string; url?: string },
+  threadRootId?: string,
+  focusMessageId?: string | null,
+) => {
+  const contextualPath = buildContextualSharePath(response.path, threadRootId, focusMessageId);
+  if (!response.url) {
+    return new URL(contextualPath, window.location.origin).toString();
+  }
+
+  if (response.url.endsWith(response.path)) {
+    return `${response.url.slice(0, -response.path.length)}${contextualPath}`;
+  }
+
+  const absoluteUrl = new URL(response.url);
+  return new URL(contextualPath, `${absoluteUrl.origin}/`).toString();
+};
+
 export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -150,15 +228,24 @@ export default function Conversations() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModerationPanelOpen, setIsModerationPanelOpen] = useState(false);
+  const [shareLinkFallback, setShareLinkFallback] = useState<string | null>(null);
 
+  const routeConversationId = params.conversationId;
+  const threadRootId = params.threadRootId;
   const focusMessageId = searchParams.get("focusMessageId");
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const prevLatestSeqRef = useRef(0);
   const didInitialScrollRef = useRef(false);
+  const shareLinkInputRef = useRef<HTMLInputElement | null>(null);
 
   const conversationsQuery = useChatConversationsList();
   const conversations = useMemo(() => conversationsQuery.data?.items ?? [], [conversationsQuery.data?.items]);
-  const selectedConversation = conversations.find((item) => item.id === params.conversationId);
+  const listConversation = conversations.find((item) => item.id === routeConversationId);
+  const resolveConversationQuery = useResolveConversation(routeConversationId);
+  const selectedConversation = useMemo(
+    () => resolveConversationFromRoute(listConversation, resolveConversationQuery.data),
+    [listConversation, resolveConversationQuery.data],
+  );
   const messagesQuery = useChatMessages(selectedConversation?.id, {
     limit: MESSAGES_LIMIT,
   });
@@ -186,6 +273,7 @@ export default function Conversations() {
   const unarchiveConversation = useUnarchiveConversation();
   const deleteConversation = useDeleteConversation();
   const moderateConversation = useModerateConversation();
+  const createShareLink = useCreateShareLink();
 
   const mentionDisplayById = useMemo(() => {
     const users = usersDirectoryQuery.data?.users ?? [];
@@ -198,6 +286,8 @@ export default function Conversations() {
 
   const handleActiveConversationRejected = useCallback(() => {
     setPendingUiMessages([]);
+    setSettingsOpen(false);
+    setInviteOpen(false);
     setChatStatus({
       code: "FORBIDDEN",
       message: "Access removed / banned / not a member",
@@ -220,16 +310,50 @@ export default function Conversations() {
     onActiveConversationRejected: handleActiveConversationRejected,
   });
 
-  const threadRootId = params.threadRootId;
   const threadRootMessage = threadRootId
     ? messages.find((message) => message.id === threadRootId || message.thread_root_id === threadRootId)
     : undefined;
 
   useEffect(() => {
     if (conversations.length === 0) return;
-    if (params.conversationId) return;
+    if (routeConversationId) return;
     navigate(`/chat/${conversations[0].id}`, { replace: true });
-  }, [conversations, navigate, params.conversationId]);
+  }, [conversations, navigate, routeConversationId]);
+
+  const resolveConversationError =
+    resolveConversationQuery.error instanceof ApiError ? resolveConversationQuery.error : null;
+  const routeAccessState = useMemo(() => {
+    if (!routeConversationId) return null;
+    if (resolveConversationQuery.isLoading) {
+      return {
+        title: "Resolving conversation...",
+        description: "Checking access and loading conversation details.",
+      };
+    }
+    if (!resolveConversationError) return null;
+    if (resolveConversationError.code === "CHAT_BANNED") {
+      return {
+        title: "You are banned from this conversation",
+        description: resolveConversationError.message,
+      };
+    }
+    if (resolveConversationError.code === "FORBIDDEN") {
+      return {
+        title: "No access",
+        description: "You do not have access to this conversation.",
+      };
+    }
+    if (resolveConversationError.code === "NOT_FOUND" || resolveConversationError.status === 404) {
+      return {
+        title: "Conversation not found",
+        description: "The shared link points to a conversation that no longer exists.",
+      };
+    }
+    return {
+      title: "Unable to open conversation",
+      description: resolveConversationError.message,
+    };
+  }, [resolveConversationError, resolveConversationQuery.isLoading, routeConversationId]);
 
   useEffect(() => {
     if (!messagesQuery.error) return;
@@ -249,9 +373,24 @@ export default function Conversations() {
     setPendingUiMessages([]);
     setShowJumpToLatest(false);
     setNewMessagesFromSeq(null);
+    setShareLinkFallback(null);
     prevLatestSeqRef.current = 0;
     didInitialScrollRef.current = false;
-  }, [activeConversationId]);
+  }, [routeConversationId]);
+
+  useEffect(() => {
+    if (!routeAccessState) return;
+    setSettingsOpen(false);
+    setInviteOpen(false);
+  }, [routeAccessState]);
+
+  useEffect(() => {
+    if (!shareLinkFallback) return;
+    requestAnimationFrame(() => {
+      shareLinkInputRef.current?.focus();
+      shareLinkInputRef.current?.select();
+    });
+  }, [shareLinkFallback]);
 
   useEffect(() => {
     const viewport = messageViewportRef.current;
@@ -576,6 +715,46 @@ export default function Conversations() {
     }
   };
 
+  const backToChats = () => {
+    setSearchParams({});
+    navigate("/chat");
+  };
+
+  const openShareLink = (link: string) => {
+    const parsed = new URL(link, window.location.origin);
+    if (parsed.origin === window.location.origin) {
+      navigate(`${parsed.pathname}${parsed.search}`);
+      return;
+    }
+    window.location.assign(link);
+  };
+
+  const handleShareLink = async () => {
+    if (!selectedConversation?.id) return;
+
+    try {
+      const response = await createShareLink.mutateAsync(selectedConversation.id);
+      const shareUrl = buildShareLinkUrl(response, threadRootId, focusMessageId);
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: "Link copied",
+          description: "Conversation link copied to clipboard.",
+          action: (
+            <ToastAction altText="Open shared conversation" onClick={() => openShareLink(shareUrl)}>
+              Open
+            </ToastAction>
+          ),
+        });
+      } catch {
+        setShareLinkFallback(shareUrl);
+      }
+    } catch (error) {
+      applyChatError(error);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -633,7 +812,7 @@ export default function Conversations() {
             <div className="min-h-0 flex-1">
               <ConversationList
                 conversations={conversations}
-                selectedConversationId={selectedConversation?.id}
+                selectedConversationId={routeConversationId}
                 search={search}
                 onSearch={setSearch}
                 onSelect={(conversationId) => navigate(`/chat/${conversationId}`)}
@@ -664,9 +843,14 @@ export default function Conversations() {
       </div>
 
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
-        <ChatHeader conversation={selectedConversation} onOpenSettings={() => setSettingsOpen(true)} />
+        <ChatHeader
+          conversation={selectedConversation}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onShareLink={selectedConversation ? handleShareLink : undefined}
+          isSharingLink={createShareLink.isPending}
+        />
 
-        {effectiveStatus?.mode && (
+        {effectiveStatus?.mode && !routeAccessState && (
           <ChatStatusBanner
             mode={effectiveStatus.mode}
             message={effectiveStatus.message}
@@ -674,7 +858,19 @@ export default function Conversations() {
           />
         )}
 
-        {!selectedConversation ? (
+        {routeAccessState ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">{routeAccessState.title}</h3>
+              <p className="max-w-md text-sm text-muted-foreground">{routeAccessState.description}</p>
+            </div>
+            {!resolveConversationQuery.isLoading ? (
+              <Button variant="outline" onClick={backToChats}>
+                Back to chats
+              </Button>
+            ) : null}
+          </div>
+        ) : !selectedConversation ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Select a conversation from the left list.
           </div>
@@ -909,6 +1105,31 @@ export default function Conversations() {
           toast({ title: "Invites sent", description: `${userIds.length} member(s) invited.` });
         }}
       />
+
+      <Dialog open={Boolean(shareLinkFallback)} onOpenChange={(open) => !open && setShareLinkFallback(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copy conversation link</DialogTitle>
+            <DialogDescription>
+              Clipboard access is unavailable. Copy this secure chat link manually.
+            </DialogDescription>
+          </DialogHeader>
+          <Input ref={shareLinkInputRef} value={shareLinkFallback ?? ""} readOnly aria-label="Conversation share link" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareLinkFallback(null)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                if (!shareLinkFallback) return;
+                openShareLink(shareLinkFallback);
+              }}
+            >
+              Open
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="hidden">
         {realtime.isConnected ? "socket-connected" : "socket-disconnected"}

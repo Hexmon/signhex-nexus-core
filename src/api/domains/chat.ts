@@ -4,6 +4,8 @@ import type {
   ChatBookmark,
   ChatBookmarksListResponse,
   ChatConversationResponse,
+  ChatResolveResponse,
+  ChatShareLinkResponse,
   ChatInvitePolicy,
   ChatConversationSettings,
   ChatListConversationsResponse,
@@ -134,6 +136,18 @@ export const chatApi = {
     apiClient.request<ChatListConversationsResponse>({
       path: endpoints.chat.conversations,
       method: "GET",
+    }),
+
+  resolveConversation: (conversationId: string) =>
+    apiClient.request<ChatResolveResponse>({
+      path: endpoints.chat.conversationById(conversationId),
+      method: "GET",
+    }),
+
+  createShareLink: (conversationId: string) =>
+    apiClient.request<ChatShareLinkResponse>({
+      path: endpoints.chat.shareLink(conversationId),
+      method: "POST",
     }),
 
   listMessages: (conversationId: string, params?: ChatCursorRequestParams) =>
