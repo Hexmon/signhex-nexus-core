@@ -528,6 +528,7 @@ export interface MediaAsset {
   type?: MediaType;
   content_type?: string;
   source_content_type?: string;
+  source_size?: number;
   size?: number;
   status?: string;
   duration_seconds?: number;

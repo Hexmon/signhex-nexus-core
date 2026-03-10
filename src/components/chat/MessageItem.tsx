@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, CornerDownRight, Pencil, Pin, PinOff, SmilePlus, Trash2 } from "lucide-react";
 import { MediaPreview } from "@/components/common/MediaPreview";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +103,12 @@ export function MessageItem({
     });
     return map;
   }, [message.reactions]);
+
+  useEffect(() => {
+    if (isDeleted && viewer) {
+      setViewer(null);
+    }
+  }, [isDeleted, viewer]);
 
   const senderLabel = mentionDisplayById[message.sender_id] || message.sender_id;
 
@@ -288,7 +294,7 @@ export function MessageItem({
         </div>
       )}
 
-      <Dialog open={Boolean(viewer)} onOpenChange={(open) => !open && setViewer(null)}>
+      <Dialog open={Boolean(viewer) && !isDeleted} onOpenChange={(open) => !open && setViewer(null)}>
         <DialogContent className="h-[90vh] w-[95vw] max-w-6xl p-4">
           <DialogHeader>
             <DialogTitle>{viewer?.alt || "Attachment preview"}</DialogTitle>

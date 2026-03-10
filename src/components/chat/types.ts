@@ -18,6 +18,9 @@ export interface ComposerUploadItem {
   mediaId?: string;
   previewUrl?: string;
   error?: string;
+  didCompress?: boolean;
+  originalSize?: number;
+  finalSize?: number;
 }
 
 export interface ChatPendingUiMessage {

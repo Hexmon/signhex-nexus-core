@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileUp, Loader2, Plus, Search, Upload } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ import {
   uploadFileToMedia,
   validateUploadFile,
 } from "@/components/chat/mediaUpload";
+import type { UploadMediaResult } from "@/components/chat/mediaUpload";
 import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/chat/types";
 
 interface AttachmentPickerProps {
@@ -45,6 +46,8 @@ const resolveType = (media: MediaAsset): string => {
   return "DOCUMENT";
 };
 
+const formatUploadMb = (bytes?: number) => (typeof bytes === "number" ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : "—");
+
 export function AttachmentPicker({
   open,
   initialTab = "existing",
@@ -57,6 +60,7 @@ export function AttachmentPicker({
   const [mediaType, setMediaType] = useState<"all" | "image" | "video" | "document">("all");
   const [uploadItems, setUploadItems] = useState<ComposerUploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const objectUrlsRef = useRef<Record<string, string>>({});
 
   const typeFilter = (mediaType === "all" ? undefined : mediaType.toUpperCase()) as MediaType | undefined;
 
@@ -64,6 +68,13 @@ export function AttachmentPicker({
     if (!open) return;
     setActiveTab(initialTab);
   }, [initialTab, open]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(objectUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current = {};
+    };
+  }, []);
 
   const mediaQuery = useQuery({
     queryKey: ["chat", "attachment-picker", typeFilter],
@@ -101,6 +112,7 @@ export function AttachmentPicker({
 
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const localPreviewUrl = createLocalPreviewUrl(file);
+      if (localPreviewUrl) objectUrlsRef.current[localId] = localPreviewUrl;
 
       setUploadItems((prev) => [
         {
@@ -117,11 +129,39 @@ export function AttachmentPicker({
 
       updateUploadItem(localId, (item) => ({ ...item, status: "uploading" }));
 
-      uploadFileToMedia(file, (progress) => {
-        updateUploadItem(localId, (item) => ({ ...item, progress, status: "uploading" }));
+      uploadFileToMedia(file, {
+        onPrepared: (prepared) => {
+          const nextPreviewUrl = createLocalPreviewUrl(prepared.file);
+          const previousPreviewUrl = objectUrlsRef.current[localId];
+          if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
+            URL.revokeObjectURL(previousPreviewUrl);
+          }
+          if (nextPreviewUrl) objectUrlsRef.current[localId] = nextPreviewUrl;
+          else delete objectUrlsRef.current[localId];
+
+          updateUploadItem(localId, (item) => ({
+            ...item,
+            fileName: prepared.file.name,
+            contentType: prepared.file.type || item.contentType,
+            size: prepared.finalSize,
+            previewUrl: nextPreviewUrl ?? item.previewUrl,
+            didCompress: prepared.didCompress,
+            originalSize: prepared.originalSize,
+            finalSize: prepared.finalSize,
+            status: "uploading",
+          }));
+        },
+        onProgress: (progress) => {
+          updateUploadItem(localId, (item) => ({ ...item, progress, status: "uploading" }));
+        },
       })
-        .then((media) => {
-          if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+        .then((result: UploadMediaResult) => {
+          const media = result.media;
+          const previewUrl = objectUrlsRef.current[localId];
+          if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            delete objectUrlsRef.current[localId];
+          }
 
           updateUploadItem(localId, (item) => ({
             ...item,
@@ -129,6 +169,12 @@ export function AttachmentPicker({
             previewUrl: media.media_url ?? undefined,
             progress: 100,
             status: "uploaded",
+            fileName: media.filename,
+            contentType: media.content_type || item.contentType,
+            size: media.size ?? result.finalSize,
+            didCompress: result.didCompress,
+            originalSize: result.originalSize,
+            finalSize: result.finalSize,
             error: undefined,
           }));
 
@@ -176,6 +222,7 @@ export function AttachmentPicker({
           return;
         }
         URL.revokeObjectURL(item.previewUrl);
+        delete objectUrlsRef.current[item.localId];
       });
       return prev.filter((item) => item.status !== "uploaded" && item.status !== "failed");
     });
@@ -328,6 +375,13 @@ export function AttachmentPicker({
                           </Badge>
                         </div>
                         <Progress value={item.progress} className="h-2" />
+                        {item.didCompress &&
+                          typeof item.originalSize === "number" &&
+                          typeof item.finalSize === "number" && (
+                            <p className="text-xs text-emerald-700">
+                              Compressed: {formatUploadMb(item.originalSize)} {"->"} {formatUploadMb(item.finalSize)}
+                            </p>
+                          )}
                         {item.error && <p className="text-xs text-destructive">{item.error}</p>}
                       </div>
                     ))}

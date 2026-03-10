@@ -6,6 +6,7 @@ import {
   clampChatCursorLimit,
   getLastSeenSeq,
   mergeChatMessages,
+  normalizeDeletedMessagePatch,
   patchMessageInInfiniteData,
   tombstonePatch,
 } from "@/hooks/chat/cursorUtils";
@@ -15,8 +16,8 @@ const makeMessage = (seq: number, overrides: Partial<ChatMessage> = {}): ChatMes
   conversation_id: overrides.conversation_id ?? "conv-1",
   seq,
   sender_id: overrides.sender_id ?? "user-1",
-  body_text: overrides.body_text ?? `message-${seq}`,
-  body_rich: null,
+  body_text: Object.prototype.hasOwnProperty.call(overrides, "body_text") ? (overrides.body_text ?? null) : `message-${seq}`,
+  body_rich: Object.prototype.hasOwnProperty.call(overrides, "body_rich") ? (overrides.body_rich ?? null) : null,
   reply_to_message_id: overrides.reply_to_message_id ?? null,
   thread_root_id: overrides.thread_root_id ?? null,
   thread_reply_count: overrides.thread_reply_count ?? 0,
@@ -31,6 +32,11 @@ const makeMessage = (seq: number, overrides: Partial<ChatMessage> = {}): ChatMes
 
 const makeInfiniteData = (items: ChatMessage[]): InfiniteData<ChatListMessagesResponse, number> => ({
   pages: [{ items }],
+  pageParams: [0],
+});
+
+const makeThreadInfiniteData = (items: ChatMessage[]): InfiniteData<ChatThreadResponse, number> => ({
+  pages: [{ items, threadRootId: "msg-1" }],
   pageParams: [0],
 });
 
@@ -60,6 +66,17 @@ describe("chat cursor merge + dedupe", () => {
 
     const merged = mergeChatMessages(existing, incoming);
     expect(merged[0].attachments).toEqual(["media-1"]);
+  });
+
+  test("deleted incoming message does not preserve previous attachments", () => {
+    const existing = [makeMessage(10, { id: "same-id", attachments: ["media-1"], reactions: [{ message_id: "same-id", user_id: "u1", emoji: "👍" }] })];
+    const incoming = [makeMessage(10, { id: "same-id", attachments: [], reactions: [], deleted_at: "2026-03-06T12:00:00.000Z", body_text: null, body_rich: null })];
+
+    const merged = mergeChatMessages(existing, incoming);
+    expect(merged[0].attachments).toEqual([]);
+    expect(merged[0].reactions).toEqual([]);
+    expect(merged[0].body_text).toBeNull();
+    expect(merged[0].deleted_at).toBe("2026-03-06T12:00:00.000Z");
   });
 
   test("out-of-order response still results in sorted cache", () => {
@@ -113,5 +130,44 @@ describe("reconnect catch-up + ws patch helpers", () => {
     expect(deleted?.body_text).toBeNull();
     expect(deleted?.attachments).toEqual([]);
     expect(deleted?.reactions).toEqual([]);
+  });
+
+  test("delete mutation patch normalizes partial response into a tombstone", () => {
+    const partialDeleteResponse = {
+      id: "msg-1",
+      deleted_at: "2026-03-06T12:10:00.000Z",
+      edited_at: "2026-03-06T12:10:00.000Z",
+    } as Partial<ChatMessage>;
+
+    const patch = normalizeDeletedMessagePatch(partialDeleteResponse);
+    expect(patch.deleted_at).toBe("2026-03-06T12:10:00.000Z");
+    expect(patch.body_text).toBeNull();
+    expect(patch.body_rich).toBeNull();
+    expect(patch.attachments).toEqual([]);
+    expect(patch.reactions).toEqual([]);
+    expect(patch.edited_at).toBe("2026-03-06T12:10:00.000Z");
+  });
+
+  test("thread cache tombstone patch removes attachments and reactions", () => {
+    const initial = makeThreadInfiniteData([
+      makeMessage(3, {
+        id: "thread-msg",
+        thread_root_id: "msg-1",
+        attachments: ["media-9"],
+        reactions: [{ message_id: "thread-msg", user_id: "u2", emoji: "🔥" }],
+      }),
+    ]);
+
+    const afterDelete = patchMessageInInfiniteData(
+      initial,
+      "thread-msg",
+      normalizeDeletedMessagePatch({ id: "thread-msg", deleted_at: "2026-03-06T12:20:00.000Z" }),
+    );
+    const deleted = afterDelete?.pages[0].items.find((item) => item.id === "thread-msg");
+
+    expect(deleted?.deleted_at).toBe("2026-03-06T12:20:00.000Z");
+    expect(deleted?.attachments).toEqual([]);
+    expect(deleted?.reactions).toEqual([]);
+    expect(deleted?.body_text).toBeNull();
   });
 });

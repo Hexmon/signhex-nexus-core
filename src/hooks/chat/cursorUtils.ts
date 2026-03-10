@@ -47,6 +47,7 @@ export const mergeChatMessages = (existing: ChatMessage[], incoming: ChatMessage
     const previous = byId.get(message.id);
     const nextMessage =
       previous &&
+      !message.deleted_at &&
       Array.isArray(previous.attachments) &&
       previous.attachments.length > 0 &&
       (!Array.isArray(message.attachments) || message.attachments.length === 0)
@@ -114,4 +115,9 @@ export const tombstonePatch = (deletedAt?: string): Partial<ChatMessage> => ({
   body_rich: null,
   attachments: [],
   reactions: [],
+});
+
+export const normalizeDeletedMessagePatch = (message?: Partial<ChatMessage>): Partial<ChatMessage> => ({
+  ...(message ?? {}),
+  ...tombstonePatch(message?.deleted_at ?? undefined),
 });

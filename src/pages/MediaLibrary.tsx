@@ -8,12 +8,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { ToastAction } from "@/components/ui/toast";
 import { mediaApi } from "@/api/domains/media";
 import type { MediaAsset, MediaType } from "@/api/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, useNavigate } from "react-router-dom";
+import {
+  getFriendlyUploadError,
+  uploadMediaWithPresign,
+  validateUploadFile,
+  type UploadMediaResult,
+} from "@/lib/mediaUploadFlow";
+import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
 
 type MediaLibraryLocationState = {
   returnTo?: string;
@@ -31,108 +40,44 @@ export default function MediaLibrary() {
   const [activeTab, setActiveTab] = useState("all");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResult, setUploadResult] = useState<UploadMediaResult | null>(null);
   const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MediaAsset | null>(null);
   const [deleteMode, setDeleteMode] = useState<"soft" | "hard">("soft");
 
-  const allowedMimeTypes = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "video/mp4",
-    "video/quicktime", // mov
-    "application/pdf",
-    "application/vnd.ms-powerpoint", // ppt
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
-    "text/csv",
-    "application/msword", // doc
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
-  ]);
-  const allowedExtensions = new Set([
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".mp4",
-    ".mov",
-    ".pdf",
-    ".ppt",
-    ".pptx",
-    ".csv",
-    ".doc",
-    ".docx",
-  ]);
-
-  const readMediaMetadata = (file: File) =>
-    new Promise<Partial<{ width: number; height: number; duration_seconds: number }>>((resolve) => {
-      if (typeof window === "undefined") return resolve({});
-      if (file.type.startsWith("image/")) {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-          resolve({ width: img.naturalWidth, height: img.naturalHeight });
-          URL.revokeObjectURL(url);
-        };
-        img.onerror = () => {
-          resolve({});
-          URL.revokeObjectURL(url);
-        };
-        img.src = url;
-        return;
-      }
-      if (file.type.startsWith("video/")) {
-        const url = URL.createObjectURL(file);
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.onloadedmetadata = () => {
-          resolve({
-            width: video.videoWidth || undefined,
-            height: video.videoHeight || undefined,
-            duration_seconds: isNaN(video.duration) ? undefined : Math.round(video.duration),
-          });
-          URL.revokeObjectURL(url);
-        };
-        video.onerror = () => {
-          resolve({});
-          URL.revokeObjectURL(url);
-        };
-        video.src = url;
-        return;
-      }
-      resolve({});
-    });
-
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const contentType = file.type || "application/octet-stream";
-      const presign = await mediaApi.presignUpload({
-        filename: file.name,
-        content_type: contentType,
-        size: file.size,
-      });
-
-      const uploadResponse = await fetch(presign.upload_url, {
-        method: "PUT",
-        headers: { "Content-Type": contentType },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        const message = await uploadResponse.text().catch(() => "");
-        throw new Error(message || "Upload failed.");
-      }
-
-      const metadata = await readMediaMetadata(file);
-      return mediaApi.complete(presign.media_id, {
-        status: "READY",
-        content_type: contentType,
-        size: file.size,
-        ...metadata,
+      return uploadMediaWithPresign(file, {
+        onPrepared: (result) => {
+          setUploadResult((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  ...result,
+                }
+              : {
+                  ...result,
+                  media: {
+                    id: "",
+                    filename: result.file.name,
+                  },
+                },
+          );
+        },
+        onProgress: (progress) => {
+          setUploadProgress(progress);
+        },
       });
     },
-    onSuccess: () => {
-      toast({ title: "Upload complete", description: "Media uploaded and marked ready." });
+    onSuccess: (result) => {
+      const description = result.didCompress
+        ? `Media uploaded. Compressed ${(result.originalSize / 1024 / 1024).toFixed(2)} MB -> ${(result.finalSize / 1024 / 1024).toFixed(2)} MB.`
+        : "Media uploaded and marked ready.";
+      toast({ title: "Upload complete", description });
       setIsUploadOpen(false);
       setSelectedFile(null);
+      setUploadProgress(0);
       void queryClient.invalidateQueries({ queryKey: ["media"] });
       if (locationState?.returnTo) {
         navigate(locationState.returnTo, {
@@ -144,7 +89,7 @@ export default function MediaLibrary() {
       }
     },
     onError: (err) => {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Upload failed.";
+      const message = getFriendlyUploadError(err);
       toast({ title: "Upload failed", description: message, variant: "destructive" });
     },
   });
@@ -161,8 +106,24 @@ export default function MediaLibrary() {
       void queryClient.invalidateQueries({ queryKey: ["media"] });
     },
     onError: (err) => {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Delete failed.";
-      toast({ title: "Delete failed", description: message, variant: "destructive" });
+      const mapped = mapMediaDeleteError(err);
+      if (mapped.dismissDeleteDialog) {
+        setDeleteTarget(null);
+      }
+      if (err instanceof ApiError && err.code === "NOT_FOUND") {
+        void queryClient.invalidateQueries({ queryKey: ["media"] });
+      }
+      toast({
+        title: mapped.title,
+        description: mapped.description,
+        variant: mapped.variant,
+        action:
+          mapped.helpRoute && mapped.helpLabel ? (
+            <ToastAction altText={mapped.helpLabel} onClick={() => navigate(mapped.helpRoute!)}>
+              {mapped.helpLabel}
+            </ToastAction>
+          ) : undefined,
+      });
     },
   });
 
@@ -186,27 +147,34 @@ export default function MediaLibrary() {
     const file = input.files?.[0];
     if (!file) {
       setSelectedFile(null);
+      setUploadResult(null);
+      setUploadProgress(0);
       return;
     }
 
-    const ext = file.name.includes(".") ? file.name.substring(file.name.lastIndexOf(".")).toLowerCase() : "";
-    const isAllowed = allowedMimeTypes.has(file.type) || (ext && allowedExtensions.has(ext));
-    if (!isAllowed) {
+    const validationError = validateUploadFile(file);
+    if (validationError) {
       toast({
         title: "Unsupported file type",
-        description: "Allowed: JPEG, PNG, WEBP, MP4, MOV, PDF, PPT/PPTX, CSV, DOC/DOCX.",
+        description: validationError,
         variant: "destructive",
       });
       input.value = "";
       setSelectedFile(null);
+      setUploadResult(null);
+      setUploadProgress(0);
       return;
     }
 
     setSelectedFile(file);
+    setUploadResult(null);
+    setUploadProgress(0);
   };
 
   const handleUpload = () => {
     if (!selectedFile || isUploading) return;
+    setUploadResult(null);
+    setUploadProgress(0);
     uploadMutation.mutate(selectedFile);
   };
 
@@ -279,6 +247,8 @@ export default function MediaLibrary() {
     return { total, images, videos, documents };
   }, [media]);
 
+  const resolveMediaLabel = (media: MediaAsset) => media.name || media.filename || "Untitled media";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -333,7 +303,7 @@ export default function MediaLibrary() {
             >
               <CardHeader>
                 <CardTitle className="text-base flex items-center justify-between">
-                  <span className="truncate">{item.filename}</span>
+                  <span className="truncate">{resolveMediaLabel(item)}</span>
                   <Badge variant="outline">{item.content_type || "unknown"}</Badge>
                 </CardTitle>
               </CardHeader>
@@ -343,7 +313,7 @@ export default function MediaLibrary() {
                     {item.type === "IMAGE" || (item.content_type || "").startsWith("image/") ? (
                       <img
                         src={item.media_url}
-                        alt={item.filename}
+                        alt={resolveMediaLabel(item)}
                         className="h-40 w-full object-cover"
                         loading="lazy"
                       />
@@ -426,7 +396,11 @@ export default function MediaLibrary() {
         open={isUploadOpen}
         onOpenChange={(open) => {
           setIsUploadOpen(open);
-          if (!open) setSelectedFile(null);
+          if (!open) {
+            setSelectedFile(null);
+            setUploadResult(null);
+            setUploadProgress(0);
+          }
         }}
       >
         <DialogContent className="sm:max-w-[480px]">
@@ -445,12 +419,24 @@ export default function MediaLibrary() {
               />
             </div>
             {selectedFile && (
-              <div className="rounded-md border p-3 text-sm text-muted-foreground space-y-1">
+              <div className="rounded-md border p-3 text-sm text-muted-foreground space-y-2">
                 <div className="flex items-center justify-between text-foreground">
                   <span className="font-medium truncate">{selectedFile.name}</span>
                   <Badge variant="outline">{selectedFile.type || "unknown"}</Badge>
                 </div>
                 <div>Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                {uploadResult?.didCompress && (
+                  <div className="text-xs text-emerald-700">
+                    Compressed: {(uploadResult.originalSize / 1024 / 1024).toFixed(2)} MB {"->"}{" "}
+                    {(uploadResult.finalSize / 1024 / 1024).toFixed(2)} MB
+                  </div>
+                )}
+                {isUploading && (
+                  <div className="space-y-1">
+                    <Progress value={uploadProgress} className="h-1.5" />
+                    <div className="text-[11px] text-muted-foreground">{uploadProgress}% uploaded</div>
+                  </div>
+                )}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -473,7 +459,7 @@ export default function MediaLibrary() {
           <DialogContent className="sm:max-w-[720px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <span className="truncate">{previewMedia.filename}</span>
+                <span className="truncate">{resolveMediaLabel(previewMedia)}</span>
                 {previewMedia.type && <Badge variant="outline">{previewMedia.type}</Badge>}
               </DialogTitle>
             </DialogHeader>
@@ -482,7 +468,7 @@ export default function MediaLibrary() {
                 previewMedia.type === "IMAGE" || (previewMedia.content_type || "").startsWith("image/") ? (
                   <img
                     src={previewMedia.media_url}
-                    alt={previewMedia.filename}
+                    alt={resolveMediaLabel(previewMedia)}
                     className="w-full max-h-[480px] object-contain"
                   />
                 ) : previewMedia.type === "VIDEO" || (previewMedia.content_type || "").startsWith("video/") ? (

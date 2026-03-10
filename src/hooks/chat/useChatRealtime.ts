@@ -22,7 +22,7 @@ import {
   flattenMessagePages,
   getLastSeenSeq,
   patchMessageInInfiniteData,
-  tombstonePatch,
+  normalizeDeletedMessagePatch,
 } from "@/hooks/chat/cursorUtils";
 import { connectChatSocket } from "@/lib/chatSocket";
 import { useAppSelector } from "@/store/hooks";
@@ -154,7 +154,7 @@ export const useChatRealtime = ({
     };
 
     const onMessageDeleted = (payload: ChatMessageDeletedEvent) => {
-      const patch = tombstonePatch();
+      const patch = normalizeDeletedMessagePatch();
       queryClient.setQueriesData(
         { queryKey: ["chat", "messages", payload.conversationId] },
         (current: InfiniteData<ChatListMessagesResponse> | undefined) =>

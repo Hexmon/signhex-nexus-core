@@ -30,6 +30,7 @@ import {
   getLastSeenSeq,
   appendMessageInInfiniteData,
   patchMessageInInfiniteData,
+  normalizeDeletedMessagePatch,
 } from "@/hooks/chat/cursorUtils";
 
 export const chatQueryKeys = {
@@ -304,7 +305,7 @@ export const useDeleteChatMessage = () => {
     mutationFn: ({ messageId, conversationId }: { messageId: string; conversationId: string }) =>
       chatApi.deleteMessage(messageId).then((res) => ({ ...res, conversationId })),
     onSuccess: ({ message, conversationId }) => {
-      patchMessageCaches(queryClient, conversationId, message.id, message);
+      patchMessageCaches(queryClient, conversationId, message.id, normalizeDeletedMessagePatch(message));
       void queryClient.invalidateQueries({ queryKey: chatQueryKeys.conversations });
     },
   });
