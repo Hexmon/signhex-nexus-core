@@ -31,6 +31,25 @@ type MediaLibraryLocationState = {
   openUpload?: boolean;
 };
 
+const formatRelativeMediaTime = (value?: string | null) => {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return null;
+
+  const diffMs = Date.now() - timestamp;
+  if (diffMs <= 0) return "Just now";
+
+  const diffHours = diffMs / (1000 * 60 * 60);
+  if (diffHours < 1) return "Just now";
+  if (diffHours < 24) {
+    const hours = Math.floor(diffHours);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+};
+
 export default function MediaLibrary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -248,6 +267,8 @@ export default function MediaLibrary() {
   }, [media]);
 
   const resolveMediaLabel = (media: MediaAsset) => media.name || media.filename || "Untitled media";
+  const resolveMediaUpdatedLabel = (media: MediaAsset) =>
+    formatRelativeMediaTime(media.updated_at ?? media.created_at);
 
   return (
     <div className="space-y-6">
@@ -382,6 +403,11 @@ export default function MediaLibrary() {
                   <Badge variant="secondary" className="text-xs">
                     {item.status}
                   </Badge>
+                )}
+                {resolveMediaUpdatedLabel(item) && (
+                  <div className="text-xs">
+                    Updated: {resolveMediaUpdatedLabel(item)}
+                  </div>
                 )}
                 <div className="text-xs">
                   {/* Status : {item.status ?? "PENDING"} · Thumbnail: {item.thumbnail_object_id ?? "pending"} */}

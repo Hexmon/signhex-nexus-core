@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, MoreHorizontal, Pencil, Trash2, RefreshCw, LayoutGrid } from "lucide-react";
+import { Eye, Plus, MoreHorizontal, Pencil, Trash2, RefreshCw, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Pagination,
@@ -49,15 +55,27 @@ const ITEMS_PER_PAGE = 20;
 const aspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
 
 function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  return date.toLocaleDateString();
+  const timestamp = Date.parse(dateString);
+  if (Number.isNaN(timestamp)) return "Unknown";
+
+  const diffMs = Date.now() - timestamp;
+  if (diffMs <= 0) return "Just now";
+
+  const diffHours = diffMs / (1000 * 60 * 60);
+  if (diffHours < 1) return "Just now";
+  if (diffHours < 24) {
+    const hours = Math.floor(diffHours);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+  }
+
+  return new Date(timestamp).toLocaleDateString();
 }
 
 export interface LayoutSlot {
@@ -79,6 +97,18 @@ export interface Layout {
   updated_at: string;
 }
 
+function getPreviewDimensions(ratio: string, maxWidth: number): { width: number; height: number } {
+  const [widthRatio, heightRatio] = ratio.split(":").map(Number);
+  if (!widthRatio || !heightRatio) {
+    return { width: maxWidth, height: maxWidth * 0.5625 };
+  }
+
+  return {
+    width: maxWidth,
+    height: maxWidth * (heightRatio / widthRatio),
+  };
+}
+
 const Layouts = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -86,6 +116,7 @@ const Layouts = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [aspectRatioFilter, setAspectRatioFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<LayoutItem | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<LayoutItem | null>(null);
   const [confirmationInput, setConfirmationInput] = useState("");
 
   const trimmedSearchQuery = searchQuery.trim();
@@ -202,6 +233,32 @@ const Layouts = () => {
   const errorMessage =
     error instanceof Error ? error.message : "Unable to load layouts right now.";
 
+  const renderLayoutPreview = (layout: LayoutItem, maxWidth = 420) => {
+    const dimensions = getPreviewDimensions(layout.aspect_ratio, maxWidth);
+
+    return (
+      <div
+        className="relative rounded-lg border bg-muted/30"
+        style={{ width: dimensions.width, height: dimensions.height }}
+      >
+        {layout.spec.slots.map((slot) => (
+          <div
+            key={slot.id}
+            className="absolute flex items-center justify-center overflow-hidden rounded border border-primary/60 bg-primary/10 text-[10px] text-muted-foreground"
+            style={{
+              left: `${slot.x * 100}%`,
+              top: `${slot.y * 100}%`,
+              width: `${slot.w * 100}%`,
+              height: `${slot.h * 100}%`,
+            }}
+          >
+            {slot.id}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -313,6 +370,12 @@ const Layouts = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          onClick={() => setPreviewTarget(layout)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() => navigate(`/layouts/${layout.id}`)}
                         >
                           <Pencil className="mr-2 h-4 w-4" />
@@ -418,6 +481,25 @@ const Layouts = () => {
           </div>
         )}
       </ConfirmDialog>
+
+      <Dialog open={!!previewTarget} onOpenChange={(open) => !open && setPreviewTarget(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{previewTarget?.name || "Layout preview"}</DialogTitle>
+          </DialogHeader>
+          {previewTarget && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{previewTarget.aspect_ratio}</Badge>
+                <Badge variant="outline">{previewTarget.spec.slots.length} slots</Badge>
+              </div>
+              <div className="flex justify-center rounded-lg border bg-muted/20 p-6">
+                {renderLayoutPreview(previewTarget)}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

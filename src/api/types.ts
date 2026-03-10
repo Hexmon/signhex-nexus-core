@@ -630,6 +630,8 @@ export interface MediaAsset {
   source_bucket?: string;
   source_key?: string;
   media_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Schedule {
