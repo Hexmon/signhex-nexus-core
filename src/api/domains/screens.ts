@@ -134,7 +134,7 @@ export const screensApi = {
       method: "GET",
     }),
 
-  listAspectRatios: (params?: { search?: string }) =>
+  listAspectRatios: (params?: { search?: string; configured_only?: boolean }) =>
     apiClient.request<ScreenAspectRatioListResponse>({
       path: endpoints.screens.aspectRatios,
       method: "GET",

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Plus, Copy, Trash2, Save, Grid3X3 } from "lucide-react";
+import { ArrowLeft, Copy, Grid3X3, Move, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,17 @@ import { screensApi } from "@/api/domains/screens";
 import { layoutsApi } from "@/api/domains/layouts";
 import type { LayoutCreatePayload, LayoutItem, LayoutSlot, ScreenAspectRatio } from "@/api/types";
 
-const defaultAspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
+const mergeAspectRatioOptions = (response?: { items?: ScreenAspectRatio[]; defaults?: ScreenAspectRatio[] }) => {
+  const combined = [...(response?.items ?? []), ...(response?.defaults ?? [])];
+  const seen = new Set<string>();
+
+  return combined.filter((option): option is ScreenAspectRatio & { aspect_ratio: string } => {
+    if (!option.aspect_ratio) return false;
+    if (seen.has(option.aspect_ratio)) return false;
+    seen.add(option.aspect_ratio);
+    return true;
+  });
+};
 
 type LayoutEditorLocationState = {
   returnTo?: string;
@@ -51,6 +61,21 @@ function checkOverlap(slot1: LayoutSlot, slot2: LayoutSlot): boolean {
 
   return !(slot1.x >= x2End || x1End <= slot2.x || slot1.y >= y2End || y1End <= slot2.y);
 }
+
+const GRID_OPTIONS = [
+  { label: "5%", value: 0.05 },
+  { label: "10%", value: 0.1 },
+  { label: "20%", value: 0.2 },
+] as const;
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const snapToStep = (value: number, step: number) => {
+  if (!step || step <= 0) return Number(clamp01(value).toFixed(3));
+  return Number(clamp01(Math.round(value / step) * step).toFixed(3));
+};
+
+const getInputStep = (gridStep: number, snapToGrid: boolean) => (snapToGrid ? gridStep : 0.01);
 
 const LayoutEditor = () => {
   const { id } = useParams();
@@ -76,6 +101,8 @@ const LayoutEditor = () => {
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [gridStep, setGridStep] = useState<number>(0.1);
   const [isJsonOpen, setIsJsonOpen] = useState(true);
 
   const layoutQuery = useQuery({
@@ -153,6 +180,19 @@ const LayoutEditor = () => {
 
   const canvasWidth = 500;
   const canvasDimensions = getAspectRatioDimensions(aspectRatio, canvasWidth);
+  const inputStep = useMemo(() => getInputStep(gridStep, snapToGrid), [gridStep, snapToGrid]);
+  const gridMarkers = useMemo(
+    () =>
+      Array.from({ length: Math.floor(1 / gridStep) + 1 }, (_, index) => {
+        const position = Math.min(index * gridStep * 100, 100);
+        return {
+          key: `${gridStep}-${position}`,
+          position,
+          label: `${Math.round(position)}%`,
+        };
+      }),
+    [gridStep],
+  );
 
   const saveLayoutMutation = useSafeMutation<
     LayoutItem,
@@ -260,19 +300,21 @@ const LayoutEditor = () => {
   };
 
   const getCanvasCoordinates = useCallback(
-    (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number, shouldSnap = false) => {
       if (!canvasRef.current) return { x: 0, y: 0 };
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+      const rawX = clamp01((clientX - rect.left) / rect.width);
+      const rawY = clamp01((clientY - rect.top) / rect.height);
+      const x = shouldSnap ? snapToStep(rawX, gridStep) : Number(rawX.toFixed(3));
+      const y = shouldSnap ? snapToStep(rawY, gridStep) : Number(rawY.toFixed(3));
       return { x, y };
     },
-    []
+    [gridStep]
   );
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (isDrawing) {
-      const coords = getCanvasCoordinates(e.clientX, e.clientY);
+      const coords = getCanvasCoordinates(e.clientX, e.clientY, snapToGrid);
       setDrawStart(coords);
       setDrawCurrent(coords);
     }
@@ -280,10 +322,10 @@ const LayoutEditor = () => {
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     if (isDrawing && drawStart) {
-      const coords = getCanvasCoordinates(e.clientX, e.clientY);
+      const coords = getCanvasCoordinates(e.clientX, e.clientY, snapToGrid);
       setDrawCurrent(coords);
     } else if (dragState) {
-      const coords = getCanvasCoordinates(e.clientX, e.clientY);
+      const coords = getCanvasCoordinates(e.clientX, e.clientY, snapToGrid);
       const deltaX = coords.x - dragState.startX;
       const deltaY = coords.y - dragState.startY;
 
@@ -292,13 +334,18 @@ const LayoutEditor = () => {
           if (slot.id !== dragState.slotId) return slot;
 
           if (dragState.type === "move") {
-            const newX = Math.max(0, Math.min(1 - dragState.originalSlot.w, dragState.originalSlot.x + deltaX));
-            const newY = Math.max(0, Math.min(1 - dragState.originalSlot.h, dragState.originalSlot.y + deltaY));
-            return { ...slot, x: Number(newX.toFixed(3)), y: Number(newY.toFixed(3)) };
+            const unclampedX = Math.max(0, Math.min(1 - dragState.originalSlot.w, dragState.originalSlot.x + deltaX));
+            const unclampedY = Math.max(0, Math.min(1 - dragState.originalSlot.h, dragState.originalSlot.y + deltaY));
+            const newX = snapToGrid ? snapToStep(unclampedX, gridStep) : Number(unclampedX.toFixed(3));
+            const newY = snapToGrid ? snapToStep(unclampedY, gridStep) : Number(unclampedY.toFixed(3));
+            return { ...slot, x: newX, y: newY };
           } else if (dragState.type === "resize" && dragState.handle === "se") {
-            const newW = Math.max(0.05, Math.min(1 - dragState.originalSlot.x, dragState.originalSlot.w + deltaX));
-            const newH = Math.max(0.05, Math.min(1 - dragState.originalSlot.y, dragState.originalSlot.h + deltaY));
-            return { ...slot, w: Number(newW.toFixed(3)), h: Number(newH.toFixed(3)) };
+            const minSize = Math.max(snapToGrid ? gridStep : 0.01, 0.05);
+            const unclampedW = Math.max(minSize, Math.min(1 - dragState.originalSlot.x, dragState.originalSlot.w + deltaX));
+            const unclampedH = Math.max(minSize, Math.min(1 - dragState.originalSlot.y, dragState.originalSlot.h + deltaY));
+            const newW = snapToGrid ? snapToStep(unclampedW, gridStep) : Number(unclampedW.toFixed(3));
+            const newH = snapToGrid ? snapToStep(unclampedH, gridStep) : Number(unclampedH.toFixed(3));
+            return { ...slot, w: newW, h: newH };
           }
           return slot;
         })
@@ -313,8 +360,9 @@ const LayoutEditor = () => {
       const y = Math.min(drawStart.y, drawCurrent.y);
       const w = Math.abs(drawCurrent.x - drawStart.x);
       const h = Math.abs(drawCurrent.y - drawStart.y);
+      const minDrawSize = Math.max(snapToGrid ? gridStep : 0.02, 0.02);
 
-      if (w > 0.02 && h > 0.02) {
+      if (w >= minDrawSize && h >= minDrawSize) {
         const newSlotId = `slot-${slots.length + 1}`;
         const newSlot: LayoutSlot = {
           id: newSlotId,
@@ -341,7 +389,7 @@ const LayoutEditor = () => {
   const handleSlotMouseDown = (e: React.MouseEvent, slot: LayoutSlot, type: "move" | "resize", handle?: string) => {
     e.stopPropagation();
     setSelectedSlotId(slot.id);
-    const coords = getCanvasCoordinates(e.clientX, e.clientY);
+    const coords = getCanvasCoordinates(e.clientX, e.clientY, snapToGrid);
     setDragState({
       type,
       slotId: slot.id,
@@ -369,8 +417,18 @@ const LayoutEditor = () => {
         }
         const numValue = typeof value === "string" ? parseFloat(value) : value;
         if (isNaN(numValue)) return slot;
-        const clampedValue = Math.max(0, Math.min(1, numValue));
-        return { ...slot, [property]: Number(clampedValue.toFixed(3)) };
+        const normalizedValue = property === "w" || property === "h"
+          ? Math.max(snapToGrid ? gridStep : 0.01, numValue)
+          : numValue;
+        const maxValue =
+          property === "w"
+            ? 1 - slot.x
+            : property === "h"
+              ? 1 - slot.y
+              : 1;
+        const clampedValue = Math.max(0, Math.min(maxValue, normalizedValue));
+        const nextValue = snapToGrid ? snapToStep(clampedValue, gridStep) : Number(clampedValue.toFixed(3));
+        return { ...slot, [property]: nextValue };
       })
     );
     if (property === "id" && slotId === selectedSlotId) {
@@ -399,6 +457,67 @@ const LayoutEditor = () => {
 
   const markDirty = () => setIsDirty(true);
 
+  const nudgeSelectedSlot = useCallback((deltaX: number, deltaY: number) => {
+    if (!selectedSlotId) return;
+
+    setSlots((prev) =>
+      prev.map((slot) => {
+        if (slot.id !== selectedSlotId) return slot;
+        const nextX = Math.max(0, Math.min(1 - slot.w, slot.x + deltaX));
+        const nextY = Math.max(0, Math.min(1 - slot.h, slot.y + deltaY));
+        return {
+          ...slot,
+          x: snapToGrid ? snapToStep(nextX, gridStep) : Number(nextX.toFixed(3)),
+          y: snapToGrid ? snapToStep(nextY, gridStep) : Number(nextY.toFixed(3)),
+        };
+      }),
+    );
+    setIsDirty(true);
+  }, [gridStep, selectedSlotId, snapToGrid]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!selectedSlotId) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const baseStep = snapToGrid ? gridStep : 0.01;
+      const multiplier = event.shiftKey ? 5 : 1;
+      const step = baseStep * multiplier;
+
+      switch (event.key) {
+        case "ArrowLeft":
+          event.preventDefault();
+          nudgeSelectedSlot(-step, 0);
+          break;
+        case "ArrowRight":
+          event.preventDefault();
+          nudgeSelectedSlot(step, 0);
+          break;
+        case "ArrowUp":
+          event.preventDefault();
+          nudgeSelectedSlot(0, -step);
+          break;
+        case "ArrowDown":
+          event.preventDefault();
+          nudgeSelectedSlot(0, step);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gridStep, nudgeSelectedSlot, selectedSlotId, snapToGrid]);
+
   const debouncedSearchTerm = debouncedAspectRatioSearch.trim();
   const isSearchActive = Boolean(debouncedSearchTerm);
 
@@ -407,24 +526,18 @@ const LayoutEditor = () => {
     queryFn: () =>
       screensApi.listAspectRatios({
         search: debouncedSearchTerm || undefined,
+        configured_only: true,
       }),
     keepPreviousData: true,
   });
 
   const aspectRatioOptions = useMemo<ScreenAspectRatio[]>(() => {
-    const items = aspectRatioResponse?.items ?? [];
+    const resolved = mergeAspectRatioOptions(aspectRatioResponse);
     if (isSearchActive) {
-      return items;
+      return resolved;
     }
-    if (items.length > 0) {
-      return items;
-    }
-    return defaultAspectRatios.map((ratio) => ({
-      id: `fallback-${ratio}`,
-      name: ratio,
-      aspect_ratio: ratio,
-    }));
-  }, [aspectRatioResponse?.items, isSearchActive]);
+    return resolved;
+  }, [aspectRatioResponse, isSearchActive]);
 
   return (
     <div className="space-y-6">
@@ -544,11 +657,17 @@ const LayoutEditor = () => {
                       </div>
                     )}
                     {aspectRatioOptions.map((option) => (
-                      <SelectItem key={`${option.id}-${option.aspect_ratio}`} value={option.aspect_ratio}>
+                      <SelectItem
+                        key={`${option.id ?? option.aspect_ratio}-${option.aspect_ratio}`}
+                        value={option.aspect_ratio}
+                      >
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">{option.aspect_ratio}</span>
-                          {option.name && option.name !== option.aspect_ratio && (
-                            <span className="text-xs text-muted-foreground">{option.name}</span>
+                          {(option.aspect_ratio_name || option.name) &&
+                            (option.aspect_ratio_name || option.name) !== option.aspect_ratio && (
+                            <span className="text-xs text-muted-foreground">
+                              {option.aspect_ratio_name || option.name}
+                            </span>
                           )}
                         </div>
                       </SelectItem>
@@ -630,89 +749,157 @@ const LayoutEditor = () => {
                   <Grid3X3 className="mr-1 h-3 w-3" />
                   Grid
                 </Button>
+                <Button
+                  size="sm"
+                  variant={snapToGrid ? "secondary" : "outline"}
+                  onClick={() => setSnapToGrid((prev) => !prev)}
+                >
+                  <Move className="mr-1 h-3 w-3" />
+                  Snap
+                </Button>
+                <Select
+                  value={String(gridStep)}
+                  onValueChange={(value) => setGridStep(Number(value))}
+                >
+                  <SelectTrigger className="h-9 w-[110px]" aria-label="Grid density">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRID_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={String(option.value)}>
+                        {option.label} grid
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <span className="text-xs text-muted-foreground">
-                Grid toggles a 10% reference overlay for aligning slots.
+                Grid shows reference lines. Snap locks draw, move, and resize actions to the selected grid.
               </span>
             </div>
             <Badge variant="outline">{aspectRatio}</Badge>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">Grid {Math.round(gridStep * 100)}%</Badge>
+            <Badge variant={snapToGrid ? "secondary" : "outline"}>
+              Snap {snapToGrid ? "on" : "off"}
+            </Badge>
+            {selectedSlot && (
+              <Badge variant="outline">
+                {selectedSlot.id}: x {Math.round(selectedSlot.x * 100)}% · y {Math.round(selectedSlot.y * 100)}% ·
+                w {Math.round(selectedSlot.w * 100)}% · h {Math.round(selectedSlot.h * 100)}%
+              </Badge>
+            )}
+            <span>Arrow keys move the selected slot. Hold Shift for larger nudges.</span>
+          </div>
+
           {/* Canvas */}
           <Card>
             <CardContent className="p-4">
-              <div
-                ref={canvasRef}
-                className={`relative border-2 border-dashed rounded-lg mx-auto overflow-hidden ${
-                  isDrawing ? "cursor-crosshair" : "cursor-default"
-                }`}
-                style={{
-                  width: canvasDimensions.width,
-                  height: canvasDimensions.height,
-                  backgroundColor: "hsl(var(--muted))",
-                }}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={handleCanvasMouseUp}
-              >
-                {/* Grid Overlay */}
+              <div className="mx-auto w-fit">
                 {showGrid && (
-                  <div
-                    className="absolute inset-0 pointer-events-none opacity-30"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)",
-                      backgroundSize: "10% 10%",
-                    }}
-                  />
+                  <div className="mb-2 ml-10 relative" style={{ width: canvasDimensions.width }}>
+                    {gridMarkers.map((marker) => (
+                      <span
+                        key={`top-${marker.key}`}
+                        className="absolute -translate-x-1/2 rounded bg-background/95 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-sm"
+                        style={{ left: `${marker.position}%` }}
+                      >
+                        {marker.label}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
-                {/* Slots */}
-                {slots.map((slot) => (
+                <div className="flex items-start gap-2">
+                  {showGrid && (
+                    <div className="relative shrink-0" style={{ width: 36, height: canvasDimensions.height }}>
+                      {gridMarkers.map((marker) => (
+                        <span
+                          key={`side-${marker.key}`}
+                          className="absolute right-0 -translate-y-1/2 rounded bg-background/95 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-sm"
+                          style={{ top: `${marker.position}%` }}
+                        >
+                          {marker.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <div
-                    key={slot.id}
-                    className={`absolute border-2 rounded transition-shadow ${
-                      selectedSlotId === slot.id
-                        ? "border-primary shadow-lg z-10"
-                        : "border-primary/50 hover:border-primary"
+                    ref={canvasRef}
+                    className={`relative border-2 border-dashed rounded-lg overflow-hidden ${
+                      isDrawing ? "cursor-crosshair" : "cursor-default"
                     }`}
                     style={{
-                      left: `${slot.x * 100}%`,
-                      top: `${slot.y * 100}%`,
-                      width: `${slot.w * 100}%`,
-                      height: `${slot.h * 100}%`,
-                      backgroundColor: "hsl(var(--primary) / 0.15)",
+                      width: canvasDimensions.width,
+                      height: canvasDimensions.height,
+                      backgroundColor: "hsl(var(--muted))",
                     }}
-                    onMouseDown={(e) => handleSlotMouseDown(e, slot, "move")}
+                    onMouseDown={handleCanvasMouseDown}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={handleCanvasMouseUp}
+                    onMouseLeave={handleCanvasMouseUp}
                   >
-                    {/* Slot Label */}
-                    <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-background/90 rounded text-xs font-medium">
-                      {slot.id}
-                    </div>
-
-                    {/* Resize Handle */}
-                    {selectedSlotId === slot.id && (
+                    {showGrid && (
                       <div
-                        className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-tl cursor-se-resize"
-                        onMouseDown={(e) => handleSlotMouseDown(e, slot, "resize", "se")}
+                        className="absolute inset-0 pointer-events-none opacity-30"
+                        style={{
+                          backgroundImage:
+                            "linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)",
+                          backgroundSize: `${gridStep * 100}% ${gridStep * 100}%`,
+                        }}
                       />
                     )}
-                  </div>
-                ))}
 
-                {/* Drawing Preview */}
-                {isDrawing && drawStart && drawCurrent && (
-                  <div
-                    className="absolute border-2 border-dashed border-primary bg-primary/20 pointer-events-none"
-                    style={{
-                      left: `${Math.min(drawStart.x, drawCurrent.x) * 100}%`,
-                      top: `${Math.min(drawStart.y, drawCurrent.y) * 100}%`,
-                      width: `${Math.abs(drawCurrent.x - drawStart.x) * 100}%`,
-                      height: `${Math.abs(drawCurrent.y - drawStart.y) * 100}%`,
-                    }}
-                  />
-                )}
+                    {slots.map((slot) => (
+                      <div
+                        key={slot.id}
+                        className={`absolute border-2 rounded transition-shadow ${
+                          selectedSlotId === slot.id
+                            ? "border-primary shadow-lg z-10"
+                            : "border-primary/50 hover:border-primary"
+                        }`}
+                        style={{
+                          left: `${slot.x * 100}%`,
+                          top: `${slot.y * 100}%`,
+                          width: `${slot.w * 100}%`,
+                          height: `${slot.h * 100}%`,
+                          backgroundColor: "hsl(var(--primary) / 0.15)",
+                        }}
+                        onMouseDown={(e) => handleSlotMouseDown(e, slot, "move")}
+                      >
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-background/90 rounded text-xs font-medium">
+                          {slot.id}
+                        </div>
+
+                        {selectedSlotId === slot.id && (
+                          <div
+                            className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-tl cursor-se-resize"
+                            onMouseDown={(e) => handleSlotMouseDown(e, slot, "resize", "se")}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    {isDrawing && drawStart && drawCurrent && (
+                      <div
+                        className="absolute border-2 border-dashed border-primary bg-primary/20 pointer-events-none"
+                        style={{
+                          left: `${Math.min(drawStart.x, drawCurrent.x) * 100}%`,
+                          top: `${Math.min(drawStart.y, drawCurrent.y) * 100}%`,
+                          width: `${Math.abs(drawCurrent.x - drawStart.x) * 100}%`,
+                          height: `${Math.abs(drawCurrent.y - drawStart.y) * 100}%`,
+                        }}
+                      >
+                        <div className="absolute left-1 top-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] text-foreground">
+                          {Math.round(Math.abs(drawCurrent.x - drawStart.x) * 100)}% × {Math.round(Math.abs(drawCurrent.y - drawStart.y) * 100)}%
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -752,7 +939,7 @@ const LayoutEditor = () => {
                     <Input
                       id="slot-x"
                       type="number"
-                      step="0.01"
+                      step={inputStep}
                       min="0"
                       max="1"
                       value={selectedSlot.x}
@@ -764,7 +951,7 @@ const LayoutEditor = () => {
                     <Input
                       id="slot-y"
                       type="number"
-                      step="0.01"
+                      step={inputStep}
                       min="0"
                       max="1"
                       value={selectedSlot.y}
@@ -776,7 +963,7 @@ const LayoutEditor = () => {
                     <Input
                       id="slot-w"
                       type="number"
-                      step="0.01"
+                      step={inputStep}
                       min="0"
                       max="1"
                       value={selectedSlot.w}
@@ -788,7 +975,7 @@ const LayoutEditor = () => {
                     <Input
                       id="slot-h"
                       type="number"
-                      step="0.01"
+                      step={inputStep}
                       min="0"
                       max="1"
                       value={selectedSlot.h}
@@ -842,7 +1029,7 @@ const LayoutEditor = () => {
                             <Label className="text-xs text-muted-foreground">X ({(slot.x * 100).toFixed(0)}%)</Label>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={inputStep}
                               min="0"
                               max="1"
                               value={slot.x}
@@ -853,7 +1040,7 @@ const LayoutEditor = () => {
                             <Label className="text-xs text-muted-foreground">Y ({(slot.y * 100).toFixed(0)}%)</Label>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={inputStep}
                               min="0"
                               max="1"
                               value={slot.y}
@@ -864,7 +1051,7 @@ const LayoutEditor = () => {
                             <Label className="text-xs text-muted-foreground">Width ({(slot.w * 100).toFixed(0)}%)</Label>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={inputStep}
                               min="0"
                               max="1"
                               value={slot.w}
@@ -875,7 +1062,7 @@ const LayoutEditor = () => {
                             <Label className="text-xs text-muted-foreground">Height ({(slot.h * 100).toFixed(0)}%)</Label>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={inputStep}
                               min="0"
                               max="1"
                               value={slot.h}

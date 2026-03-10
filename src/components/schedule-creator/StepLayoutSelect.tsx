@@ -27,8 +27,19 @@ interface StepLayoutSelectProps {
   onSelectLayout: (layout: Layout) => void;
 }
 
-const defaultAspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
 const LAYOUTS_PER_PAGE = 100;
+
+const mergeAspectRatioOptions = (response?: { items?: ScreenAspectRatio[]; defaults?: ScreenAspectRatio[] }) => {
+  const combined = [...(response?.items ?? []), ...(response?.defaults ?? [])];
+  const seen = new Set<string>();
+
+  return combined.filter((option): option is ScreenAspectRatio & { aspect_ratio: string } => {
+    if (!option.aspect_ratio) return false;
+    if (seen.has(option.aspect_ratio)) return false;
+    seen.add(option.aspect_ratio);
+    return true;
+  });
+};
 
 export function StepLayoutSelect({ selectedLayout, onSelectLayout }: StepLayoutSelectProps) {
   const navigate = useNavigate();
@@ -65,24 +76,18 @@ export function StepLayoutSelect({ selectedLayout, onSelectLayout }: StepLayoutS
     queryFn: () =>
       screensApi.listAspectRatios({
         search: debouncedSearchTerm || undefined,
+        configured_only: true,
       }),
     keepPreviousData: true,
   });
 
   const aspectRatioOptions = useMemo<ScreenAspectRatio[]>(() => {
-    const items = aspectRatioResponse?.items ?? [];
+    const resolved = mergeAspectRatioOptions(aspectRatioResponse);
     if (isSearchActive) {
-      return items;
+      return resolved;
     }
-    if (items.length > 0) {
-      return items;
-    }
-    return defaultAspectRatios.map((ratio) => ({
-      id: `fallback-${ratio}`,
-      name: ratio,
-      aspect_ratio: ratio,
-    }));
-  }, [aspectRatioResponse?.items, isSearchActive]);
+    return resolved;
+  }, [aspectRatioResponse, isSearchActive]);
 
   const layouts = layoutsResponse?.items ?? [];
 
@@ -174,11 +179,17 @@ export function StepLayoutSelect({ selectedLayout, onSelectLayout }: StepLayoutS
               </div>
             )}
             {aspectRatioOptions.map((option) => (
-              <SelectItem key={`${option.id}-${option.aspect_ratio}`} value={option.aspect_ratio}>
+              <SelectItem
+                key={`${option.id ?? option.aspect_ratio}-${option.aspect_ratio}`}
+                value={option.aspect_ratio}
+              >
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">{option.aspect_ratio}</span>
-                  {option.name && option.name !== option.aspect_ratio && (
-                    <span className="text-xs text-muted-foreground">{option.name}</span>
+                  {(option.aspect_ratio_name || option.name) &&
+                    (option.aspect_ratio_name || option.name) !== option.aspect_ratio && (
+                    <span className="text-xs text-muted-foreground">
+                      {option.aspect_ratio_name || option.name}
+                    </span>
                   )}
                 </div>
               </SelectItem>

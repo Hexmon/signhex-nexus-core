@@ -363,13 +363,16 @@ export interface Screen {
 }
 
 export interface ScreenAspectRatio {
-  id: string;
+  id: string | null;
   name: string;
-  aspect_ratio: string;
+  aspect_ratio: string | null;
+  aspect_ratio_name?: string | null;
+  is_fallback?: boolean;
 }
 
 export interface ScreenAspectRatioListResponse {
   items: ScreenAspectRatio[];
+  defaults?: ScreenAspectRatio[];
 }
 
 export interface ScreenStatus {
