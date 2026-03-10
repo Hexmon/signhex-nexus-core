@@ -304,7 +304,7 @@ export default function MediaLibrary() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center justify-between">
                   <span className="truncate">{resolveMediaLabel(item)}</span>
-                  <Badge variant="outline">{item.content_type || "unknown"}</Badge>
+                  <Badge variant="outline">{item.type || "unknown"}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
@@ -384,7 +384,8 @@ export default function MediaLibrary() {
                   </Badge>
                 )}
                 <div className="text-xs">
-                  Ready object: {item.ready_object_id ?? "pending"} · Thumbnail: {item.thumbnail_object_id ?? "pending"}
+                  {/* Status : {item.status ?? "PENDING"} · Thumbnail: {item.thumbnail_object_id ?? "pending"} */}
+                  Status : {item?.status ?? "PENDING"} 
                 </div>
               </CardContent>
             </Card>
