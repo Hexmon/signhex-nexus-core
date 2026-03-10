@@ -379,12 +379,73 @@ export interface ScreenStatus {
   uptime_seconds?: number;
 }
 
+export type ScreenPlaybackSource =
+  | "EMERGENCY"
+  | "HEARTBEAT"
+  | "SCHEDULE"
+  | "DEFAULT"
+  | "UNKNOWN"
+  | string;
+
+export interface ScreenPublishSummary {
+  publish_id?: string | null;
+  schedule_id?: string | null;
+  snapshot_id?: string | null;
+  published_at?: string | null;
+  schedule_start_at?: string | null;
+  schedule_end_at?: string | null;
+}
+
+export interface ScreenPlaybackSummary {
+  source?: ScreenPlaybackSource;
+  is_live?: boolean;
+  current_media_id?: string | null;
+  current_schedule_id?: string | null;
+  current_item_id?: string | null;
+  started_at?: string | null;
+  ends_at?: string | null;
+  heartbeat_received_at?: string | null;
+  last_proof_of_play_at?: string | null;
+  current_media?: MediaAsset | null;
+}
+
+export interface ScreenEmergencySummary {
+  media_url?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ScreenOverviewItem extends Screen {
+  current_schedule_id?: string | null;
+  current_media_id?: string | null;
+  active_items?: ScheduleItem[];
+  upcoming_items?: ScheduleItem[];
+  booked_until?: string | null;
+  publish?: ScreenPublishSummary | null;
+  playback?: ScreenPlaybackSummary | null;
+  emergency?: ScreenEmergencySummary | null;
+}
+
 export interface NowPlaying {
   screen_id: string;
   media_id?: string;
   media_name?: string;
   started_at?: string;
   schedule_id?: string;
+}
+
+export interface ScreenNowPlayingResponse {
+  server_time?: string;
+  screen_id: string;
+  status?: string;
+  last_heartbeat_at?: string | null;
+  current_schedule_id?: string | null;
+  current_media_id?: string | null;
+  publish?: ScreenPublishSummary | null;
+  active_items?: ScheduleItem[];
+  upcoming_items?: ScheduleItem[];
+  booked_until?: string | null;
+  playback?: ScreenPlaybackSummary | null;
+  emergency?: ScreenEmergencySummary | null;
 }
 
 export interface ScreenAvailability {
@@ -443,6 +504,9 @@ export interface ScreenGroup {
   name: string;
   description?: string | null;
   screen_ids?: string[];
+  active_items?: ScheduleItem[];
+  upcoming_items?: ScheduleItem[];
+  booked_until?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -467,7 +531,8 @@ export interface ScreenGroupNowPlaying {
 }
 
 export interface ScreensOverview {
-  screens: Screen[];
+  server_time?: string;
+  screens: ScreenOverviewItem[];
   groups: ScreenGroup[];
   now_playing: NowPlaying[];
   stats?: {
@@ -476,6 +541,29 @@ export interface ScreensOverview {
     offline_screens: number;
     total_groups: number;
   };
+}
+
+export interface ScreensSubscribeAck {
+  subscribed_all?: boolean;
+  subscribed?: string[];
+  rejected?: string[];
+}
+
+export interface ScreensSyncAck {
+  server_time?: string;
+  screens: ScreenOverviewItem[];
+  groups?: ScreenGroup[];
+}
+
+export interface ScreenStateUpdateEvent {
+  server_time?: string;
+  screen: ScreenOverviewItem;
+}
+
+export interface ScreenRefreshRequiredEvent {
+  reason?: "PUBLISH" | "EMERGENCY" | "GROUP_MEMBERSHIP" | string;
+  screen_ids?: string[];
+  group_ids?: string[];
 }
 
 export interface DevicePairing {

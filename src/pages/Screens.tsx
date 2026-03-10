@@ -1,6 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Monitor, Plus, MapPin, Power, Users, QrCode, Eye, Trash2, Pencil } from "lucide-react";
+import {
+  AlertTriangle,
+  Eye,
+  Flame,
+  MapPin,
+  Monitor,
+  Pencil,
+  Plus,
+  Power,
+  QrCode,
+  RadioTower,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { screensApi } from "@/api/domains/screens";
 import { devicePairingApi } from "@/api/domains/devicePairing";
-import type { Screen, ScreenGroup, DevicePairing } from "@/api/types";
+import type { DevicePairing, ScreenGroup, ScreenOverviewItem } from "@/api/types";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SearchBar } from "@/components/common/SearchBar";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -30,6 +43,28 @@ import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 import { toast } from "sonner";
 import { CreateGroupModal } from "@/components/screens/CreateGroupModal";
 import { UpdateGroupModal } from "@/components/screens/UpdateGroupModal";
+import { useScreensRealtime } from "@/hooks/screens/useScreensRealtime";
+import {
+  getPlaybackTimingLabel,
+  getServerClockOffsetMs,
+  getServerNowFromOffset,
+  isHeartbeatStale,
+} from "@/hooks/screens/screensRealtimeUtils";
+
+const getFallbackPlaybackLabel = (screen: ScreenOverviewItem) => {
+  if (screen.playback?.source === "EMERGENCY") return "Emergency takeover is active";
+  if (screen.status === "OFFLINE") return "Screen is offline";
+  if (!screen.publish && screen.playback?.source === "DEFAULT") return "Default media fallback";
+  if (!screen.publish && screen.playback?.source === "UNKNOWN") return "Nothing currently scheduled";
+  return "Waiting for live playback";
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "N/A";
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "N/A";
+  return new Date(timestamp).toLocaleString();
+};
 
 export default function Screens() {
   const queryClient = useQueryClient();
@@ -40,15 +75,12 @@ export default function Screens() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [formState, setFormState] = useState({ name: "", location: "" });
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
+  const [clockTick, setClockTick] = useState(() => Date.now());
 
-  const { data: screensData, isLoading, isFetching } = useQuery({
-    queryKey: queryKeys.screens,
-    queryFn: () => screensApi.list({ page: 1, limit: 100 }),
-  });
-
-  const { data: screenGroupsData } = useQuery({
-    queryKey: queryKeys.screenGroups,
-    queryFn: () => screensApi.listGroups({ page: 1, limit: 100 }),
+  const overviewQuery = useQuery({
+    queryKey: queryKeys.screensOverview({ includeMedia: true }),
+    queryFn: () => screensApi.getOverview({ include_media: true }),
   });
 
   const { data: pairingsData } = useQuery({
@@ -56,14 +88,38 @@ export default function Screens() {
     queryFn: () => devicePairingApi.list({ page: 1, limit: 10 }),
   });
 
-  const screens = useMemo(() => screensData?.items ?? [], [screensData]);
-  const screenGroups = useMemo(() => screenGroupsData?.items ?? [], [screenGroupsData]);
+  const screens = useMemo(() => overviewQuery.data?.screens ?? [], [overviewQuery.data?.screens]);
+  const screenGroups = useMemo(() => overviewQuery.data?.groups ?? [], [overviewQuery.data?.groups]);
   const pairings = useMemo(() => pairingsData?.items ?? [], [pairingsData]);
+  const selectedScreen = useMemo(
+    () => screens.find((screen) => screen.id === selectedScreenId) ?? null,
+    [screens, selectedScreenId],
+  );
+
+  useEffect(() => {
+    setServerClockOffsetMs(getServerClockOffsetMs(overviewQuery.data?.server_time));
+  }, [overviewQuery.data?.server_time]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setClockTick(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const serverNowMs = useMemo(
+    () => getServerNowFromOffset(serverClockOffsetMs, clockTick),
+    [clockTick, serverClockOffsetMs],
+  );
+
+  const { rejectedScreenIds, pendingEmergencyScreenIds } = useScreensRealtime({
+    activeScreenId: selectedScreenId,
+    enabled: true,
+  });
 
   const createScreen = useSafeMutation({
     mutationFn: (payload: { name: string; location?: string }) => screensApi.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
       setIsAddDialogOpen(false);
       setFormState({ name: "", location: "" });
       toast.success("Screen created successfully");
@@ -74,6 +130,7 @@ export default function Screens() {
     mutationFn: (id: string) => screensApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
       toast.success("Screen deleted successfully");
     },
   }, "Unable to delete screen.");
@@ -84,6 +141,7 @@ export default function Screens() {
       queryClient.invalidateQueries({ queryKey: queryKeys.screenGroups });
       queryClient.invalidateQueries({ queryKey: ["available-screens"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
       toast.success("Group deleted successfully");
     },
   }, "Unable to delete group.");
@@ -100,14 +158,14 @@ export default function Screens() {
           id.toLowerCase().includes(q)
         );
       }),
-    [screens, search]
+    [screens, search],
   );
 
   const stats = useMemo(() => {
     const total = screens.length;
-    const active = screens.filter((s) => s.status === "ACTIVE").length;
-    const offline = screens.filter((s) => s.status === "OFFLINE").length;
-    const inactive = screens.filter((s) => s.status === "INACTIVE").length;
+    const active = screens.filter((screen) => screen.status === "ACTIVE").length;
+    const offline = screens.filter((screen) => screen.status === "OFFLINE").length;
+    const inactive = screens.filter((screen) => screen.status === "INACTIVE").length;
     return { total, active, offline, inactive };
   }, [screens]);
 
@@ -115,16 +173,18 @@ export default function Screens() {
     deleteScreen.mutate(screenId);
   };
 
-  const handleDeleteGroup = (groupId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteGroup = (groupId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
     deleteGroup.mutate(groupId);
-    toast.success("Group deleted successfully");
   };
 
-  const handleEditGroup = (groupId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleEditGroup = (groupId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
     setSelectedGroupId(groupId);
   };
+
+  const screensErrorMessage =
+    overviewQuery.error instanceof Error ? overviewQuery.error.message : "Unable to load screens.";
 
   return (
     <div className="space-y-6">
@@ -136,7 +196,7 @@ export default function Screens() {
         onAction={() => setIsAddDialogOpen(true)}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Screens"
           value={stats.total}
@@ -169,62 +229,115 @@ export default function Screens() {
             />
           </div>
           <div className="text-sm text-muted-foreground">
-            {isFetching ? "Refreshing..." : `${filteredScreens.length} screens`}
+            {overviewQuery.isFetching ? "Refreshing live playback..." : `${filteredScreens.length} screens`}
           </div>
         </div>
       </Card>
 
-      {isLoading ? (
+      {overviewQuery.isLoading && !overviewQuery.data ? (
         <LoadingIndicator fullScreen label="Loading screens..." />
+      ) : overviewQuery.isError && !overviewQuery.data ? (
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center gap-3 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <div>
+              <p className="font-semibold">Unable to load screens</p>
+              <p className="text-sm text-muted-foreground">{screensErrorMessage}</p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => overviewQuery.refetch()}
+            className="w-fit"
+          >
+            Retry
+          </Button>
+        </Card>
       ) : filteredScreens.length === 0 ? (
         <EmptyState
           title="No screens found"
           description="Try adjusting your search or add a new screen."
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredScreens.map((screen) => {
-            const { id, name, location, status, last_heartbeat_at } = screen;
+            const { id, name, location, status, last_heartbeat_at, playback, publish, active_items, upcoming_items } = screen;
+            const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
+            const isOffline = status === "OFFLINE";
+            const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
+            const playbackLabel =
+              playback?.current_media?.name ||
+              playback?.current_media_id ||
+              getFallbackPlaybackLabel(screen);
+            const timingLabel = getPlaybackTimingLabel(
+              playback?.started_at,
+              playback?.ends_at,
+              serverNowMs,
+            );
 
             return (
-              <Card key={id} className="p-5 hover:shadow-lg transition-shadow space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
+              <Card key={id} className="p-5 hover:shadow-lg transition-shadow space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
                     <div
-                      className={`p-2 rounded-lg ${status === "ACTIVE"
-                        ? "bg-green-500/10 text-green-600"
-                        : status === "OFFLINE"
+                      className={`p-2 rounded-lg ${
+                        isEmergency
                           ? "bg-red-500/10 text-red-600"
-                          : "bg-yellow-500/10 text-yellow-600"
-                        }`}
+                          : isOffline
+                            ? "bg-red-500/10 text-red-600"
+                            : status === "ACTIVE"
+                              ? "bg-green-500/10 text-green-600"
+                              : "bg-yellow-500/10 text-yellow-600"
+                      }`}
                     >
-                      <Monitor className="h-5 w-5" />
+                      {isEmergency ? <Flame className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
                     </div>
-                    <div>
-                      <h3 className="font-semibold">{name}</h3>
-                      <p className="text-xs text-muted-foreground font-mono">{id}</p>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{name}</h3>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{id}</p>
                     </div>
                   </div>
                   <StatusBadge status={(status || "offline").toLowerCase()} />
                 </div>
 
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    <span>{location || "Unassigned"}</span>
-                  </div>
-                  {last_heartbeat_at && (
-                    <div className="text-xs">
-                      Last heartbeat: {new Date(last_heartbeat_at).toLocaleString()}
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {isEmergency && <Badge variant="destructive">Emergency</Badge>}
+                  {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                  {hasStaleHeartbeat && !isOffline && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-700">
+                      Delayed heartbeat
+                    </Badge>
+                  )}
+                  {!publish && playback?.source === "DEFAULT" && (
+                    <Badge variant="outline">Default fallback</Badge>
+                  )}
+                  {!publish && playback?.source === "UNKNOWN" && (
+                    <Badge variant="outline">Nothing scheduled</Badge>
                   )}
                 </div>
 
-                <div className="flex gap-2">
-                  <Badge variant="outline">{status || "UNKNOWN"}</Badge>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{location || "Unassigned"}</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <RadioTower className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{playbackLabel}</p>
+                      <p className="text-xs">{timingLabel || "Waiting for next playback change"}</p>
+                    </div>
+                  </div>
+                  <div className="text-xs">
+                    Last heartbeat: {formatDateTime(last_heartbeat_at)}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span>Active items: {active_items?.length ?? 0}</span>
+                    <span>Upcoming: {upcoming_items?.length ?? 0}</span>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-1">
                   <Button
                     size="sm"
                     variant="outline"
@@ -267,14 +380,14 @@ export default function Screens() {
           </div>
 
           <div className="divide-y rounded-md border max-h-72 overflow-auto">
-            {screenGroupsData?.items.length === 0 ? (
+            {screenGroups.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground text-center">
                 No groups yet. Create one to organize your screens.
               </div>
             ) : (
               <>
-                {screenGroups.map((group) => {
-                  const { id, name, description, screen_ids } = group;
+                {screenGroups.map((group: ScreenGroup) => {
+                  const { id, name, description, screen_ids, booked_until, active_items, upcoming_items } = group;
 
                   return (
                     <div
@@ -286,15 +399,22 @@ export default function Screens() {
                         <p className="text-xs text-muted-foreground truncate">
                           {description || "No description"}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {screen_ids?.length || 0} screens
-                        </p>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>{screen_ids?.length || 0} screens</span>
+                          <span>Active {active_items?.length ?? 0}</span>
+                          <span>Upcoming {upcoming_items?.length ?? 0}</span>
+                        </div>
+                        {booked_until && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Booked until: {formatDateTime(booked_until)}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 ml-2">
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={(e) => handleEditGroup(id, e)}
+                          onClick={(event) => handleEditGroup(id, event)}
                           className="h-8 w-8 p-0"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -302,7 +422,7 @@ export default function Screens() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={(e) => handleDeleteGroup(id, e)}
+                          onClick={(event) => handleDeleteGroup(id, event)}
                           disabled={deleteGroup.isPending}
                           className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                         >
@@ -323,10 +443,7 @@ export default function Screens() {
               <QrCode className="h-4 w-4 text-primary" />
               <h2 className="font-semibold">Device Pairings</h2>
             </div>
-            <Button
-              size="sm"
-              onClick={() => setIsPairModalOpen(true)}
-            >
+            <Button size="sm" onClick={() => setIsPairModalOpen(true)}>
               <Plus className="h-3 w-3 mr-1" />
               Pair Device
             </Button>
@@ -343,7 +460,7 @@ export default function Screens() {
               </div>
             ) : (
               <>
-                {pairings.map((pair) => {
+                {pairings.map((pair: DevicePairing) => {
                   const { id, pairing_code, status, device_id, expires_at, used_at, created_at } = pair;
 
                   return (
@@ -367,15 +484,9 @@ export default function Screens() {
                         </p>
                       )}
                       <div className="text-[10px] text-muted-foreground space-y-0.5">
-                        {created_at && (
-                          <p>Created: {new Date(created_at).toLocaleString()}</p>
-                        )}
-                        {used_at && (
-                          <p>Used: {new Date(used_at).toLocaleString()}</p>
-                        )}
-                        {expires_at && status !== "used" && (
-                          <p>Expires: {new Date(expires_at).toLocaleString()}</p>
-                        )}
+                        {created_at && <p>Created: {formatDateTime(created_at)}</p>}
+                        {used_at && <p>Used: {formatDateTime(used_at)}</p>}
+                        {expires_at && status !== "used" && <p>Expires: {formatDateTime(expires_at)}</p>}
                       </div>
                     </div>
                   );
@@ -400,7 +511,7 @@ export default function Screens() {
               <Input
                 id="screen-name"
                 value={formState.name}
-                onChange={(e) => setFormState((prev) => ({ ...prev, name: e.target.value }))}
+                onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
                 placeholder="e.g., Main Lobby Display"
               />
             </div>
@@ -409,7 +520,7 @@ export default function Screens() {
               <Input
                 id="location"
                 value={formState.location}
-                onChange={(e) => setFormState((prev) => ({ ...prev, location: e.target.value }))}
+                onChange={(event) => setFormState((prev) => ({ ...prev, location: event.target.value }))}
                 placeholder="e.g., Building A - Lobby"
               />
             </div>
@@ -425,7 +536,7 @@ export default function Screens() {
             <Button
               onClick={() => createScreen.mutate({
                 name: formState.name.trim(),
-                location: formState.location.trim() || undefined
+                location: formState.location.trim() || undefined,
               })}
               disabled={createScreen.isPending || !formState.name.trim()}
             >
@@ -435,20 +546,14 @@ export default function Screens() {
         </DialogContent>
       </Dialog>
 
-      <PairDeviceModal
-        open={isPairModalOpen}
-        onOpenChange={setIsPairModalOpen}
-      />
+      <PairDeviceModal open={isPairModalOpen} onOpenChange={setIsPairModalOpen} />
 
-      <CreateGroupModal
-        open={isGroupModalOpen}
-        onOpenChange={setIsGroupModalOpen}
-      />
+      <CreateGroupModal open={isGroupModalOpen} onOpenChange={setIsGroupModalOpen} />
 
       {selectedGroupId && (
         <UpdateGroupModal
           groupId={selectedGroupId}
-          open={!!selectedGroupId}
+          open={Boolean(selectedGroupId)}
           onOpenChange={(open) => !open && setSelectedGroupId(null)}
         />
       )}
@@ -456,7 +561,10 @@ export default function Screens() {
       {selectedScreenId && (
         <ScreenDetailsModal
           screenId={selectedScreenId}
-          open={!!selectedScreenId}
+          screenName={selectedScreen?.name}
+          open={Boolean(selectedScreenId)}
+          realtimeRejected={rejectedScreenIds.includes(selectedScreenId)}
+          pendingEmergency={pendingEmergencyScreenIds.includes(selectedScreenId)}
           onOpenChange={(open) => !open && setSelectedScreenId(null)}
         />
       )}

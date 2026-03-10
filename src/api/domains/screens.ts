@@ -7,6 +7,7 @@ import type {
   ScreenGroup,
   ScreenStatus,
   NowPlaying,
+  ScreenNowPlayingResponse,
   ScreenAvailability,
   ScreenSnapshot,
   ScreenGroupAvailability,
@@ -50,33 +51,38 @@ export const screensApi = {
       method: "DELETE",
     }),
 
-  getOverview: () =>
+  getOverview: (query?: { include_media?: boolean }) =>
     apiClient.request<ScreensOverview>({
-      path: "/screens/overview",
+      path: endpoints.screens.overview,
       method: "GET",
+      query,
     }),
 
   getStatus: (screenId: string) =>
     apiClient.request<ScreenStatus>({
-      path: `/screens/${screenId}/status`,
+      path: endpoints.screens.status(screenId),
       method: "GET",
     }),
 
-  getNowPlaying: (screenId: string) =>
-    apiClient.request<NowPlaying>({
-      path: `/screens/${screenId}/now-playing`,
+  getNowPlaying: (
+    screenId: string,
+    query?: { include_media?: boolean; include_urls?: boolean },
+  ) =>
+    apiClient.request<ScreenNowPlayingResponse>({
+      path: endpoints.screens.nowPlaying(screenId),
       method: "GET",
+      query,
     }),
 
   getAvailability: (screenId: string) =>
     apiClient.request<ScreenAvailability>({
-      path: `/screens/${screenId}/availability`,
+      path: endpoints.screens.availability(screenId),
       method: "GET",
     }),
 
   getSnapshot: (screenId: string, includeUrls = true) =>
     apiClient.request<ScreenSnapshot>({
-      path: `/screens/${screenId}/snapshot`,
+      path: endpoints.screens.snapshot(screenId),
       method: "GET",
       query: { include_urls: includeUrls },
     }),

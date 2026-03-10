@@ -139,6 +139,11 @@ export const endpoints = {
   screens: {
     base: "/screens",
     byId: (screenId: string) => `/screens/${screenId}`,
+    overview: "/screens/overview",
+    nowPlaying: (screenId: string) => `/screens/${screenId}/now-playing`,
+    status: (screenId: string) => `/screens/${screenId}/status`,
+    availability: (screenId: string) => `/screens/${screenId}/availability`,
+    snapshot: (screenId: string) => `/screens/${screenId}/snapshot`,
     groups: "/screen-groups",
     groupById: (groupId: string) => `/screen-groups/${groupId}`,
     aspectRatios: "/screens/aspect-ratios",

@@ -1,6 +1,19 @@
 export const queryKeys = {
   departments: ["departments"] as const,
   screens: ["screens"] as const,
+  screensOverview: (filters?: { includeMedia?: boolean }) =>
+    ["screens", "overview", Boolean(filters?.includeMedia)] as const,
+  screenNowPlaying: (
+    screenId?: string,
+    filters?: { includeMedia?: boolean; includeUrls?: boolean },
+  ) =>
+    [
+      "screens",
+      "now-playing",
+      screenId,
+      Boolean(filters?.includeMedia),
+      Boolean(filters?.includeUrls),
+    ] as const,
   screenGroups: ["screen-groups"] as const,
   screenSnapshot: (screenId?: string) => ["screens", "snapshot", screenId] as const,
   screenGroupSnapshot: (groupId?: string) => ["screen-groups", "snapshot", groupId] as const,
