@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus, EyeOff, Eye } from "lucide-react";
+import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,9 +29,9 @@ import { useRolesList } from "@/hooks/useRolesApi";
 import { getRoleBadgeClass } from "@/lib/roleBadges";
 
 export default function Operators() {
-  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const operatorsQueryKey = ["users", "operators"] as const;
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null);
@@ -42,6 +42,7 @@ export default function Operators() {
     role_id: "",
     department_id: "",
     password: "",
+    confirm_password: "",
   });
   const [pendingActionUser, setPendingActionUser] = useState<ApiUser | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -49,12 +50,14 @@ export default function Operators() {
   const [isActivateConfirmOpen, setIsActivateConfirmOpen] = useState(false);
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: () => usersApi.list({ page: 1, limit: 100 }),
+    queryKey: operatorsQueryKey,
+    queryFn: () => usersApi.list({ page: 1, limit: 100, role: "OPERATOR" }),
   });
 
   const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
   const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+  const operatorRole = useMemo(() => roles.find((role) => role.name === "OPERATOR") ?? null, [roles]);
+  const passwordMismatch = !selectedUser && Boolean(formData.confirm_password) && formData.password !== formData.confirm_password;
 
   useEffect(() => {
     if (isError) {
@@ -88,6 +91,7 @@ export default function Operators() {
         role_id: selectedUser.role_id,
         department_id: selectedUser.department_id ?? "",
         password: "",
+        confirm_password: "",
       });
     } else {
       setFormData({
@@ -97,18 +101,23 @@ export default function Operators() {
         role_id: "",
         department_id: "",
         password: "",
+        confirm_password: "",
       });
     }
   }, [selectedUser, isFormOpen]);
 
   useEffect(() => {
-    if (!formData.role_id && roles.length > 0) {
-      setFormData((prev) => ({ ...prev, role_id: roles[0].id }));
+    if (!selectedUser && !formData.role_id && roles.length > 0) {
+      setFormData((prev) => ({ ...prev, role_id: operatorRole?.id ?? roles[0].id }));
     }
-  }, [formData.role_id, roles]);
+  }, [formData.role_id, operatorRole?.id, roles, selectedUser]);
 
   const createOrUpdate = useSafeMutation({
     mutationFn: async () => {
+      if (!selectedUser && formData.password !== formData.confirm_password) {
+        throw new Error("Password and confirm password must match.");
+      }
+
       if (selectedUser) {
         // Update existing user
         const payload = {
@@ -134,6 +143,7 @@ export default function Operators() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
       setIsFormOpen(false);
       setSelectedUser(null);
     },
@@ -143,6 +153,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
       setPendingActionUser(null);
       setIsDeleteConfirmOpen(false);
     },
@@ -165,6 +176,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.update(id, { is_active: true } as Partial<ApiUser>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
       setPendingActionUser(null);
       setIsActivateConfirmOpen(false);
     },
@@ -332,34 +344,35 @@ export default function Operators() {
               </div>
             </div>
             {!selectedUser && (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     value={formData.password}
                     onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Enter initial password"
                     disabled={createOrUpdate.isPending}
-                    className="pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    disabled={createOrUpdate.isPending}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={formData.confirm_password}
+                    onChange={(e) => setFormData((p) => ({ ...p, confirm_password: e.target.value }))}
+                    placeholder="Confirm password"
+                    disabled={createOrUpdate.isPending}
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
                   Set an initial password for the new operator with atleast 8 characters with special character, number, and uppercase letter.
                 </p>
+                {passwordMismatch ? (
+                  <p className="col-span-2 text-xs text-destructive">Password and confirm password must match.</p>
+                ) : null}
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
@@ -385,7 +398,7 @@ export default function Operators() {
                     <SelectContent>
                       {roles.map((role) => (
                         <SelectItem key={role.id} value={role.id}>
-                          {role.name}
+                          {role.name === "OPERATOR" ? "Operator" : role.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -413,7 +426,7 @@ export default function Operators() {
               disabled={
                 createOrUpdate.isPending ||
                 !formData.email.trim() ||
-                (!selectedUser && !formData.password.trim()) ||
+                (!selectedUser && (!formData.password.trim() || !formData.confirm_password.trim() || passwordMismatch)) ||
                 !formData.role_id
               }
             >

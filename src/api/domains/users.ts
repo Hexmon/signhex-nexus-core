@@ -66,7 +66,14 @@ export const usersApi = {
       method: "POST",
     }),
 
-  list: (params?: PaginationParams & { role_id?: string; department_id?: string; is_active?: boolean }) =>
+  list: (
+    params?: PaginationParams & {
+      role_id?: string;
+      role?: string;
+      department_id?: string;
+      is_active?: boolean;
+    },
+  ) =>
     apiClient.request<PaginatedResponse<User>>({
       path: endpoints.users.base,
       method: "GET",
