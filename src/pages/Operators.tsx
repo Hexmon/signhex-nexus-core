@@ -27,11 +27,14 @@ import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { useRolesList } from "@/hooks/useRolesApi";
 import { getRoleBadgeClass } from "@/lib/roleBadges";
+import { PageNavigation } from "@/components/common/PageNavigation";
+
+const PAGE_SIZE = 9;
 
 export default function Operators() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const operatorsQueryKey = ["users", "operators"] as const;
+  const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null);
@@ -48,10 +51,12 @@ export default function Operators() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isActivateConfirmOpen, setIsActivateConfirmOpen] = useState(false);
+  const operatorsQueryKey = ["users", "operators", page, PAGE_SIZE] as const;
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: operatorsQueryKey,
-    queryFn: () => usersApi.list({ page: 1, limit: 100, role: "OPERATOR" }),
+    queryFn: () => usersApi.list({ page, limit: PAGE_SIZE, role: "OPERATOR" }),
+    placeholderData: (previousData) => previousData,
   });
 
   const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
@@ -81,6 +86,17 @@ export default function Operators() {
       }),
     [users, searchQuery]
   );
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   useEffect(() => {
     if (selectedUser) {
@@ -143,7 +159,7 @@ export default function Operators() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setIsFormOpen(false);
       setSelectedUser(null);
     },
@@ -153,7 +169,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setPendingActionUser(null);
       setIsDeleteConfirmOpen(false);
     },
@@ -176,7 +192,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.update(id, { is_active: true } as Partial<ApiUser>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setPendingActionUser(null);
       setIsActivateConfirmOpen(false);
     },
@@ -200,7 +216,7 @@ export default function Operators() {
           <SearchBar placeholder="Search operators..." onSearch={setSearchQuery} initialValue={searchQuery} />
         </div>
         <div className="text-sm text-muted-foreground">
-          {isFetching ? "Refreshing..." : `${filtered.length} operators`}
+          {isFetching ? "Refreshing..." : `${data?.total ?? filtered.length} operators`}
         </div>
       </div>
 
@@ -209,9 +225,10 @@ export default function Operators() {
       ) : filtered.length === 0 ? (
         <EmptyState title="No operators found" description="Try adjusting your search or add a new operator." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((operator: ApiUser) => (
-            <Card key={operator.id} className="hover:shadow-md transition-shadow">
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((operator: ApiUser) => (
+              <Card key={operator.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-full bg-primary/10">
@@ -300,8 +317,10 @@ export default function Operators() {
                   </Badge>
                 )}
               </CardContent>
-            </Card>
-          ))}
+              </Card>
+            ))}
+          </div>
+          <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>

@@ -35,6 +35,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { SearchBar } from "@/components/common/SearchBar";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
+import { PageNavigation } from "@/components/common/PageNavigation";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
@@ -50,6 +51,8 @@ import {
   getServerNowFromOffset,
   isHeartbeatStale,
 } from "@/hooks/screens/screensRealtimeUtils";
+
+const PAGE_SIZE = 9;
 
 const getFallbackPlaybackLabel = (screen: ScreenOverviewItem) => {
   if (screen.playback?.source === "EMERGENCY") return "Emergency takeover is active";
@@ -77,6 +80,7 @@ export default function Screens() {
   const [formState, setFormState] = useState({ name: "", location: "" });
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
+  const [page, setPage] = useState(1);
 
   const overviewQuery = useQuery({
     queryKey: queryKeys.screensOverview({ includeMedia: true }),
@@ -160,6 +164,21 @@ export default function Screens() {
       }),
     [screens, search],
   );
+  const totalPages = Math.max(1, Math.ceil(filteredScreens.length / PAGE_SIZE));
+  const paginatedScreens = useMemo(
+    () => filteredScreens.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredScreens, page],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const stats = useMemo(() => {
     const total = screens.length;
@@ -259,8 +278,9 @@ export default function Screens() {
           description="Try adjusting your search or add a new screen."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredScreens.map((screen) => {
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {paginatedScreens.map((screen) => {
             const { id, name, location, status, last_heartbeat_at, playback, publish, active_items, upcoming_items } = screen;
             const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
             const isOffline = status === "OFFLINE";
@@ -358,7 +378,9 @@ export default function Screens() {
                 </div>
               </Card>
             );
-          })}
+            })}
+          </div>
+          <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
 

@@ -31,15 +31,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
@@ -50,8 +41,9 @@ import { Input } from "@/components/ui/input";
 import { layoutsApi } from "@/api/domains/layouts";
 import { queryKeys } from "@/api/queryKeys";
 import type { LayoutItem, LayoutListParams } from "@/api/types";
+import { PageNavigation } from "@/components/common/PageNavigation";
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 9;
 const aspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
 
 function formatRelativeTime(dateString: string): string {
@@ -172,39 +164,14 @@ const Layouts = () => {
   const layouts = data?.items ?? [];
   const totalPages =
     pagination.limit > 0 ? Math.max(1, Math.ceil(pagination.total / pagination.limit)) : 1;
-  const hasMultiplePages = pagination.total > pagination.limit;
-
-  const paginationPages = useMemo<Array<number | "ellipsis">>(() => {
-    if (!hasMultiplePages) return [];
-    const pages: Array<number | "ellipsis"> = [];
-    const start = Math.max(1, page - 2);
-    const end = Math.min(totalPages, page + 2);
-
-    if (start > 1) {
-      pages.push(1);
-      if (start > 2) {
-        pages.push("ellipsis");
-      }
-    }
-
-    for (let current = start; current <= end; current += 1) {
-      pages.push(current);
-    }
-
-    if (end < totalPages) {
-      if (end < totalPages - 1) {
-        pages.push("ellipsis");
-      }
-      pages.push(totalPages);
-    }
-
-    return pages;
-  }, [hasMultiplePages, page, totalPages]);
-
-  const canGoPrev = page > 1;
-  const canGoNext = page < totalPages;
   const canConfirmDelete =
     Boolean(deleteTarget && confirmationInput.trim() === deleteTarget.name);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const handleDelete = async () => {
     if (!deleteTarget || !canConfirmDelete) return;
@@ -398,63 +365,7 @@ const Layouts = () => {
         </div>
       )}
 
-      {/* Pagination */}
-      {hasMultiplePages && (
-        <div className="flex justify-end">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  aria-disabled={!canGoPrev}
-                  className={!canGoPrev ? "pointer-events-none opacity-50" : undefined}
-                  onClick={(event) => {
-                    if (!canGoPrev) {
-                      event.preventDefault();
-                      return;
-                    }
-                    event.preventDefault();
-                    setPage((prev) => Math.max(prev - 1, 1));
-                  }}
-                />
-              </PaginationItem>
-              {paginationPages.map((pageItem, index) =>
-                pageItem === "ellipsis" ? (
-                  <PaginationItem key={`ellipsis-${index}`}>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                ) : (
-                  <PaginationItem key={`page-${pageItem}`}>
-                    <PaginationLink
-                      href="#"
-                      isActive={pageItem === page}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        setPage(pageItem);
-                      }}
-                    >
-                      {pageItem}
-                    </PaginationLink>
-                  </PaginationItem>
-                ),
-              )}
-              <PaginationItem>
-                <PaginationNext
-                  aria-disabled={!canGoNext}
-                  className={!canGoNext ? "pointer-events-none opacity-50" : undefined}
-                  onClick={(event) => {
-                    if (!canGoNext) {
-                      event.preventDefault();
-                      return;
-                    }
-                    event.preventDefault();
-                    setPage((prev) => Math.min(prev + 1, totalPages));
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      )}
+      <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} className="flex justify-end" />
 
       <ConfirmDialog
         open={!!deleteTarget}
