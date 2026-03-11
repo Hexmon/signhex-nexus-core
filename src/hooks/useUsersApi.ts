@@ -5,7 +5,19 @@ import { ApiError } from "@/api/apiClient";
 import type { RoleId } from "@/api/types";
 import { mapUsersErrorToUx } from "@/lib/usersErrors";
 
-export const useUsersApi = () => {
+type UseUsersApiOptions = {
+    usersPage?: number;
+    usersLimit?: number;
+    invitationsPage?: number;
+    invitationsLimit?: number;
+};
+
+export const useUsersApi = ({
+    usersPage = 1,
+    usersLimit = 100,
+    invitationsPage = 1,
+    invitationsLimit = 100,
+}: UseUsersApiOptions = {}) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
 
@@ -14,24 +26,26 @@ export const useUsersApi = () => {
     ============================ */
 
     const listUsers = useQuery({
-        queryKey: ["users"],
-        queryFn: () => usersApi.list({ page: 1, limit: 100 }),
+        queryKey: ["users", usersPage, usersLimit],
+        queryFn: () => usersApi.list({ page: usersPage, limit: usersLimit }),
         retry: false,
         refetchOnWindowFocus: false,
         staleTime: 0, // always refetch when invalidated
+        placeholderData: (previousData) => previousData,
     });
 
     const listInvitations = useQuery({
-        queryKey: ["invitations"],
+        queryKey: ["invitations", invitationsPage, invitationsLimit],
         queryFn: () =>
             usersApi.listInvitations({
                 status: "pending",
-                page: 1,
-                limit: 100,
+                page: invitationsPage,
+                limit: invitationsLimit,
             }),
         retry: false,
         refetchOnWindowFocus: false,
         staleTime: 0,
+        placeholderData: (previousData) => previousData,
     });
 
     /* ============================

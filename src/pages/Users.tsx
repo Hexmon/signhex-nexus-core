@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Mail, Clock, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import { useUsersApi } from "@/hooks/useUsersApi";
 import { UserCard } from "@/components/users/UserCard";
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
 import { mapUsersErrorToUx } from "@/lib/usersErrors";
+import { PageNavigation } from "@/components/common/PageNavigation";
+
+const PAGE_SIZE = 9;
 
 export default function Users() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -24,40 +27,75 @@ export default function Users() {
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState("users");
+    const [usersPage, setUsersPage] = useState(1);
+    const [invitationsPage, setInvitationsPage] = useState(1);
 
-    const { listUsers, createUser, updateUser, deleteUser, listInvitations, inviteUser } = useUsersApi();
+    const { listUsers, createUser, updateUser, deleteUser, listInvitations, inviteUser } = useUsersApi({
+        usersPage,
+        usersLimit: PAGE_SIZE,
+        invitationsPage,
+        invitationsLimit: PAGE_SIZE,
+    });
     const { data, isLoading, error: usersError } = listUsers;
     const { data: invitationsData, isLoading: isLoadingInvitations, error: invitationsError } = listInvitations;
-    const users = data?.items || [];
-    const invitations = invitationsData?.items || [];
+    const users = useMemo(() => data?.items ?? [], [data?.items]);
+    const invitations = useMemo(() => invitationsData?.items ?? [], [invitationsData?.items]);
     const usersErrorMessage = usersError ? mapUsersErrorToUx(usersError, "Failed to load users") : null;
     const invitationsErrorMessage = invitationsError
         ? mapUsersErrorToUx(invitationsError, "Failed to load invitations")
         : null;
 
-    const filteredUsers = users.filter((user) => {
-        const query = searchQuery.toLowerCase();
-        const { email, first_name, last_name, role } = user;
+    const filteredUsers = useMemo(
+        () =>
+            users.filter((user) => {
+                const query = searchQuery.toLowerCase();
+                const { email, first_name, last_name, role } = user;
 
-        return (
-            query === "" ||
-            email.toLowerCase().includes(query) ||
-            (first_name || "").toLowerCase().includes(query) ||
-            (last_name || "").toLowerCase().includes(query) ||
-                (role || "").toLowerCase().includes(query)
-        );
-    });
+                return (
+                    query === "" ||
+                    email.toLowerCase().includes(query) ||
+                    (first_name || "").toLowerCase().includes(query) ||
+                    (last_name || "").toLowerCase().includes(query) ||
+                        (role || "").toLowerCase().includes(query)
+                );
+            }),
+        [users, searchQuery],
+    );
 
-    const filteredInvitations = invitations.filter((invitation) => {
-        const query = searchQuery.toLowerCase();
-        const { email, role } = invitation;
+    const filteredInvitations = useMemo(
+        () =>
+            invitations.filter((invitation) => {
+                const query = searchQuery.toLowerCase();
+                const { email, role } = invitation;
 
-        return (
-            query === "" ||
-            (email || "").toLowerCase().includes(query) ||
-            (role || "").toLowerCase().includes(query)
-        );
-    });
+                return (
+                    query === "" ||
+                    (email || "").toLowerCase().includes(query) ||
+                    (role || "").toLowerCase().includes(query)
+                );
+            }),
+        [invitations, searchQuery],
+    );
+
+    const usersTotalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+    const invitationsTotalPages = Math.max(1, Math.ceil((invitationsData?.total ?? 0) / PAGE_SIZE));
+
+    useEffect(() => {
+        setUsersPage(1);
+        setInvitationsPage(1);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (usersPage > usersTotalPages) {
+            setUsersPage(usersTotalPages);
+        }
+    }, [usersPage, usersTotalPages]);
+
+    useEffect(() => {
+        if (invitationsPage > invitationsTotalPages) {
+            setInvitationsPage(invitationsTotalPages);
+        }
+    }, [invitationsPage, invitationsTotalPages]);
 
     const handleCreateUser = (formData: UserFormData) => {
         createUser.mutate(
@@ -176,8 +214,8 @@ export default function Users() {
                     </div>
                     <div className="text-sm text-muted-foreground">
                         {activeTab === "users"
-                            ? `${filteredUsers.length} ${filteredUsers.length === 1 ? "user" : "users"}`
-                            : `${filteredInvitations.length} ${filteredInvitations.length === 1 ? "invitation" : "invitations"}`
+                            ? `${data?.total ?? filteredUsers.length} ${(data?.total ?? filteredUsers.length) === 1 ? "user" : "users"}`
+                            : `${invitationsData?.total ?? filteredInvitations.length} ${(invitationsData?.total ?? filteredInvitations.length) === 1 ? "invitation" : "invitations"}`
                         }
                     </div>
                 </div>
@@ -200,15 +238,22 @@ export default function Users() {
                             <p className="text-muted-foreground">No users found</p>
                         </div>
                     ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {filteredUsers.map((user) => (
-                                <UserCard
-                                    key={user.id}
-                                    user={user}
-                                    onEdit={() => setEditingUser(user)}
-                                    onDelete={() => setDeletingUser(user)}
-                                />
-                            ))}
+                        <div className="space-y-6">
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {filteredUsers.map((user) => (
+                                    <UserCard
+                                        key={user.id}
+                                        user={user}
+                                        onEdit={() => setEditingUser(user)}
+                                        onDelete={() => setDeletingUser(user)}
+                                    />
+                                ))}
+                            </div>
+                            <PageNavigation
+                                currentPage={usersPage}
+                                totalPages={usersTotalPages}
+                                onPageChange={setUsersPage}
+                            />
                         </div>
                     )}
                 </TabsContent>
@@ -236,13 +281,20 @@ export default function Users() {
                             </Button>
                         </div>
                     ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {filteredInvitations.map((invitation) => (
-                                <InvitationCard
-                                    key={invitation.id}
-                                    invitation={invitation}
-                                />
-                            ))}
+                        <div className="space-y-6">
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {filteredInvitations.map((invitation) => (
+                                    <InvitationCard
+                                        key={invitation.id}
+                                        invitation={invitation}
+                                    />
+                                ))}
+                            </div>
+                            <PageNavigation
+                                currentPage={invitationsPage}
+                                totalPages={invitationsTotalPages}
+                                onPageChange={setInvitationsPage}
+                            />
                         </div>
                     )}
                 </TabsContent>
