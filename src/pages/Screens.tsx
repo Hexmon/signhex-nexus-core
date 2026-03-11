@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Eye,
   Flame,
+  HeartPulse,
   MapPin,
   Monitor,
   Pencil,
@@ -17,16 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { screensApi } from "@/api/domains/screens";
 import { devicePairingApi } from "@/api/domains/devicePairing";
@@ -54,6 +45,14 @@ import {
 
 const PAGE_SIZE = 9;
 
+const HEALTH_PRIORITY: Record<string, number> = {
+  RECOVERY_REQUIRED: 0,
+  ERROR: 1,
+  STALE: 2,
+  OFFLINE: 3,
+  ONLINE: 4,
+};
+
 const getFallbackPlaybackLabel = (screen: ScreenOverviewItem) => {
   if (screen.playback?.source === "EMERGENCY") return "Emergency takeover is active";
   if (screen.status === "OFFLINE") return "Screen is offline";
@@ -72,12 +71,11 @@ const formatDateTime = (value?: string | null) => {
 export default function Screens() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [formState, setFormState] = useState({ name: "", location: "" });
+  const [recoveryScreenId, setRecoveryScreenId] = useState<string | null>(null);
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const [page, setPage] = useState(1);
@@ -99,6 +97,10 @@ export default function Screens() {
     () => screens.find((screen) => screen.id === selectedScreenId) ?? null,
     [screens, selectedScreenId],
   );
+  const recoveryScreen = useMemo(
+    () => screens.find((screen) => screen.id === recoveryScreenId) ?? null,
+    [recoveryScreenId, screens],
+  );
 
   useEffect(() => {
     setServerClockOffsetMs(getServerClockOffsetMs(overviewQuery.data?.server_time));
@@ -118,17 +120,6 @@ export default function Screens() {
     activeScreenId: selectedScreenId,
     enabled: true,
   });
-
-  const createScreen = useSafeMutation({
-    mutationFn: (payload: { name: string; location?: string }) => screensApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.screens });
-      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
-      setIsAddDialogOpen(false);
-      setFormState({ name: "", location: "" });
-      toast.success("Screen created successfully");
-    },
-  }, "Unable to create screen.");
 
   const deleteScreen = useSafeMutation({
     mutationFn: (id: string) => screensApi.remove(id),
@@ -182,10 +173,11 @@ export default function Screens() {
 
   const stats = useMemo(() => {
     const total = screens.length;
-    const active = screens.filter((screen) => screen.status === "ACTIVE").length;
-    const offline = screens.filter((screen) => screen.status === "OFFLINE").length;
-    const inactive = screens.filter((screen) => screen.status === "INACTIVE").length;
-    return { total, active, offline, inactive };
+    const online = screens.filter((screen) => screen.health_state === "ONLINE").length;
+    const recovery = screens.filter((screen) => screen.health_state === "RECOVERY_REQUIRED").length;
+    const stale = screens.filter((screen) => screen.health_state === "STALE").length;
+    const offline = screens.filter((screen) => screen.health_state === "OFFLINE").length;
+    return { total, online, recovery, stale, offline };
   }, [screens]);
 
   const handleDeleteScreen = (screenId: string) => {
@@ -210,9 +202,12 @@ export default function Screens() {
       <PageHeader
         title="Screens"
         description="Manage and monitor all display screens across locations"
-        actionLabel="Add Screen"
-        actionIcon={<Plus className="h-4 w-4" />}
-        onAction={() => setIsAddDialogOpen(true)}
+        actionLabel="Pair Device"
+        actionIcon={<QrCode className="h-4 w-4" />}
+        onAction={() => {
+          setRecoveryScreenId(null);
+          setIsPairModalOpen(true);
+        }}
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -222,8 +217,8 @@ export default function Screens() {
           icon={<Monitor className="h-5 w-5 text-primary" />}
         />
         <StatCard
-          title="Active"
-          value={stats.active}
+          title="Online"
+          value={stats.online}
           icon={<Power className="h-5 w-5 text-green-600" />}
         />
         <StatCard
@@ -232,9 +227,14 @@ export default function Screens() {
           icon={<Power className="h-5 w-5 text-red-600" />}
         />
         <StatCard
-          title="Inactive"
-          value={stats.inactive}
-          icon={<Power className="h-5 w-5 text-yellow-600" />}
+          title="Recovery"
+          value={stats.recovery}
+          icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
+        />
+        <StatCard
+          title="Stale"
+          value={stats.stale}
+          icon={<HeartPulse className="h-5 w-5 text-yellow-600" />}
         />
       </div>
 
@@ -275,15 +275,15 @@ export default function Screens() {
       ) : filteredScreens.length === 0 ? (
         <EmptyState
           title="No screens found"
-          description="Try adjusting your search or add a new screen."
+          description="Try adjusting your search or pair a device from the player first."
         />
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {paginatedScreens.map((screen) => {
-            const { id, name, location, status, last_heartbeat_at, playback, publish, active_items, upcoming_items } = screen;
+            const { id, name, location, status, last_heartbeat_at, playback, publish, active_items, upcoming_items, health_state, health_reason, auth_diagnostics, active_pairing } = screen;
             const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
-            const isOffline = status === "OFFLINE";
+            const isOffline = health_state === "OFFLINE" || status === "OFFLINE";
             const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
             const playbackLabel =
               playback?.current_media?.name ||
@@ -294,6 +294,8 @@ export default function Screens() {
               playback?.ends_at,
               serverNowMs,
             );
+            const healthBadge = health_state || status || "offline";
+            const healthRank = HEALTH_PRIORITY[health_state || ""] ?? 99;
 
             return (
               <Card key={id} className="p-5 hover:shadow-lg transition-shadow space-y-4">
@@ -303,11 +305,13 @@ export default function Screens() {
                       className={`p-2 rounded-lg ${
                         isEmergency
                           ? "bg-red-500/10 text-red-600"
-                          : isOffline
+                          : healthRank === 0 || healthRank === 1
                             ? "bg-red-500/10 text-red-600"
-                            : status === "ACTIVE"
+                            : isOffline
+                            ? "bg-red-500/10 text-red-600"
+                            : health_state === "ONLINE"
                               ? "bg-green-500/10 text-green-600"
-                              : "bg-yellow-500/10 text-yellow-600"
+                            : "bg-yellow-500/10 text-yellow-600"
                       }`}
                     >
                       {isEmergency ? <Flame className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
@@ -317,12 +321,17 @@ export default function Screens() {
                       <p className="text-xs text-muted-foreground font-mono truncate">{id}</p>
                     </div>
                   </div>
-                  <StatusBadge status={(status || "offline").toLowerCase()} />
+                  <StatusBadge status={String(healthBadge).toLowerCase()} />
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   {isEmergency && <Badge variant="destructive">Emergency</Badge>}
                   {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                  {active_pairing?.mode === "RECOVERY" && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-700">
+                      Recovery pending
+                    </Badge>
+                  )}
                   {hasStaleHeartbeat && !isOffline && (
                     <Badge variant="outline" className="border-amber-500 text-amber-700">
                       Delayed heartbeat
@@ -349,6 +358,15 @@ export default function Screens() {
                     </div>
                   </div>
                   <div className="text-xs">
+                    Health: <span className="font-medium text-foreground">{health_state || status || "UNKNOWN"}</span>
+                  </div>
+                  {health_reason ? (
+                    <div className="text-xs text-muted-foreground">{health_reason}</div>
+                  ) : null}
+                  {auth_diagnostics?.reason ? (
+                    <div className="text-xs text-muted-foreground">Auth: {auth_diagnostics.reason}</div>
+                  ) : null}
+                  <div className="text-xs">
                     Last heartbeat: {formatDateTime(last_heartbeat_at)}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
@@ -366,6 +384,16 @@ export default function Screens() {
                   >
                     <Eye className="h-3 w-3 mr-1" />
                     Details
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setRecoveryScreenId(id);
+                      setIsPairModalOpen(true);
+                    }}
+                  >
+                    <QrCode className="h-3 w-3" />
                   </Button>
                   <Button
                     size="sm"
@@ -472,7 +500,7 @@ export default function Screens() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            View all device pairing records (pending, used, expired)
+            View all device pairing records for first-time pairing and same-screen recovery.
           </p>
 
           <div className="divide-y rounded-md border max-h-72 overflow-auto">
@@ -500,6 +528,11 @@ export default function Screens() {
                           {status || "pending"}
                         </Badge>
                       </div>
+                      {pair.recovery?.mode ? (
+                        <p className="text-xs text-muted-foreground">
+                          Mode: <span className="font-medium">{pair.recovery.mode}</span>
+                        </p>
+                      ) : null}
                       {device_id && (
                         <p className="text-xs text-muted-foreground">
                           Device: <span className="font-mono">{device_id}</span>
@@ -519,56 +552,16 @@ export default function Screens() {
         </Card>
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Screen</DialogTitle>
-            <DialogDescription>
-              Manually register a new display screen to the system.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="screen-name">Screen Name *</Label>
-              <Input
-                id="screen-name"
-                value={formState.name}
-                onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="e.g., Main Lobby Display"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location (Optional)</Label>
-              <Input
-                id="location"
-                value={formState.location}
-                onChange={(event) => setFormState((prev) => ({ ...prev, location: event.target.value }))}
-                placeholder="e.g., Building A - Lobby"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsAddDialogOpen(false)}
-              disabled={createScreen.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => createScreen.mutate({
-                name: formState.name.trim(),
-                location: formState.location.trim() || undefined,
-              })}
-              disabled={createScreen.isPending || !formState.name.trim()}
-            >
-              {createScreen.isPending ? "Creating..." : "Add Screen"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <PairDeviceModal open={isPairModalOpen} onOpenChange={setIsPairModalOpen} />
+      <PairDeviceModal
+        open={isPairModalOpen}
+        onOpenChange={(open) => {
+          setIsPairModalOpen(open);
+          if (!open) {
+            setRecoveryScreenId(null);
+          }
+        }}
+        recoveryScreen={recoveryScreen}
+      />
 
       <CreateGroupModal open={isGroupModalOpen} onOpenChange={setIsGroupModalOpen} />
 

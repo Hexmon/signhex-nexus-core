@@ -418,6 +418,22 @@ export interface ScreenEmergencySummary {
 }
 
 export interface ScreenOverviewItem extends Screen {
+  health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string;
+  health_reason?: string | null;
+  auth_diagnostics?: {
+    state?: string;
+    reason?: string;
+    latest_certificate_expires_at?: string | null;
+    latest_certificate_revoked_at?: string | null;
+    latest_certificate_serial?: string | null;
+  } | null;
+  active_pairing?: {
+    id?: string;
+    created_at?: string | null;
+    expires_at?: string | null;
+    confirmed?: boolean;
+    mode?: "PAIRING" | "RECOVERY" | string | null;
+  } | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
   active_items?: ScheduleItem[];
@@ -440,6 +456,10 @@ export interface ScreenNowPlayingResponse {
   server_time?: string;
   screen_id: string;
   status?: string;
+  health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string;
+  health_reason?: string | null;
+  auth_diagnostics?: ScreenOverviewItem["auth_diagnostics"];
+  active_pairing?: ScreenOverviewItem["active_pairing"];
   last_heartbeat_at?: string | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
@@ -578,6 +598,52 @@ export interface DevicePairing {
   expires_at?: string;
   confirmed_at?: string;
   created_at?: string;
+  recovery?: {
+    mode?: "PAIRING" | "RECOVERY" | string | null;
+    recommended_action?: string | null;
+  } | null;
+  specs?: {
+    width?: number | null;
+    height?: number | null;
+    aspect_ratio?: string | null;
+    orientation?: string | null;
+    model?: string | null;
+    codecs?: string[] | null;
+    device_info?: Record<string, unknown> | null;
+  } | null;
+}
+
+export interface PairingStatusResponse {
+  device_id: string;
+  paired: boolean;
+  confirmed: boolean;
+  active_pairing?: {
+    id?: string;
+    created_at?: string | null;
+    expires_at?: string | null;
+    confirmed?: boolean;
+    mode?: "PAIRING" | "RECOVERY" | string | null;
+    confirmed_at?: string | null;
+    screen_name?: string | null;
+    screen_location?: string | null;
+  } | null;
+  screen?: {
+    id: string;
+    name?: string;
+    status?: string;
+  } | null;
+  diagnostics?: {
+    auth_state?: string;
+    reason?: string;
+    recommended_action?: string;
+  } | null;
+  certificate?: {
+    id?: string;
+    serial?: string | null;
+    expires_at?: string | null;
+    revoked_at?: string | null;
+    is_revoked?: boolean;
+  } | null;
 }
 
 export interface DevicePairingRequest {

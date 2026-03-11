@@ -53,6 +53,8 @@ export const endpoints = {
     base: "/device-pairing",
     generate: "/device-pairing/generate",
     complete: "/device-pairing/complete",
+    status: "/device-pairing/status",
+    recovery: (deviceId: string) => `/device-pairing/recovery/${deviceId}`,
   },
   deviceTelemetry: {
     heartbeat: "/device/heartbeat",

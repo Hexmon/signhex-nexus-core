@@ -14,7 +14,10 @@ export type Status =
   | "failed"
   | "online"
   | "offline"
-  | "maintenance";
+  | "maintenance"
+  | "stale"
+  | "error"
+  | "recovery_required";
 
 interface StatusBadgeProps {
   status?: Status | string;
@@ -35,6 +38,13 @@ const statusConfig: Record<Status, { label: string; variant: "default" | "second
   online: { label: "Online", variant: "default", className: "bg-success text-success-foreground" },
   offline: { label: "Offline", variant: "secondary" },
   maintenance: { label: "Maintenance", variant: "outline", className: "border-warning text-warning" },
+  stale: { label: "Stale", variant: "outline", className: "border-warning text-warning" },
+  error: { label: "Error", variant: "destructive" },
+  recovery_required: {
+    label: "Recovery Required",
+    variant: "outline",
+    className: "border-red-500 text-red-700",
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
@@ -115,6 +116,10 @@ export function ScreenDetailsModal({
   const screen = screenQuery.data;
   const nowPlaying = nowPlayingQuery.data;
   const screenStatus = nowPlaying?.status || screen?.status || "UNKNOWN";
+  const healthState = nowPlaying?.health_state || "UNKNOWN";
+  const healthReason = nowPlaying?.health_reason || null;
+  const authDiagnostics = nowPlaying?.auth_diagnostics || null;
+  const activePairing = nowPlaying?.active_pairing || null;
   const isOffline = screenStatus === "OFFLINE";
   const hasStaleHeartbeat = isHeartbeatStale(nowPlaying?.last_heartbeat_at, nowPlaying?.server_time);
   const playback = nowPlaying?.playback;
@@ -304,18 +309,16 @@ export function ScreenDetailsModal({
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">Status</Label>
+                    <Label className="text-muted-foreground">Health</Label>
                     <div className="flex flex-wrap gap-2">
-                      <Badge
-                        variant={
-                          screenStatus === "ACTIVE" ? "default" :
-                            screenStatus === "OFFLINE" ? "destructive" :
-                              "secondary"
-                        }
-                      >
-                        {screenStatus}
-                      </Badge>
+                      <StatusBadge status={String(healthState).toLowerCase()} />
+                      <Badge variant="outline">{screenStatus}</Badge>
                       {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                      {activePairing?.mode === "RECOVERY" ? (
+                        <Badge variant="outline" className="border-amber-500 text-amber-700">
+                          Recovery pending
+                        </Badge>
+                      ) : null}
                       {hasStaleHeartbeat && !isOffline && (
                         <Badge variant="outline" className="border-amber-500 text-amber-700">
                           Delayed heartbeat
@@ -338,6 +341,29 @@ export function ScreenDetailsModal({
                     </div>
                   </div>
                 </div>
+                {healthReason ? (
+                  <div className="text-sm text-muted-foreground">
+                    <Label className="text-muted-foreground">Health reason</Label>
+                    <p className="mt-1">{healthReason}</p>
+                  </div>
+                ) : null}
+                {authDiagnostics ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Auth diagnostics</Label>
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">{authDiagnostics.state || "UNKNOWN"}</p>
+                        <p className="text-muted-foreground">{authDiagnostics.reason || "No authentication warnings."}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <Label className="text-muted-foreground">Certificate</Label>
+                      <p>Serial: <span className="font-mono">{authDiagnostics.latest_certificate_serial || "N/A"}</span></p>
+                      <p>Expires: {formatDateTime(authDiagnostics.latest_certificate_expires_at)}</p>
+                      <p>Revoked at: {formatDateTime(authDiagnostics.latest_certificate_revoked_at)}</p>
+                    </div>
+                  </div>
+                ) : null}
               </Card>
 
               {availabilityQuery.data && (
@@ -371,6 +397,10 @@ export function ScreenDetailsModal({
                       <p className="text-lg font-semibold">{screenStatus}</p>
                     </div>
                     <div>
+                      <Label className="text-muted-foreground">Health state</Label>
+                      <p className="text-lg font-semibold">{healthState}</p>
+                    </div>
+                    <div>
                       <Label className="text-muted-foreground">Playback source</Label>
                       <p className="text-lg font-semibold">{playback?.source || "UNKNOWN"}</p>
                     </div>
@@ -392,6 +422,12 @@ export function ScreenDetailsModal({
                       <div>
                         <Label className="text-muted-foreground">Last proof-of-play</Label>
                         <p className="text-sm">{formatDateTime(playback.last_proof_of_play_at)}</p>
+                      </div>
+                    )}
+                    {activePairing?.mode && (
+                      <div>
+                        <Label className="text-muted-foreground">Active pairing</Label>
+                        <p className="text-sm">{activePairing.mode}</p>
                       </div>
                     )}
                   </div>

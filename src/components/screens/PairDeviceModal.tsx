@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, Check, Plus, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw, ShieldAlert } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,63 +13,105 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { devicePairingApi } from "@/api/domains/devicePairing";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
+import type { PairingStatusResponse, ScreenOverviewItem } from "@/api/types";
 import { toast } from "sonner";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 
 interface PairDeviceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  recoveryScreen?: ScreenOverviewItem | null;
 }
 
-export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
+const DEFAULT_EXPIRES_IN = 900;
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "N/A";
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "N/A";
+  return new Date(timestamp).toLocaleString();
+}
+
+export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: PairDeviceModalProps) {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<"confirm" | "recover">(recoveryScreen ? "recover" : "confirm");
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [generateForm, setGenerateForm] = useState({
-    deviceId: "",
-    expiresIn: 900,
-  });
   const [confirmForm, setConfirmForm] = useState({
     pairingCode: "",
-    name: "",
-    location: "",
+    name: recoveryScreen?.name || "",
+    location: recoveryScreen?.location || "",
   });
 
-  const generatePairing = useSafeMutation({
-    mutationFn: (payload: { device_id: string; expires_in: number }) =>
-      devicePairingApi.generate(payload),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["device-pairings"] });
-      if (data.pairing_code) {
-        setGeneratedCode(data.pairing_code);
-        toast.success("Pairing code generated successfully");
-      }
-    },
-  }, "Unable to generate pairing code.");
+  useEffect(() => {
+    if (!open) return;
+    setTab(recoveryScreen ? "recover" : "confirm");
+    setConfirmForm({
+      pairingCode: "",
+      name: recoveryScreen?.name || "",
+      location: recoveryScreen?.location || "",
+    });
+  }, [open, recoveryScreen]);
+
+  const recoveryQuery = useQuery({
+    queryKey: ["device-pairing", "recovery", recoveryScreen?.id],
+    queryFn: () => devicePairingApi.recovery(recoveryScreen!.id),
+    enabled: open && Boolean(recoveryScreen?.id),
+  });
 
   const confirmPairing = useSafeMutation({
     mutationFn: (payload: { pairing_code: string; name: string; location?: string }) =>
       devicePairingApi.confirm(payload),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["device-pairings"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.screens });
-      const screenName = confirmForm.name.trim() || "Screen";
-      const message = data?.message || `Pairing approved for "${screenName}". Waiting for device to complete.`;
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
+      queryClient.invalidateQueries({ queryKey: ["device-pairing", "recovery", recoveryScreen?.id] });
+      const message =
+        data?.recovery?.mode === "RECOVERY"
+          ? "Recovery confirmed. The screen can now complete credential recovery."
+          : data?.message || "Pairing approved. Waiting for device completion.";
       toast.success(message);
-      setConfirmForm({ pairingCode: "", name: "", location: "" });
+      setGeneratedCode(null);
+      setConfirmForm({ pairingCode: "", name: recoveryScreen?.name || "", location: recoveryScreen?.location || "" });
       onOpenChange(false);
     },
   }, "Unable to confirm pairing.");
 
-  const handleCopyCode = () => {
-    if (generatedCode) {
-      navigator.clipboard.writeText(generatedCode);
-      setCopied(true);
-      toast.success("Pairing code copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const generateRecoveryCode = useSafeMutation({
+    mutationFn: (payload: { device_id: string; expires_in?: number }) =>
+      devicePairingApi.startRecovery(payload.device_id, { expires_in: payload.expires_in }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["device-pairings"] });
+      queryClient.invalidateQueries({ queryKey: ["device-pairing", "recovery", recoveryScreen?.id] });
+      if (data.pairing_code) {
+        setGeneratedCode(data.pairing_code);
+        setConfirmForm((current) => ({
+          ...current,
+          pairingCode: data.pairing_code || current.pairingCode,
+          name: recoveryScreen?.name || current.name,
+          location: recoveryScreen?.location || current.location,
+        }));
+      }
+      toast.success("Recovery code generated.");
+    },
+  }, "Unable to generate recovery code.");
+
+  const pairingUrl = useMemo(
+    () => (generatedCode ? `https://signhex.app/pair?code=${generatedCode}` : ""),
+    [generatedCode],
+  );
+
+  const handleCopyCode = async () => {
+    if (!generatedCode) return;
+    await navigator.clipboard.writeText(generatedCode);
+    setCopied(true);
+    toast.success("Code copied to clipboard");
+    window.setTimeout(() => setCopied(false), 2000);
   };
 
   const handleConfirm = () => {
@@ -80,138 +122,42 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
     });
   };
 
-  const handleGenerate = () => {
-    generatePairing.mutate({
-      device_id: generateForm.deviceId.trim(),
-      expires_in: generateForm.expiresIn,
-    });
-  };
-
-  const handleGenerateNew = () => {
-    setGeneratedCode(null);
-  };
-
-  const handleClose = (open: boolean) => {
-    if (!open) {
+  const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen) {
       setGeneratedCode(null);
-      setGenerateForm({ deviceId: "", expiresIn: 900 });
-      setConfirmForm({ pairingCode: "", name: "", location: "" });
+      setCopied(false);
+      setTab(recoveryScreen ? "recover" : "confirm");
+      setConfirmForm({
+        pairingCode: "",
+        name: recoveryScreen?.name || "",
+        location: recoveryScreen?.location || "",
+      });
     }
-    onOpenChange(open);
+    onOpenChange(nextOpen);
   };
 
-  const pairingUrl = generatedCode
-    ? `https://signhex.app/pair?code=${generatedCode}`
-    : "";
+  const recovery = recoveryQuery.data;
+  const activeRecovery = recovery?.active_pairing?.mode === "RECOVERY" ? recovery.active_pairing : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Device Pairing</DialogTitle>
+          <DialogTitle>{recoveryScreen ? "Recover Screen" : "Pair Device"}</DialogTitle>
           <DialogDescription>
-            Generate a pairing code or confirm an existing pairing
+            {recoveryScreen
+              ? "Generate and approve a recovery code for this existing screen identity."
+              : "Approve a pairing code that was already generated by the signage player."}
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="generate" className="mt-2">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="generate">Generate</TabsTrigger>
+        <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="mt-2">
+          <TabsList className={`grid w-full ${recoveryScreen ? "grid-cols-2" : "grid-cols-1"}`}>
             <TabsTrigger value="confirm">Confirm</TabsTrigger>
+            {recoveryScreen ? <TabsTrigger value="recover">Recover</TabsTrigger> : null}
           </TabsList>
 
-          <TabsContent value="generate" className="space-y-3 py-3">
-            {generatedCode ? (
-              <>
-                <div className="flex flex-col items-center gap-3 p-4 bg-muted/50 rounded-lg">
-                  <div className="bg-white p-3 rounded-lg shadow-sm">
-                    <QRCodeSVG value={pairingUrl} size={160} level="H" />
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full">
-                    <Input
-                      value={generatedCode}
-                      readOnly
-                      className="text-center text-base font-mono font-bold tracking-wider"
-                    />
-                    <Button variant="outline" size="icon" onClick={handleCopyCode}>
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={handleGenerateNew}>
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground text-center">
-                    Expires in 15 minutes
-                  </p>
-                </div>
-
-                <div className="bg-muted/30 p-3 rounded-lg">
-                  <h5 className="font-semibold text-sm mb-1">Instructions:</h5>
-                  <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
-                    <li>Open SignHex Player on device</li>
-                    <li>Go to Settings → Pair Device</li>
-                    <li>Scan QR or enter code</li>
-                    <li>Switch to "Confirm" tab to complete</li>
-                  </ol>
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="device-id" className="text-sm">Device ID *</Label>
-                  <Input
-                    id="device-id"
-                    value={generateForm.deviceId}
-                    onChange={(e) =>
-                      setGenerateForm((prev) => ({ ...prev, deviceId: e.target.value }))
-                    }
-                    placeholder="e.g., DEVICE-001 or MAC address"
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Unique identifier for the device (can be any string)
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="expires-in" className="text-sm">Expires In (seconds)</Label>
-                  <Input
-                    id="expires-in"
-                    type="number"
-                    value={generateForm.expiresIn}
-                    onChange={(e) =>
-                      setGenerateForm((prev) => ({
-                        ...prev,
-                        expiresIn: parseInt(e.target.value) || 900
-                      }))
-                    }
-                    min={60}
-                    max={3600}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Default: 900 seconds (15 minutes)
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleGenerate}
-                  disabled={generatePairing.isPending || !generateForm.deviceId.trim()}
-                  className="w-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {generatePairing.isPending ? "Generating..." : "Generate Pairing Code"}
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="confirm" className="space-y-3 py-3">
+          <TabsContent value="confirm" className="space-y-4 py-3">
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="pairing-code" className="text-sm">Pairing Code *</Label>
@@ -219,12 +165,9 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
                   id="pairing-code"
                   value={confirmForm.pairingCode}
                   onChange={(e) =>
-                    setConfirmForm((prev) => ({
-                      ...prev,
-                      pairingCode: e.target.value.toUpperCase(),
-                    }))
+                    setConfirmForm((prev) => ({ ...prev, pairingCode: e.target.value.toUpperCase() }))
                   }
-                  placeholder="Enter code"
+                  placeholder="Enter the code currently shown on the screen"
                   className="font-mono uppercase"
                   maxLength={20}
                 />
@@ -235,9 +178,7 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
                 <Input
                   id="screen-name"
                   value={confirmForm.name}
-                  onChange={(e) =>
-                    setConfirmForm((prev) => ({ ...prev, name: e.target.value }))
-                  }
+                  onChange={(e) => setConfirmForm((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g., Lobby Display"
                 />
               </div>
@@ -247,12 +188,17 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
                 <Input
                   id="screen-location"
                   value={confirmForm.location}
-                  onChange={(e) =>
-                    setConfirmForm((prev) => ({ ...prev, location: e.target.value }))
-                  }
+                  onChange={(e) => setConfirmForm((prev) => ({ ...prev, location: e.target.value }))}
                   placeholder="e.g., First Floor"
                 />
               </div>
+
+              <Card className="p-3 bg-muted/30">
+                <p className="text-sm font-medium">CMS action</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Confirm is used for both first-time pairing and same-screen recovery. The device still completes pairing on its side with a CSR after approval.
+                </p>
+              </Card>
 
               <Button
                 onClick={handleConfirm}
@@ -263,16 +209,93 @@ export function PairDeviceModal({ open, onOpenChange }: PairDeviceModalProps) {
                 }
                 className="w-full"
               >
-                {confirmPairing.isPending ? "Confirming..." : "Confirm & Create Screen"}
+                {confirmPairing.isPending ? "Confirming..." : "Confirm Pairing / Recovery"}
               </Button>
             </div>
-
-            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-2.5 rounded-lg">
-              <p className="text-xs text-blue-900 dark:text-blue-100">
-                <strong>Note:</strong> Device sends request with the code. Enter it here to register the screen.
-              </p>
-            </div>
           </TabsContent>
+
+          {recoveryScreen ? (
+            <TabsContent value="recover" className="space-y-4 py-3">
+              <Card className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{recoveryScreen.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{recoveryScreen.id}</p>
+                  </div>
+                  <StatusBadge status={recoveryScreen.health_state || recoveryScreen.status || "offline"} />
+                </div>
+                {recovery?.recovery ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4 text-amber-600" />
+                      <span className="font-medium">{recovery.recovery.auth_state || "UNKNOWN"}</span>
+                    </div>
+                    <p className="text-muted-foreground">{recovery.recovery.reason || "No recovery diagnostics available."}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Recommended action: {recovery.recovery.recommended_action || "N/A"}
+                    </p>
+                  </div>
+                ) : recoveryQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading recovery diagnostics...</p>
+                ) : null}
+                {recovery?.certificate ? (
+                  <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                    <p>Serial: <span className="font-mono">{recovery.certificate.serial || "N/A"}</span></p>
+                    <p>Expires: {formatDateTime(recovery.certificate.expires_at)}</p>
+                    <p>Revoked: {recovery.certificate.is_revoked ? "Yes" : "No"}</p>
+                    <p>Revoked at: {formatDateTime(recovery.certificate.revoked_at)}</p>
+                  </div>
+                ) : null}
+                {activeRecovery ? (
+                  <Badge variant="outline" className="w-fit border-amber-500 text-amber-700">
+                    Recovery pending until {formatDateTime(activeRecovery.expires_at)}
+                  </Badge>
+                ) : null}
+              </Card>
+
+              {generatedCode ? (
+                <Card className="p-4 space-y-3 bg-muted/30">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-white p-3 rounded-lg shadow-sm">
+                      <QRCodeSVG value={pairingUrl} size={160} level="H" />
+                    </div>
+                    <div className="flex items-center gap-2 w-full">
+                      <Input
+                        value={generatedCode}
+                        readOnly
+                        className="text-center text-base font-mono font-bold tracking-wider"
+                      />
+                      <Button variant="outline" size="icon" onClick={handleCopyCode}>
+                        {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => generateRecoveryCode.mutate({ device_id: recoveryScreen.id, expires_in: DEFAULT_EXPIRES_IN })}
+                        disabled={generateRecoveryCode.isPending}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <p>1. Enter this code on the affected screen or player recovery UI.</p>
+                    <p>2. Return to the Confirm tab and approve this code for the same screen identity.</p>
+                    <p>3. The device completes recovery with a fresh CSR; the old certificate is revoked automatically.</p>
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={() => setTab("confirm")}>Use this code in Confirm</Button>
+                </Card>
+              ) : (
+                <Button
+                  onClick={() => generateRecoveryCode.mutate({ device_id: recoveryScreen.id, expires_in: DEFAULT_EXPIRES_IN })}
+                  disabled={generateRecoveryCode.isPending}
+                  className="w-full"
+                >
+                  {generateRecoveryCode.isPending ? "Generating recovery code..." : "Generate Recovery Code"}
+                </Button>
+              )}
+            </TabsContent>
+          ) : null}
         </Tabs>
       </DialogContent>
     </Dialog>
