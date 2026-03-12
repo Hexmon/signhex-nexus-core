@@ -392,6 +392,7 @@ export default function Screens() {
                       setRecoveryScreenId(id);
                       setIsPairModalOpen(true);
                     }}
+                    aria-label={`Recover Screen ${name}`}
                   >
                     <QrCode className="h-3 w-3" />
                   </Button>
@@ -400,6 +401,7 @@ export default function Screens() {
                     variant="outline"
                     onClick={() => handleDeleteScreen(id)}
                     disabled={deleteScreen.isPending}
+                    aria-label={`Delete Screen ${name}`}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
