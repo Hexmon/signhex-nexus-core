@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "test:unit": "vitest run",
+    "test:default-media": "playwright test tests/settings-default-media.e2e.spec.ts",
     "preview": "vite preview",
     "test:chat-e2e": "playwright test -c playwright.config.ts",
     "test:chat-e2e:headed": "playwright test -c playwright.config.ts --headed"

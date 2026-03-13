@@ -156,6 +156,7 @@ export const endpoints = {
   settings: {
     base: "/settings",
     defaultMedia: "/settings/default-media",
+    defaultMediaVariants: "/settings/default-media/variants",
   },
   ssoConfig: {
     base: "/sso-config",

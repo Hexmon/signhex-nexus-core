@@ -158,6 +158,18 @@ export interface DefaultMediaSetting {
   media?: MediaAsset | null;
 }
 
+export interface DefaultMediaVariantSetting {
+  aspect_ratio: string;
+  media_id: string | null;
+  media?: MediaAsset | null;
+}
+
+export interface DefaultMediaVariantsSetting {
+  global_media_id: string | null;
+  global_media?: MediaAsset | null;
+  variants: DefaultMediaVariantSetting[];
+}
+
 export interface Conversation {
   id: string;
   participant_id: string;

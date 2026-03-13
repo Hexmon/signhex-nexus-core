@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Image as ImageIcon, Video, FileText, Upload } from "lucide-react";
+import { Image as ImageIcon, Video, FileText, Upload, MonitorPlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,14 +13,26 @@ import { SearchBar } from "@/components/common/SearchBar";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { mediaApi } from "@/api/domains/media";
+import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
-import { useDefaultMedia, useUpdateDefaultMedia } from "@/hooks/useSettingsApi";
+import {
+  useDefaultMedia,
+  useDefaultMediaVariants,
+  useUpdateDefaultMedia,
+  useUpdateDefaultMediaVariants,
+} from "@/hooks/useSettingsApi";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { ApiError } from "@/api/apiClient";
-import type { MediaAsset, MediaType } from "@/api/types";
+import type { DefaultMediaVariantSetting, MediaAsset, MediaType, ScreenAspectRatio } from "@/api/types";
 
 const MEDIA_PAGE_SIZE = 100;
+
+type PickerTarget =
+  | { type: "global" }
+  | { type: "variant"; aspectRatio: string };
+
+type RemoveTarget = PickerTarget | null;
 
 const resolveMediaType = (media: MediaAsset): MediaType => {
   if (media.type) {
@@ -85,19 +97,66 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
   );
 };
 
+const mergeAspectRatios = (
+  catalog: ScreenAspectRatio[] | undefined,
+  variants: DefaultMediaVariantSetting[] | undefined,
+): ScreenAspectRatio[] => {
+  const merged = new Map<string, ScreenAspectRatio>();
+  for (const item of [...(catalog || []), ...(variants || []).map((entry) => ({
+    id: null,
+    name: entry.aspect_ratio,
+    aspect_ratio: entry.aspect_ratio,
+    aspect_ratio_name: entry.aspect_ratio,
+    is_fallback: false,
+  }))]) {
+    if (!item.aspect_ratio) continue;
+    if (!merged.has(item.aspect_ratio)) {
+      merged.set(item.aspect_ratio, item);
+    }
+  }
+  return Array.from(merged.values()).sort((left, right) => (left.aspect_ratio || "").localeCompare(right.aspect_ratio || ""));
+};
+
+const MediaSummary = ({ media }: { media: MediaAsset | null }) => {
+  if (!media) {
+    return <p className="text-sm text-muted-foreground">No media assigned.</p>;
+  }
+
+  const mediaType = resolveMediaType(media);
+  return (
+    <div className="flex flex-col md:flex-row md:items-center gap-4 rounded-lg border p-4">
+      <MediaPreview media={media} mediaType={mediaType} sizeClass="h-24 w-full md:w-32" />
+      <div className="space-y-2 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-medium truncate">{resolveMediaName(media)}</h3>
+          <Badge variant="outline">{mediaType}</Badge>
+        </div>
+        <p className="text-xs text-muted-foreground font-mono break-all">{media.id}</p>
+        {media.content_type && <p className="text-xs text-muted-foreground">{media.content_type}</p>}
+      </div>
+    </div>
+  );
+};
+
 export function DefaultMediaSection() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isAdminOrSuperAdmin } = useAuthorization();
   const canEdit = isAdminOrSuperAdmin;
 
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<RemoveTarget>(null);
   const [mediaSearch, setMediaSearch] = useState("");
   const [mediaTypeFilter, setMediaTypeFilter] = useState("all");
 
   const defaultMediaQuery = useDefaultMedia();
+  const defaultMediaVariantsQuery = useDefaultMediaVariants();
   const updateDefaultMedia = useUpdateDefaultMedia();
+  const updateDefaultMediaVariants = useUpdateDefaultMediaVariants();
+
+  const isPickerOpen = pickerTarget !== null;
+  const isRemoveDialogOpen = removeTarget !== null;
+  const isSaving = updateDefaultMedia.isPending || updateDefaultMediaVariants.isPending;
 
   useEffect(() => {
     if (!defaultMediaQuery.isError) return;
@@ -108,13 +167,22 @@ export function DefaultMediaSection() {
     toast({ title: "Load failed", description: message, variant: "destructive" });
   }, [defaultMediaQuery.isError, defaultMediaQuery.error, toast]);
 
-  const defaultMediaId = defaultMediaQuery.data?.media_id ?? defaultMediaQuery.data?.media?.id ?? null;
-  const embeddedMedia = defaultMediaQuery.data?.media ?? null;
+  useEffect(() => {
+    if (!defaultMediaVariantsQuery.isError) return;
+    const message =
+      defaultMediaVariantsQuery.error instanceof ApiError
+        ? defaultMediaVariantsQuery.error.message
+        : "Unable to load default media variants.";
+    toast({ title: "Load failed", description: message, variant: "destructive" });
+  }, [defaultMediaVariantsQuery.isError, defaultMediaVariantsQuery.error, toast]);
+
+  const globalMediaId = defaultMediaQuery.data?.media_id ?? defaultMediaQuery.data?.media?.id ?? null;
+  const embeddedGlobalMedia = defaultMediaQuery.data?.media ?? null;
 
   const mediaDetailsQuery = useQuery({
-    queryKey: queryKeys.mediaById(defaultMediaId ?? undefined),
-    queryFn: () => mediaApi.getById(defaultMediaId!),
-    enabled: Boolean(defaultMediaId) && !embeddedMedia,
+    queryKey: queryKeys.mediaById(globalMediaId ?? undefined),
+    queryFn: () => mediaApi.getById(globalMediaId!),
+    enabled: Boolean(globalMediaId) && !embeddedGlobalMedia,
     staleTime: 60_000,
   });
 
@@ -127,12 +195,41 @@ export function DefaultMediaSection() {
     toast({ title: "Load failed", description: message, variant: "destructive" });
   }, [mediaDetailsQuery.isError, mediaDetailsQuery.error, toast]);
 
-  const activeMedia = embeddedMedia ?? mediaDetailsQuery.data ?? null;
-  const isDefaultLoading = defaultMediaQuery.isLoading || (defaultMediaId && mediaDetailsQuery.isLoading);
+  const aspectRatiosQuery = useQuery({
+    queryKey: ["screen-aspect-ratios", "default-media"],
+    queryFn: () => screensApi.listAspectRatios(),
+    staleTime: 60_000,
+  });
 
-  const typeFilter = (mediaTypeFilter === "all"
-    ? undefined
-    : mediaTypeFilter.toUpperCase()) as MediaType | undefined;
+  useEffect(() => {
+    if (!aspectRatiosQuery.isError) return;
+    const message =
+      aspectRatiosQuery.error instanceof ApiError
+        ? aspectRatiosQuery.error.message
+        : "Unable to load aspect ratios.";
+    toast({ title: "Load failed", description: message, variant: "destructive" });
+  }, [aspectRatiosQuery.isError, aspectRatiosQuery.error, toast]);
+
+  const activeGlobalMedia = embeddedGlobalMedia ?? mediaDetailsQuery.data ?? null;
+  const variantEntries = defaultMediaVariantsQuery.data?.variants ?? [];
+  const variantByAspectRatio = useMemo(
+    () =>
+      variantEntries.reduce<Record<string, DefaultMediaVariantSetting>>((acc, entry) => {
+        acc[entry.aspect_ratio] = entry;
+        return acc;
+      }, {}),
+    [variantEntries],
+  );
+
+  const aspectRatioOptions = useMemo(() => {
+    const catalog = [
+      ...(aspectRatiosQuery.data?.defaults ?? []),
+      ...(aspectRatiosQuery.data?.items ?? []),
+    ];
+    return mergeAspectRatios(catalog, variantEntries);
+  }, [aspectRatiosQuery.data, variantEntries]);
+
+  const typeFilter = (mediaTypeFilter === "all" ? undefined : mediaTypeFilter.toUpperCase()) as MediaType | undefined;
 
   const mediaListQuery = useQuery({
     queryKey: ["media", "picker", typeFilter],
@@ -150,14 +247,11 @@ export function DefaultMediaSection() {
   useEffect(() => {
     if (!mediaListQuery.isError) return;
     const message =
-      mediaListQuery.error instanceof ApiError
-        ? mediaListQuery.error.message
-        : "Unable to load media.";
+      mediaListQuery.error instanceof ApiError ? mediaListQuery.error.message : "Unable to load media.";
     toast({ title: "Load failed", description: message, variant: "destructive" });
   }, [mediaListQuery.isError, mediaListQuery.error, toast]);
 
   const mediaItems = useMemo(() => mediaListQuery.data?.items ?? [], [mediaListQuery.data]);
-
   const filteredMedia = useMemo(() => {
     const query = mediaSearch.trim().toLowerCase();
     if (!query) return mediaItems;
@@ -167,89 +261,191 @@ export function DefaultMediaSection() {
     });
   }, [mediaItems, mediaSearch]);
 
+  const buildNextVariants = (aspectRatio: string, mediaId: string | null) => {
+    const next = Object.fromEntries(variantEntries.map((entry) => [entry.aspect_ratio, entry.media_id]));
+    next[aspectRatio] = mediaId;
+    return next;
+  };
+
   const handleSelectMedia = (media: MediaAsset) => {
-    if (!canEdit || updateDefaultMedia.isPending) return;
-    updateDefaultMedia.mutate(media.id, {
-      onSuccess: () => setIsPickerOpen(false),
+    if (!pickerTarget || !canEdit || isSaving) return;
+
+    if (pickerTarget.type === "global") {
+      updateDefaultMedia.mutate(media.id, {
+        onSuccess: () => setPickerTarget(null),
+      });
+      return;
+    }
+
+    updateDefaultMediaVariants.mutate(buildNextVariants(pickerTarget.aspectRatio, media.id), {
+      onSuccess: () => setPickerTarget(null),
     });
   };
 
-  const handleRemoveDefault = () => {
-    if (!canEdit || updateDefaultMedia.isPending) return;
-    updateDefaultMedia.mutate(null, {
-      onSuccess: () => setIsRemoveDialogOpen(false),
+  const handleRemove = () => {
+    if (!removeTarget || !canEdit || isSaving) return;
+
+    if (removeTarget.type === "global") {
+      updateDefaultMedia.mutate(null, {
+        onSuccess: () => setRemoveTarget(null),
+      });
+      return;
+    }
+
+    updateDefaultMediaVariants.mutate(buildNextVariants(removeTarget.aspectRatio, null), {
+      onSuccess: () => setRemoveTarget(null),
     });
   };
 
   const handleUploadNavigate = () => {
-    setIsPickerOpen(false);
+    setPickerTarget(null);
     navigate("/media");
   };
+
+  const pickerTitle = pickerTarget?.type === "variant"
+    ? `Select Default Media for ${pickerTarget.aspectRatio}`
+    : "Select Global Default Media";
+
+  const removeDescription = removeTarget?.type === "variant"
+    ? `This will clear the default media for ${removeTarget.aspectRatio}. Screens with that aspect ratio will fall back to the global default if one is configured.`
+    : "This will clear the global default media setting. Only aspect-ratio-specific defaults will remain.";
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Default Media (CMS)</CardTitle>
-        <CardDescription>Choose the fallback media shown when no content is scheduled.</CardDescription>
+        <CardTitle>Default Media</CardTitle>
+        <CardDescription>
+          When nothing is scheduled, the player will use aspect-ratio-specific fallback first, then the global default.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {isDefaultLoading ? (
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-24 w-32" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-40" />
-            </div>
-          </div>
-        ) : !defaultMediaId ? (
-          <p className="text-sm text-muted-foreground">No default media selected.</p>
-        ) : activeMedia ? (
-          <div className="flex flex-col md:flex-row md:items-center gap-4 rounded-lg border p-4">
-            <MediaPreview media={activeMedia} mediaType={resolveMediaType(activeMedia)} sizeClass="h-24 w-full md:w-32" />
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium">{resolveMediaName(activeMedia)}</h3>
-                <Badge variant="outline">{resolveMediaType(activeMedia)}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground font-mono">{activeMedia.id}</p>
-              {activeMedia.content_type && (
-                <p className="text-xs text-muted-foreground">{activeMedia.content_type}</p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Unable to load default media details.</p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setIsPickerOpen(true)}
-            disabled={!canEdit || updateDefaultMedia.isPending}
-          >
-            Select default media
-          </Button>
-          {defaultMediaId && (
-            <Button
-              variant="destructive"
-              onClick={() => setIsRemoveDialogOpen(true)}
-              disabled={!canEdit || updateDefaultMedia.isPending}
-            >
-              Remove default
-            </Button>
-          )}
+      <CardContent className="space-y-6">
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Fallback precedence</p>
+          <p>1. Aspect-ratio default media</p>
+          <p>2. Global default media</p>
+          <p>3. Empty/idle state if no fallback is configured</p>
         </div>
-        {!canEdit && (
-          <p className="text-xs text-muted-foreground">Only admins can update this setting.</p>
-        )}
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-medium">Global default media</h3>
+              <p className="text-sm text-muted-foreground">Used only when no aspect-ratio-specific fallback matches the screen.</p>
+            </div>
+            <Badge variant="secondary">Fallback tier 2</Badge>
+          </div>
+
+          {defaultMediaQuery.isLoading || (globalMediaId && mediaDetailsQuery.isLoading) ? (
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-24 w-32" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </div>
+          ) : (
+            <MediaSummary media={activeGlobalMedia} />
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              aria-label="Select global default media"
+              onClick={() => setPickerTarget({ type: "global" })}
+              disabled={!canEdit || isSaving}
+            >
+              Select global default
+            </Button>
+            {globalMediaId && (
+              <Button
+                variant="destructive"
+                aria-label="Clear global default media"
+                onClick={() => setRemoveTarget({ type: "global" })}
+                disabled={!canEdit || isSaving}
+              >
+                Clear global default
+              </Button>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-medium">Aspect-ratio fallback variants</h3>
+              <p className="text-sm text-muted-foreground">These override the global default for matching screens.</p>
+            </div>
+            <Badge variant="secondary">Fallback tier 1</Badge>
+          </div>
+
+          {aspectRatiosQuery.isLoading && !aspectRatioOptions.length ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} className="h-44 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {aspectRatioOptions.map((ratio) => {
+                const aspectRatio = ratio.aspect_ratio;
+                if (!aspectRatio) return null;
+                const variant = variantByAspectRatio[aspectRatio];
+                return (
+                  <Card key={aspectRatio} className="border-muted-foreground/20">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <MonitorPlay className="h-4 w-4 text-muted-foreground" />
+                            <p className="font-medium">{aspectRatio}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{ratio.aspect_ratio_name || ratio.name || "Custom ratio"}</p>
+                        </div>
+                        <Badge variant={variant?.media_id ? "default" : "outline"}>
+                          {variant?.media_id ? "Configured" : "Uses global"}
+                        </Badge>
+                      </div>
+
+                      <MediaSummary media={variant?.media ?? null} />
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Assign default media for ${aspectRatio}`}
+                          onClick={() => setPickerTarget({ type: "variant", aspectRatio })}
+                          disabled={!canEdit || isSaving}
+                        >
+                          {variant?.media_id ? "Replace media" : "Assign media"}
+                        </Button>
+                        {variant?.media_id && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            aria-label={`Clear default media for ${aspectRatio}`}
+                            onClick={() => setRemoveTarget({ type: "variant", aspectRatio })}
+                            disabled={!canEdit || isSaving}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {!canEdit && <p className="text-xs text-muted-foreground">Only admins can update these settings.</p>}
       </CardContent>
 
-      <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+      <Dialog open={isPickerOpen} onOpenChange={(open) => !open && setPickerTarget(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle>Select Default Media</DialogTitle>
+              <DialogTitle>{pickerTitle}</DialogTitle>
               <Button size="sm" variant="outline" onClick={handleUploadNavigate}>
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Media
@@ -335,7 +531,7 @@ export function DefaultMediaSection() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPickerOpen(false)}>
+            <Button variant="outline" onClick={() => setPickerTarget(null)}>
               Cancel
             </Button>
           </DialogFooter>
@@ -344,12 +540,12 @@ export function DefaultMediaSection() {
 
       <ConfirmDialog
         open={isRemoveDialogOpen}
-        title="Remove default media?"
-        description="This will clear the default media setting for the CMS."
-        confirmLabel="Remove"
-        onConfirm={handleRemoveDefault}
-        onCancel={() => setIsRemoveDialogOpen(false)}
-        isLoading={updateDefaultMedia.isPending}
+        title={removeTarget?.type === "variant" ? `Clear ${removeTarget.aspectRatio} default media?` : "Clear global default media?"}
+        description={removeDescription}
+        confirmLabel="Clear"
+        onConfirm={handleRemove}
+        onCancel={() => setRemoveTarget(null)}
+        isLoading={isSaving}
         confirmDisabled={!canEdit}
       />
     </Card>

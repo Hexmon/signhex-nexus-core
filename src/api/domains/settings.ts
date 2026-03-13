@@ -1,6 +1,6 @@
 import { apiClient } from "../apiClient";
 import { endpoints } from "../endpoints";
-import type { DefaultMediaSetting, OrgSetting } from "../types";
+import type { DefaultMediaSetting, DefaultMediaVariantsSetting, OrgSetting } from "../types";
 
 export const settingsApi = {
   list: () =>
@@ -27,5 +27,18 @@ export const settingsApi = {
       path: endpoints.settings.defaultMedia,
       method: "PUT",
       body: { media_id: mediaId },
+    }),
+
+  getDefaultMediaVariants: () =>
+    apiClient.request<DefaultMediaVariantsSetting>({
+      path: endpoints.settings.defaultMediaVariants,
+      method: "GET",
+    }),
+
+  updateDefaultMediaVariants: (variants: Record<string, string | null>) =>
+    apiClient.request<DefaultMediaVariantsSetting>({
+      path: endpoints.settings.defaultMediaVariants,
+      method: "PUT",
+      body: { variants },
     }),
 };

@@ -2,6 +2,9 @@ import type { Role, RolePermissionGrant, RoleId } from "@/api/types";
 
 const grantKey = (grant: RolePermissionGrant) => `${grant.action}::${grant.subject}`;
 
+export const isSystemAdminRoleName = (roleName: string | null | undefined) =>
+  roleName === "ADMIN" || roleName === "SUPER_ADMIN";
+
 export const resolveEffectiveGrants = (roleId: RoleId | undefined, roles: Role[]) => {
   if (!roleId || roles.length === 0) return [] as RolePermissionGrant[];
   const roleMap = new Map<RoleId, Role>();

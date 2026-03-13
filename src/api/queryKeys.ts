@@ -23,6 +23,7 @@ export const queryKeys = {
   users: ["users"] as const,
   settings: ["settings"] as const,
   defaultMedia: ["settings", "default-media"] as const,
+  defaultMediaVariants: ["settings", "default-media-variants"] as const,
   roles: (filters?: { page?: number; limit?: number; search?: string }) =>
     ["roles", filters?.page, filters?.limit, filters?.search] as const,
   role: (roleId?: string) => ["role", roleId] as const,
