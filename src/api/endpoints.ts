@@ -142,6 +142,7 @@ export const endpoints = {
     base: "/screens",
     byId: (screenId: string) => `/screens/${screenId}`,
     overview: "/screens/overview",
+    scheduleTimeline: "/screens/schedule-timeline",
     nowPlaying: (screenId: string) => `/screens/${screenId}/now-playing`,
     status: (screenId: string) => `/screens/${screenId}/status`,
     availability: (screenId: string) => `/screens/${screenId}/availability`,

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
+  ScreenPreviewUpdateEvent,
   ScreenRefreshRequiredEvent,
+  ScreensOverview,
   ScreensSubscribeAck,
   ScreensSyncAck,
   ScreenStateUpdateEvent,
@@ -14,18 +16,32 @@ import {
   applyScreensSyncAck,
   patchScreenInOverview,
   patchScreenNowPlaying,
+  patchScreenPreviewInNowPlaying,
+  patchScreenPreviewInOverview,
   SCREENS_REFRESH_DEBOUNCE_MS,
   shouldRefetchScreenDetail,
 } from "@/hooks/screens/screensRealtimeUtils";
 
+const EMPTY_SCREEN_IDS: string[] = [];
+
 interface UseScreensRealtimeOptions {
   enabled?: boolean;
   activeScreenId?: string | null;
+  includePreview?: boolean;
+  onlineOnly?: boolean;
+  onStateUpdate?: (payload: ScreenStateUpdateEvent) => void;
+  onPreviewUpdate?: (payload: ScreenPreviewUpdateEvent) => void;
+  onRefreshRequired?: (payload: ScreenRefreshRequiredEvent) => void;
 }
 
 export const useScreensRealtime = ({
   enabled = true,
   activeScreenId,
+  includePreview = false,
+  onlineOnly = false,
+  onStateUpdate: handleStateUpdate,
+  onPreviewUpdate: handlePreviewUpdate,
+  onRefreshRequired: handleRefreshRequired,
 }: UseScreensRealtimeOptions) => {
   const queryClient = useQueryClient();
   const authToken = useAppSelector((state) => state.auth.token);
@@ -35,23 +51,46 @@ export const useScreensRealtime = ({
   const refreshTimeoutRef = useRef<number | null>(null);
 
   const detailQueryKey = useMemo(
-    () => queryKeys.screenNowPlaying(activeScreenId ?? undefined, { includeMedia: true, includeUrls: false }),
-    [activeScreenId],
+    () =>
+      queryKeys.screenNowPlaying(activeScreenId ?? undefined, {
+        includeMedia: true,
+        includeUrls: false,
+        includePreview,
+      }),
+    [activeScreenId, includePreview],
   );
 
   useEffect(() => {
     if (!enabled || !authToken) {
-      setIsConnected(false);
-      setRejectedScreenIds([]);
-      setPendingEmergencyScreenIds([]);
+      setIsConnected((current) => (current ? false : current));
+      setRejectedScreenIds((current) => (current.length > 0 ? EMPTY_SCREEN_IDS : current));
+      setPendingEmergencyScreenIds((current) => (current.length > 0 ? EMPTY_SCREEN_IDS : current));
       return;
     }
 
     const socket = connectScreensSocket(authToken);
     if (!socket) return;
 
+    const overviewQueryKey = queryKeys.screensOverview({
+      includeMedia: true,
+      includePreview,
+      onlineOnly,
+    });
+
+    const syncOverviewData = (ack?: ScreensSyncAck) => {
+      if (!ack) return;
+
+      const syncedScreens = onlineOnly
+        ? ack.screens.filter((screen) => screen.health_state === "ONLINE")
+        : ack.screens;
+
+      queryClient.setQueryData(overviewQueryKey, (current: ScreensOverview | undefined) =>
+        applyScreensSyncAck(current as never, { ...ack, screens: syncedScreens }),
+      );
+    };
+
     const refetchOverview = () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
+      queryClient.invalidateQueries({ queryKey: overviewQueryKey });
 
     const refetchDetail = () => {
       if (!activeScreenId) return Promise.resolve();
@@ -69,9 +108,7 @@ export const useScreensRealtime = ({
             return;
           }
 
-          queryClient.setQueryData(queryKeys.screensOverview({ includeMedia: true }), (current: ScreensSyncAck | undefined) =>
-            applyScreensSyncAck(current as never, ack),
-          );
+          syncOverviewData(ack);
 
           if (activeScreenId) {
             const matchedScreen = ack.screens.find((screen) => screen.id === activeScreenId);
@@ -125,18 +162,62 @@ export const useScreensRealtime = ({
     };
 
     const onStateUpdate = (payload: ScreenStateUpdateEvent) => {
-      queryClient.setQueryData(queryKeys.screensOverview({ includeMedia: true }), (current: ReturnType<typeof patchScreenInOverview>) =>
-        patchScreenInOverview(current as never, payload.screen, payload.server_time),
-      );
+      queryClient.setQueryData(overviewQueryKey, (current: ReturnType<typeof patchScreenInOverview>) => {
+        if (!current) return current;
+        const existingScreens = current.screens ?? [];
+        const hasExisting = existingScreens.some((item) => item.id === payload.screen.id);
+
+        if (onlineOnly) {
+          if (payload.screen.health_state !== "ONLINE") {
+            return {
+              ...current,
+              server_time: payload.server_time ?? current.server_time,
+              screens: existingScreens.filter((item) => item.id !== payload.screen.id),
+            };
+          }
+
+          if (!hasExisting) {
+            return {
+              ...current,
+              server_time: payload.server_time ?? current.server_time,
+              screens: [payload.screen, ...existingScreens],
+            };
+          }
+        }
+
+        return patchScreenInOverview(current as never, payload.screen, payload.server_time);
+      });
 
       if (activeScreenId === payload.screen.id) {
         queryClient.setQueryData(detailQueryKey, (current: ReturnType<typeof patchScreenNowPlaying>) =>
           patchScreenNowPlaying(current as never, payload.screen, payload.server_time),
         );
       }
+
+      handleStateUpdate?.(payload);
+    };
+
+    const onPreviewUpdate = (payload: ScreenPreviewUpdateEvent) => {
+      queryClient.setQueryData(
+        overviewQueryKey,
+        (current: ReturnType<typeof patchScreenPreviewInOverview>) =>
+          patchScreenPreviewInOverview(current as never, payload),
+      );
+
+      if (activeScreenId === payload.screenId) {
+        queryClient.setQueryData(
+          detailQueryKey,
+          (current: ReturnType<typeof patchScreenPreviewInNowPlaying>) =>
+            patchScreenPreviewInNowPlaying(current as never, payload),
+        );
+      }
+
+      handlePreviewUpdate?.(payload);
     };
 
     const onRefreshRequired = (payload: ScreenRefreshRequiredEvent) => {
+      handleRefreshRequired?.(payload);
+
       if (payload.reason === "EMERGENCY" && Array.isArray(payload.screen_ids)) {
         setPendingEmergencyScreenIds(payload.screen_ids);
       }
@@ -166,6 +247,7 @@ export const useScreensRealtime = ({
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     socket.on("screens:state:update", onStateUpdate);
+    socket.on("screens:preview:update", onPreviewUpdate);
     socket.on("screens:refresh:required", onRefreshRequired);
 
     if (socket.connected) {
@@ -184,9 +266,21 @@ export const useScreensRealtime = ({
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
       socket.off("screens:state:update", onStateUpdate);
+      socket.off("screens:preview:update", onPreviewUpdate);
       socket.off("screens:refresh:required", onRefreshRequired);
     };
-  }, [activeScreenId, authToken, detailQueryKey, enabled, queryClient]);
+  }, [
+    activeScreenId,
+    authToken,
+    detailQueryKey,
+    enabled,
+    handlePreviewUpdate,
+    handleRefreshRequired,
+    handleStateUpdate,
+    includePreview,
+    onlineOnly,
+    queryClient,
+  ]);
 
   return {
     isConnected,

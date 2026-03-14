@@ -22,6 +22,7 @@ import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import type { ScreenSnapshot } from "@/api/types";
+import { ScheduleTimelineGraph } from "@/components/screens/ScheduleTimelineGraph";
 
 interface StepScreenSelectProps {
   selectedScreenIds: string[];
@@ -207,7 +208,7 @@ export function StepScreenSelect({
     () => timelineState.snapshot?.snapshot?.schedule?.items ?? [],
     [timelineState.snapshot],
   );
-  const timelineRange = useMemo(() => {
+  const timelineBounds = useMemo(() => {
     if (!timelineItems.length) return null;
     const starts = timelineItems
       .map((item) => (item.start_at ? Date.parse(item.start_at) : NaN))
@@ -216,20 +217,11 @@ export function StepScreenSelect({
       .map((item) => (item.end_at ? Date.parse(item.end_at) : NaN))
       .filter((value) => !Number.isNaN(value));
     if (!starts.length || !ends.length) return null;
-    const min = Math.min(...starts);
-    const max = Math.max(...ends);
-    return { start: min, end: max, total: Math.max(max - min, 1) };
+    return {
+      start: new Date(Math.min(...starts)).toISOString(),
+      end: new Date(Math.max(...ends)).toISOString(),
+    };
   }, [timelineItems]);
-
-  const timelinePriorities = useMemo(
-    () =>
-      Array.from(new Set(timelineItems.map((item) => item.priority ?? 0)))
-        .sort((a, b) => b - a),
-    [timelineItems],
-  );
-
-  const formatTimelineTime = (value?: string) =>
-    value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 
   const getAvailabilityBadgeVariant = (status: AvailabilityStatus) => {
     switch (status) {
@@ -550,73 +542,20 @@ export function StepScreenSelect({
             </div>
           ) : timelineState.error ? (
             <p className="text-sm text-destructive">{timelineState.error}</p>
-          ) : timelineRange && timelineItems.length && timelinePriorities.length ? (
+          ) : timelineBounds && timelineItems.length ? (
             <div className="space-y-5">
-              <div className="flex gap-3">
-                <div className="flex flex-col items-center text-[10px] text-muted-foreground">
-                  <span className="font-semibold rotate-[-90deg]">priority</span>
-                  <span className="mt-2 h-10 w-1 rounded bg-muted" />
-                  <span className="mt-2 text-xs">↑</span>
-                </div>
-                <div className="relative flex-1 rounded-[32px] border border-border bg-white/70 p-4 shadow-sm">
-                  <div className="absolute inset-y-2 left-10 w-px bg-border/20" />
-                  <div className="absolute inset-x-0 top-12 grid h-[calc(100%-4rem)] grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, idx) => (
-                      <div
-                        key={idx}
-                        className="border-r border-dashed border-muted/40 last:border-0"
-                      />
-                    ))}
-                  </div>
-                  <div className="space-y-3">
-                    {timelinePriorities.map((priority) => {
-                      const itemsForPriority = timelineItems.filter(
-                        (item) => (item.priority ?? 0) === priority,
-                      );
-                      if (!itemsForPriority.length) return null;
-                      return (
-                        <div key={`priority-${priority}`} className="space-y-1 text-[10px]">
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span className="font-semibold">Priority {priority}</span>
-                            <span>
-                              {formatTimelineTime(itemsForPriority[0].start_at)} –{" "}
-                              {formatTimelineTime(itemsForPriority[itemsForPriority.length - 1].end_at)}
-                            </span>
-                          </div>
-                          <div className="relative h-6 rounded-full border border-muted/40 bg-muted/30">
-                            {itemsForPriority.map((item) => {
-                              const start = item.start_at ? Date.parse(item.start_at) : NaN;
-                              const end = item.end_at ? Date.parse(item.end_at) : NaN;
-                              if (Number.isNaN(start) || Number.isNaN(end)) return null;
-                              const left = ((start - timelineRange.start) / timelineRange.total) * 100;
-                              const width = ((end - start) / timelineRange.total) * 100;
-                              return (
-                                <div
-                                  key={`${item.id}-${priority}`}
-                                  className="absolute top-[12.5%] h-[75%] rounded-full border border-primary/70 bg-primary/60 px-2 text-[10px] text-primary-foreground flex items-center overflow-hidden"
-                                  style={{
-                                    left: `${Math.max(0, left)}%`,
-                                    width: `${Math.min(100, width)}%`,
-                                  }}
-                                >
-                                  <span className="truncate">
-                                    {item.presentation_id ?? item.id}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="absolute inset-x-0 bottom-[-18px] flex items-center justify-between text-[10px] text-muted-foreground px-4">
-                    <span>{formatTimelineTime(new Date(timelineRange.start).toISOString())}</span>
-                    <span className="flex items-center gap-1">timeline →</span>
-                    <span>{formatTimelineTime(new Date(timelineRange.end).toISOString())}</span>
-                  </div>
-                </div>
-              </div>
+              <ScheduleTimelineGraph
+                items={timelineItems.map((item) => ({
+                  id: item.id,
+                  label: item.presentation_id ?? item.id,
+                  start_at: item.start_at,
+                  end_at: item.end_at,
+                  priority: item.priority,
+                }))}
+                windowStart={timelineBounds.start}
+                windowEnd={timelineBounds.end}
+                currentTime={new Date().toISOString()}
+              />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

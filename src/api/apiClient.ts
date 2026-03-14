@@ -10,6 +10,7 @@ export interface ApiRequestOptions<TBody = unknown> {
   body?: TBody;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  timeoutMs?: number;
   useApiKey?: boolean;
   rawBody?: BodyInit; // if you need FormData/Blob; skips JSON stringify
 }
@@ -89,7 +90,7 @@ export class ApiClient {
 
   async request<TResponse, TBody = unknown>(options: ApiRequestOptions<TBody>): Promise<TResponse> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     const pathWithParams = fillPathParams(options.path, options.pathParams);
     const queryString = this.buildQuery(options.query);

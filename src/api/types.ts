@@ -230,6 +230,7 @@ export interface MetricsOverview {
   };
   schedules?: {
     active?: number;
+    active_screens_now?: number;
   };
   proof_of_play?: Record<string, number>;
   system_health?: {
@@ -429,6 +430,13 @@ export interface ScreenEmergencySummary {
   [key: string]: unknown;
 }
 
+export interface ScreenPreviewSummary {
+  storage_object_id?: string | null;
+  captured_at?: string | null;
+  screenshot_url?: string | null;
+  stale?: boolean;
+}
+
 export interface ScreenOverviewItem extends Screen {
   health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string;
   health_reason?: string | null;
@@ -454,6 +462,7 @@ export interface ScreenOverviewItem extends Screen {
   publish?: ScreenPublishSummary | null;
   playback?: ScreenPlaybackSummary | null;
   emergency?: ScreenEmergencySummary | null;
+  preview?: ScreenPreviewSummary | null;
 }
 
 export interface NowPlaying {
@@ -481,6 +490,35 @@ export interface ScreenNowPlayingResponse {
   booked_until?: string | null;
   playback?: ScreenPlaybackSummary | null;
   emergency?: ScreenEmergencySummary | null;
+  preview?: ScreenPreviewSummary | null;
+}
+
+export interface ScreenScheduleTimelineItem {
+  id: string;
+  presentation_id?: string | null;
+  presentation_name?: string | null;
+  start_at: string;
+  end_at: string;
+  priority?: number | null;
+  is_current?: boolean;
+}
+
+export interface ScreenScheduleTimelineRow {
+  id: string;
+  name: string;
+  location?: string | null;
+  health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string;
+  health_reason?: string | null;
+  playback?: ScreenPlaybackSummary | null;
+  publish?: ScreenPublishSummary | null;
+  timeline_items: ScreenScheduleTimelineItem[];
+}
+
+export interface ScreenScheduleTimelineResponse {
+  server_time?: string;
+  window_start: string;
+  window_end: string;
+  screens: ScreenScheduleTimelineRow[];
 }
 
 export interface ScreenAvailability {
@@ -593,6 +631,14 @@ export interface ScreensSyncAck {
 export interface ScreenStateUpdateEvent {
   server_time?: string;
   screen: ScreenOverviewItem;
+}
+
+export interface ScreenPreviewUpdateEvent {
+  screenId: string;
+  captured_at?: string | null;
+  screenshot_url?: string | null;
+  stale?: boolean;
+  storage_object_id?: string | null;
 }
 
 export interface ScreenRefreshRequiredEvent {

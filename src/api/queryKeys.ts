@@ -1,11 +1,29 @@
 export const queryKeys = {
   departments: ["departments"] as const,
   screens: ["screens"] as const,
-  screensOverview: (filters?: { includeMedia?: boolean }) =>
-    ["screens", "overview", Boolean(filters?.includeMedia)] as const,
+  screensOverview: (filters?: { includeMedia?: boolean; includePreview?: boolean; onlineOnly?: boolean }) =>
+    [
+      "screens",
+      "overview",
+      Boolean(filters?.includeMedia),
+      Boolean(filters?.includePreview),
+      Boolean(filters?.onlineOnly),
+    ] as const,
+  screensScheduleTimeline: (filters?: {
+    windowStart?: string;
+    windowHours?: number;
+    onlyActiveNow?: boolean;
+  }) =>
+    [
+      "screens",
+      "schedule-timeline",
+      filters?.windowStart ?? null,
+      filters?.windowHours ?? 24,
+      Boolean(filters?.onlyActiveNow),
+    ] as const,
   screenNowPlaying: (
     screenId?: string,
-    filters?: { includeMedia?: boolean; includeUrls?: boolean },
+    filters?: { includeMedia?: boolean; includeUrls?: boolean; includePreview?: boolean },
   ) =>
     [
       "screens",
@@ -13,6 +31,7 @@ export const queryKeys = {
       screenId,
       Boolean(filters?.includeMedia),
       Boolean(filters?.includeUrls),
+      Boolean(filters?.includePreview),
     ] as const,
   screenGroups: ["screen-groups"] as const,
   screenSnapshot: (screenId?: string) => ["screens", "snapshot", screenId] as const,

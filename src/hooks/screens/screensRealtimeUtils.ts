@@ -1,7 +1,10 @@
 import type {
   ScreenNowPlayingResponse,
+  ScreenPreviewSummary,
+  ScreenPreviewUpdateEvent,
   ScreenOverviewItem,
   ScreenRefreshRequiredEvent,
+  ScreenScheduleTimelineResponse,
   ScreensOverview,
   ScreensSyncAck,
 } from "@/api/types";
@@ -34,6 +37,10 @@ export const patchScreenNowPlaying = (
     ...current,
     server_time: serverTime ?? current.server_time,
     status: screen.status ?? current.status,
+    health_state: screen.health_state ?? current.health_state,
+    health_reason: screen.health_reason ?? current.health_reason,
+    auth_diagnostics: screen.auth_diagnostics ?? current.auth_diagnostics,
+    active_pairing: screen.active_pairing ?? current.active_pairing,
     last_heartbeat_at: screen.last_heartbeat_at ?? current.last_heartbeat_at,
     current_schedule_id: screen.current_schedule_id ?? current.current_schedule_id,
     current_media_id: screen.current_media_id ?? current.current_media_id,
@@ -43,6 +50,74 @@ export const patchScreenNowPlaying = (
     publish: screen.publish ?? current.publish,
     playback: screen.playback ?? current.playback,
     emergency: screen.emergency ?? current.emergency,
+    preview: screen.preview ?? current.preview,
+  };
+};
+
+const mergePreview = (
+  current: ScreenPreviewSummary | null | undefined,
+  payload: ScreenPreviewUpdateEvent,
+): ScreenPreviewSummary => ({
+  storage_object_id: payload.storage_object_id ?? current?.storage_object_id ?? null,
+  captured_at: payload.captured_at ?? current?.captured_at ?? null,
+  screenshot_url: payload.screenshot_url ?? current?.screenshot_url ?? null,
+  stale: payload.stale ?? current?.stale ?? false,
+});
+
+export const patchScreenPreviewInOverview = (
+  current: ScreensOverview | undefined,
+  payload: ScreenPreviewUpdateEvent,
+) => {
+  if (!current) return current;
+
+  return {
+    ...current,
+    screens: current.screens.map((screen) =>
+      screen.id === payload.screenId
+        ? {
+            ...screen,
+            preview: mergePreview(screen.preview, payload),
+          }
+        : screen,
+    ),
+  };
+};
+
+export const patchScreenPreviewInNowPlaying = (
+  current: ScreenNowPlayingResponse | undefined,
+  payload: ScreenPreviewUpdateEvent,
+) => {
+  if (!current || current.screen_id !== payload.screenId) return current;
+
+  return {
+    ...current,
+    preview: mergePreview(current.preview, payload),
+  };
+};
+
+export const patchScreenInScheduleTimeline = (
+  current: ScreenScheduleTimelineResponse | undefined,
+  screen: ScreenOverviewItem,
+  serverTime?: string,
+) => {
+  if (!current) return current;
+
+  return {
+    ...current,
+    server_time: serverTime ?? current.server_time,
+    screens: current.screens.map((row) =>
+      row.id === screen.id
+        ? {
+            ...row,
+            name: screen.name ?? row.name,
+            location: screen.location ?? row.location,
+            health_state: screen.health_state ?? row.health_state,
+            health_reason: screen.health_reason ?? row.health_reason,
+            playback: screen.playback ?? row.playback,
+            publish: screen.publish ?? row.publish,
+          }
+        : row,
+    ),
   };
 };
 

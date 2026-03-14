@@ -71,8 +71,8 @@ export function ScreenDetailsModal({
   });
 
   const nowPlayingQuery = useQuery({
-    queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false }),
-    queryFn: () => screensApi.getNowPlaying(screenId, { include_media: true }),
+    queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false, includePreview: false }),
+    queryFn: () => screensApi.getNowPlaying(screenId, { include_media: true, include_preview: false }),
     enabled: open && !realtimeRejected,
   });
 
@@ -108,6 +108,7 @@ export function ScreenDetailsModal({
       queryClient.invalidateQueries({ queryKey: ["screen", screenId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
       queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true, includePreview: true }) });
       setIsEditing(false);
       toast.success("Screen updated successfully");
     },

@@ -8,6 +8,7 @@ import type {
   ScreenStatus,
   NowPlaying,
   ScreenNowPlayingResponse,
+  ScreenScheduleTimelineResponse,
   ScreenAvailability,
   ScreenSnapshot,
   ScreenGroupAvailability,
@@ -51,11 +52,30 @@ export const screensApi = {
       method: "DELETE",
     }),
 
-  getOverview: (query?: { include_media?: boolean }) =>
+  getOverview: (
+    query?: { include_media?: boolean; include_preview?: boolean; online_only?: boolean },
+    options?: { timeoutMs?: number },
+  ) =>
     apiClient.request<ScreensOverview>({
       path: endpoints.screens.overview,
       method: "GET",
       query,
+      timeoutMs: options?.timeoutMs,
+    }),
+
+  getScheduleTimeline: (
+    query: {
+      window_start: string;
+      window_hours?: number;
+      only_active_now?: boolean;
+    },
+    options?: { timeoutMs?: number },
+  ) =>
+    apiClient.request<ScreenScheduleTimelineResponse>({
+      path: endpoints.screens.scheduleTimeline,
+      method: "GET",
+      query,
+      timeoutMs: options?.timeoutMs,
     }),
 
   getStatus: (screenId: string) =>
@@ -66,7 +86,7 @@ export const screensApi = {
 
   getNowPlaying: (
     screenId: string,
-    query?: { include_media?: boolean; include_urls?: boolean },
+    query?: { include_media?: boolean; include_urls?: boolean; include_preview?: boolean },
   ) =>
     apiClient.request<ScreenNowPlayingResponse>({
       path: endpoints.screens.nowPlaying(screenId),

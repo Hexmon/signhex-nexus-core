@@ -5,7 +5,10 @@ import {
   getServerClockOffsetMs,
   getServerNowFromOffset,
   patchScreenInOverview,
+  patchScreenInScheduleTimeline,
   patchScreenNowPlaying,
+  patchScreenPreviewInNowPlaying,
+  patchScreenPreviewInOverview,
   SCREENS_REFRESH_DEBOUNCE_MS,
   shouldRefetchScreenDetail,
 } from "@/hooks/screens/screensRealtimeUtils";
@@ -59,6 +62,81 @@ describe("screens realtime cache helpers", () => {
     expect(next?.status).toBe("OFFLINE");
     expect(next?.playback?.source).toBe("DEFAULT");
     expect(next?.server_time).toBe("2026-03-10T07:16:00.000Z");
+  });
+
+  test("patchScreenPreviewInOverview updates preview data for the matching screen", () => {
+    const current: ScreensOverview = {
+      server_time: "2026-03-10T07:15:00.000Z",
+      screens: [baseScreen],
+      groups: [],
+      now_playing: [],
+    };
+
+    const next = patchScreenPreviewInOverview(current, {
+      screenId: "screen-1",
+      captured_at: "2026-03-10T07:16:00.000Z",
+      screenshot_url: "https://cdn.example.com/screen-1.png",
+      stale: false,
+      storage_object_id: "storage-1",
+    });
+
+    expect(next?.screens[0].preview?.screenshot_url).toBe("https://cdn.example.com/screen-1.png");
+    expect(next?.screens[0].preview?.storage_object_id).toBe("storage-1");
+  });
+
+  test("patchScreenPreviewInNowPlaying updates preview for the matching detail screen", () => {
+    const current: ScreenNowPlayingResponse = {
+      screen_id: "screen-1",
+      status: "ACTIVE",
+      preview: {
+        screenshot_url: null,
+        stale: true,
+      },
+    };
+
+    const next = patchScreenPreviewInNowPlaying(current, {
+      screenId: "screen-1",
+      captured_at: "2026-03-10T07:16:00.000Z",
+      screenshot_url: "https://cdn.example.com/screen-1.png",
+      stale: false,
+      storage_object_id: "storage-1",
+    });
+
+    expect(next?.preview?.screenshot_url).toBe("https://cdn.example.com/screen-1.png");
+    expect(next?.preview?.stale).toBe(false);
+  });
+
+  test("patchScreenInScheduleTimeline patches playback and health for the matching row", () => {
+    const current = {
+      server_time: "2026-03-10T07:15:00.000Z",
+      window_start: "2026-03-10T00:00:00.000Z",
+      window_end: "2026-03-11T00:00:00.000Z",
+      screens: [
+        {
+          id: "screen-1",
+          name: "Lobby",
+          location: "Reception",
+          health_state: "ONLINE",
+          playback: { source: "SCHEDULE", current_media_id: "media-1" },
+          timeline_items: [],
+        },
+      ],
+    };
+
+    const next = patchScreenInScheduleTimeline(
+      current,
+      {
+        ...baseScreen,
+        health_state: "STALE",
+        health_reason: "Heartbeat is stale.",
+        playback: { source: "DEFAULT", current_media_id: "media-9" },
+      },
+      "2026-03-10T07:16:00.000Z",
+    );
+
+    expect(next?.server_time).toBe("2026-03-10T07:16:00.000Z");
+    expect(next?.screens[0].health_state).toBe("STALE");
+    expect(next?.screens[0].playback?.current_media_id).toBe("media-9");
   });
 
   test("applyScreensSyncAck merges synced screens and groups", () => {

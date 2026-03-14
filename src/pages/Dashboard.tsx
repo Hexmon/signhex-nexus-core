@@ -35,6 +35,8 @@ import { MediaPreview } from "@/components/common/MediaPreview";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
+import { OnlineScreensDetailsModal } from "@/components/dashboard/OnlineScreensDetailsModal";
+import { ActiveScheduledTimelineModal } from "@/components/dashboard/ActiveScheduledTimelineModal";
 
 const formatBytes = (bytes?: number | null) => {
   if (bytes === undefined || bytes === null) return "—";
@@ -380,12 +382,23 @@ export default function Dashboard() {
       {
         id: "active-scheduled",
         title: "Active Scheduled",
-        value: isMetricsLoading ? "…" : String(overview?.schedules?.active ?? 0),
+        value: isMetricsLoading
+          ? "…"
+          : String(overview?.schedules?.active_screens_now ?? overview?.schedules?.active ?? 0),
         subtitle: "Screens running playlists",
         icon: Calendar,
       },
     ];
-  }, [isMetricsLoading, quotaPercent, quotaBytes, storageBytes, screensMetrics, totalsMetrics, overview?.schedules?.active]);
+  }, [
+    isMetricsLoading,
+    overview?.schedules?.active,
+    overview?.schedules?.active_screens_now,
+    quotaPercent,
+    quotaBytes,
+    screensMetrics,
+    storageBytes,
+    totalsMetrics,
+  ]);
 
   const departmentRequests = useMemo(() => {
     if (Array.isArray(requestsByDept)) return requestsByDept;
@@ -653,8 +666,31 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <OnlineScreensDetailsModal
+        open={selectedKPI === "online-screens"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedKPI(null);
+          }
+        }}
+      />
+
+      {selectedKPI === "active-scheduled" ? (
+        <ActiveScheduledTimelineModal
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedKPI(null);
+            }
+          }}
+        />
+      ) : null}
+
       {/* KPI Detail Dialog */}
-      <Dialog open={!!selectedKPI} onOpenChange={() => setSelectedKPI(null)}>
+      <Dialog
+        open={!!selectedKPI && selectedKPI !== "online-screens" && selectedKPI !== "active-scheduled"}
+        onOpenChange={() => setSelectedKPI(null)}
+      >
         <DialogContent className={selectedKPI === "storage" ? "max-w-5xl" : "max-w-2xl"}>
           <DialogHeader>
             <DialogTitle>
