@@ -185,6 +185,7 @@ export function StepReview({ state, approvalNotes, onUpdateNotes }: StepReviewPr
     selectedGroupIds,
     scheduleName,
     scheduleDescription,
+    timezone,
     startAt,
     endAt,
     priority,
@@ -344,6 +345,12 @@ export function StepReview({ state, approvalNotes, onUpdateNotes }: StepReviewPr
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">End Time</p>
                 <p className="font-medium">{formatDateTime(endAt)}</p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Audit Timezone</p>
+                <p className="font-medium">{timezone || "UTC"}</p>
+                <p className="text-xs text-muted-foreground">Execution remains UTC-based on the player.</p>
               </div>
               
               {scheduleDescription && (

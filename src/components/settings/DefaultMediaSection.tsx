@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { ApiError } from "@/api/apiClient";
 import type { DefaultMediaVariantSetting, MediaAsset, MediaType, ScreenAspectRatio } from "@/api/types";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 const MEDIA_PAGE_SIZE = 100;
 
@@ -47,7 +48,7 @@ const resolveMediaType = (media: MediaAsset): MediaType => {
   return "DOCUMENT";
 };
 
-const resolveMediaName = (media: MediaAsset) => media.filename || media.name || "Untitled media";
+const resolveMediaName = (media: MediaAsset) => resolveMediaDisplayName(media);
 
 const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; mediaType: MediaType; sizeClass: string }) => {
   if (!media.media_url) {
@@ -256,7 +257,7 @@ export function DefaultMediaSection() {
     const query = mediaSearch.trim().toLowerCase();
     if (!query) return mediaItems;
     return mediaItems.filter((item) => {
-      const name = (item.filename || item.name || "").toLowerCase();
+      const name = resolveMediaDisplayName(item).toLowerCase();
       return name.includes(query);
     });
   }, [mediaItems, mediaSearch]);

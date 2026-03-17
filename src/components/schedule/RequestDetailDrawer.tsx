@@ -29,6 +29,7 @@ import { scheduleRequestsApi } from "@/api/domains/scheduleRequests";
 import { queryKeys } from "@/api/queryKeys";
 import type { MediaAsset, ScheduleRequestListItem } from "@/api/types";
 import { MediaPreview } from "@/components/common/MediaPreview";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 interface RequestDetailDrawerProps {
   request: ScheduleRequestListItem;
@@ -506,7 +507,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
                       <div className="flex flex-wrap items-center gap-4">
                         <MediaPreview media={media} />
                         <div className="flex-1 min-w-[220px] space-y-1">
-                          <p className="font-medium text-sm truncate">{media.name || media.filename || media.id}</p>
+                          <p className="font-medium text-sm truncate">{resolveMediaDisplayName(media)}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <ContentTypeBadge type={resolveContentType(media)} />
                             {media.duration_seconds && (
@@ -651,7 +652,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
                   >
                     {layoutSlots.map((slot) => {
                       const media = slotMediaById.get(slot.id);
-                      const mediaLabel = media?.name || media?.filename || media?.id;
+                      const mediaLabel = resolveMediaDisplayName(media);
                       const contentType = media?.content_type || media?.source_content_type || "";
                       const isImage =
                         Boolean(media?.media_url) &&
@@ -798,7 +799,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
       <Dialog open={!!previewMedia} onOpenChange={(open) => (open ? null : setPreviewMedia(null))}>
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>{previewMedia?.name || previewMedia?.filename || "Media preview"}</DialogTitle>
+            <DialogTitle>{resolveMediaDisplayName(previewMedia) || "Media preview"}</DialogTitle>
           </DialogHeader>
           {previewMedia?.media_url ? (
             previewMedia.media_url && previewMedia.type === "VIDEO" ? (
@@ -806,7 +807,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
             ) : (
               <img
                 src={previewMedia.media_url}
-                alt={previewMedia.name || previewMedia.filename || "Media"}
+                alt={resolveMediaDisplayName(previewMedia) || "Media"}
                 className="w-full max-h-[480px] object-contain"
               />
             )

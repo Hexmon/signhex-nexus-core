@@ -21,6 +21,7 @@ import {
 } from "@/components/chat/mediaUpload";
 import type { UploadMediaResult } from "@/components/chat/mediaUpload";
 import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/chat/types";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 interface AttachmentPickerProps {
   open: boolean;
@@ -31,7 +32,7 @@ interface AttachmentPickerProps {
 
 const toPendingAttachment = (media: MediaAsset): ChatPendingAttachment => ({
   mediaId: media.id,
-  fileName: media.filename,
+  fileName: resolveMediaDisplayName(media),
   contentType: media.content_type,
   size: media.size,
   previewUrl: media.media_url,
@@ -94,7 +95,8 @@ export function AttachmentPicker({
     if (!query) return items;
     return items.filter((item) => {
       const name = (item.filename || item.name || "").toLowerCase();
-      return name.includes(query);
+      const displayName = resolveMediaDisplayName(item).toLowerCase();
+      return displayName.includes(query) || name.includes(query);
     });
   }, [mediaQuery.data?.items, search]);
 
@@ -169,7 +171,7 @@ export function AttachmentPicker({
             previewUrl: media.media_url ?? undefined,
             progress: 100,
             status: "uploaded",
-            fileName: media.filename,
+            fileName: resolveMediaDisplayName(media),
             contentType: media.content_type || item.contentType,
             size: media.size ?? result.finalSize,
             didCompress: result.didCompress,
@@ -230,7 +232,7 @@ export function AttachmentPicker({
 
   const addExistingMedia = (media: MediaAsset) => {
     onAddAttachments([toPendingAttachment(media)]);
-    toast({ title: "Attachment added", description: `${media.filename} added to message.` });
+    toast({ title: "Attachment added", description: `${resolveMediaDisplayName(media)} added to message.` });
   };
 
   return (
@@ -287,11 +289,11 @@ export function AttachmentPicker({
                           media={media}
                           url={media.media_url ?? undefined}
                           type={media.content_type}
-                          alt={media.filename}
+                          alt={resolveMediaDisplayName(media)}
                           className="h-24 w-full"
                         />
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">{media.filename}</span>
+                          <span className="truncate text-sm font-medium">{resolveMediaDisplayName(media)}</span>
                           <Badge variant="outline">{resolveType(media)}</Badge>
                         </div>
                         <div className="text-xs text-muted-foreground truncate">{media.content_type || "unknown"}</div>

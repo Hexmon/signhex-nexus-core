@@ -12,6 +12,7 @@ import type {
 export interface SchedulePayload {
   name: string;
   description?: string;
+  timezone?: string;
   start_at: string;
   end_at: string;
   is_active?: boolean;

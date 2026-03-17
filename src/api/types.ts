@@ -724,9 +724,32 @@ export interface DeviceCommand {
 }
 
 export interface EmergencyStatus {
+  active: boolean;
+  active_count?: number;
+  emergency: EmergencyRecord | null;
+  active_emergencies?: EmergencyRecord[];
+}
+
+export interface EmergencyRecord {
   id: string;
-  status: string;
-  triggered_at?: string;
+  triggered_by?: string | null;
+  message: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  created_at: string;
+  triggered_at?: string | null;
+  cleared_at?: string | null;
+  cleared_by?: string | null;
+  expires_at?: string | null;
+  clear_reason?: string | null;
+  audit_note?: string | null;
+  emergency_type_id?: string | null;
+  media_id?: string | null;
+  media_url?: string | null;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+  target_all?: boolean;
+  scope?: "GLOBAL" | "GROUP" | "SCREEN" | "MIXED" | string;
+  is_active?: boolean;
 }
 
 export type MediaType = "IMAGE" | "VIDEO" | "DOCUMENT";
@@ -740,6 +763,7 @@ export interface MediaAsset {
   id: string;
   filename: string;
   name?: string;
+  display_name?: string;
   type?: MediaType;
   content_type?: string;
   source_content_type?: string;
@@ -762,6 +786,7 @@ export interface Schedule {
   id: string;
   name: string;
   description?: string | null;
+  timezone?: string | null;
   start_at: string;
   end_at: string;
   is_active?: boolean;

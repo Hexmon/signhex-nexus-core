@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { RequestDetailDrawer } from "@/components/schedule/RequestDetailDrawer";
+import { EmergencyTakeoverModal } from "@/components/requests/EmergencyTakeoverModal";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
@@ -66,6 +67,7 @@ export default function ScheduleQueue() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
   const [selectedRequest, setSelectedRequest] = useState<ScheduleRequestListItem | null>(null);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [pageByStatus, setPageByStatus] = useState<Record<TabKey, number>>({
     pending: 1,
     approved: 1,
@@ -84,7 +86,7 @@ export default function ScheduleQueue() {
   const activeConfig = STATUS_TABS.find((tab) => tab.key === activeTab)!;
   const activePage = pageByStatus[activeTab];
 
-  const { data, isLoading, isFetching, isError, error } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch: refetchRequests } = useQuery({
     queryKey: queryKeys.scheduleRequests({
       page: activePage,
       limit: PAGE_SIZE,
@@ -178,7 +180,7 @@ export default function ScheduleQueue() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setIsEmergencyModalOpen(true)}>
               <Zap className="h-4 w-4 mr-2" />
               Emergency Takeover
             </Button>
@@ -478,6 +480,16 @@ export default function ScheduleQueue() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <EmergencyTakeoverModal
+        open={isEmergencyModalOpen}
+        onOpenChange={setIsEmergencyModalOpen}
+        onUpdated={() => {
+          void summaryQuery.refetch();
+          void refetchRequests();
+          void deviceScheduleQuery.refetch();
+        }}
+      />
 
       {/* Right Panel - Detail Drawer */}
       {selectedRequest && (

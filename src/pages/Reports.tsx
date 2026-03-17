@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp, Activity, Users, Monitor, AlertTriangle, Bell, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { useAuthorization } from "@/hooks/useAuthorization";
 import type { PaginatedResponse, ProofOfPlay } from "@/api/types";
 
 export default function Reports() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [resourceFilter, setResourceFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
@@ -219,21 +221,26 @@ export default function Reports() {
               ) : (
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <p className="text-lg font-semibold">{emergencyStatus?.status ?? "UNKNOWN"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {emergencyStatus?.triggered_at ? `Since ${emergencyStatus.triggered_at}` : "No active incident"}
+                    <p className="text-lg font-semibold">
+                      {emergencyStatus?.active ? "ACTIVE" : "CLEAR"}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      {emergencyStatus?.active
+                        ? `${emergencyStatus.active_count ?? emergencyStatus.active_emergencies?.length ?? 1} active emergency${(emergencyStatus.active_count ?? emergencyStatus.active_emergencies?.length ?? 1) > 1 ? "ies" : ""}`
+                        : "No active incident"}
+                    </p>
+                    {emergencyStatus?.emergency?.message && (
+                      <p className="text-xs text-muted-foreground">
+                        {emergencyStatus.emergency.severity}: {emergencyStatus.emergency.message}
+                      </p>
+                    )}
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      emergencyStatus?.id
-                        ? emergencyApi.clear(emergencyStatus.id).then(() => emergencyQuery.refetch())
-                        : emergencyApi.trigger({ message: "Manual trigger" }).then(() => emergencyQuery.refetch())
-                    }
+                    onClick={() => navigate("/schedule")}
                   >
-                    {emergencyStatus?.status === "ACTIVE" ? "Clear" : "Trigger"}
+                    Manage
                   </Button>
                 </div>
               )}

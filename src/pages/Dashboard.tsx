@@ -37,6 +37,7 @@ import { useNavigate } from "react-router-dom";
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
 import { OnlineScreensDetailsModal } from "@/components/dashboard/OnlineScreensDetailsModal";
 import { ActiveScheduledTimelineModal } from "@/components/dashboard/ActiveScheduledTimelineModal";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 const formatBytes = (bytes?: number | null) => {
   if (bytes === undefined || bytes === null) return "—";
@@ -757,7 +758,7 @@ export default function Dashboard() {
                         allMedia?.map((item) => (
                           <TableRow key={item.id}>
                             <TableCell className="max-w-[280px] py-2 text-xs">
-                              <div className="truncate text-xs font-medium">{item.name ?? item.filename}</div>
+                              <div className="truncate text-xs font-medium">{resolveMediaDisplayName(item)}</div>
                               <div className="truncate text-xs text-muted-foreground">{item.id}</div>
                             </TableCell>
                             <TableCell className="py-2 text-xs">{item.type ?? "—"}</TableCell>
@@ -777,7 +778,7 @@ export default function Dashboard() {
                                 <Button
                                   size="icon"
                                   variant="outline"
-                                  aria-label={`Preview ${item.name ?? item.filename ?? "media"}`}
+                                  aria-label={`Preview ${resolveMediaDisplayName(item)}`}
                                   title="Preview media"
                                   onClick={() => handlePreview(item)}
                                   disabled={previewMutation.isPending && previewMediaId === item.id}
@@ -787,7 +788,7 @@ export default function Dashboard() {
                                 <Button
                                   size="icon"
                                   variant="destructive"
-                                  aria-label={`Delete ${item.name ?? item.filename ?? "media"}`}
+                                  aria-label={`Delete ${resolveMediaDisplayName(item)}`}
                                   title="Delete media"
                                   onClick={() => setDeleteTarget(item)}
                                 >
@@ -817,7 +818,7 @@ export default function Dashboard() {
         <Dialog open={!!previewMedia} onOpenChange={(open) => !open && setPreviewMedia(null)}>
           <DialogContent className="h-[90vh] w-[95vw] max-w-6xl p-4">
             <DialogHeader>
-              <DialogTitle>{previewMedia.name ?? previewMedia.filename}</DialogTitle>
+              <DialogTitle>{resolveMediaDisplayName(previewMedia)}</DialogTitle>
               <DialogDescription>
                 {previewMedia.source_content_type ?? previewMedia.content_type ?? previewMedia.type ?? "Media preview"}
               </DialogDescription>
@@ -827,7 +828,7 @@ export default function Dashboard() {
                 media={previewMedia}
                 url={previewMedia.media_url}
                 type={previewMedia.source_content_type ?? previewMedia.content_type}
-                alt={previewMedia.name ?? previewMedia.filename}
+                alt={resolveMediaDisplayName(previewMedia)}
                 className="h-full max-h-[75vh] w-full"
               />
             </div>
@@ -845,7 +846,7 @@ export default function Dashboard() {
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <div className="font-medium">{deleteTarget.name ?? deleteTarget.filename}</div>
+              <div className="font-medium">{resolveMediaDisplayName(deleteTarget)}</div>
               <div className="mt-1 text-muted-foreground">
                 {deleteTarget.source_content_type ?? deleteTarget.content_type ?? deleteTarget.type ?? "Unknown type"}
               </div>

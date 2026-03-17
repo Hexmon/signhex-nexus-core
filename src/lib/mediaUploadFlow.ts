@@ -2,6 +2,7 @@ import { ApiError } from "@/api/apiClient";
 import { mediaApi } from "@/api/domains/media";
 import type { MediaAsset } from "@/api/types";
 import { maybeCompressForUpload, type CompressionResult } from "@/lib/mediaCompression";
+import { deriveDisplayNameFromFilename } from "@/lib/media";
 
 export const allowedMimeTypes = new Set([
   "image/jpeg",
@@ -143,6 +144,7 @@ const uploadViaXhr = (
 export const uploadMediaWithPresign = async (
   file: File,
   opts?: {
+    displayName?: string;
     onProgress?: (percent: number) => void;
     onPrepared?: (result: CompressionResult) => void;
   },
@@ -155,6 +157,7 @@ export const uploadMediaWithPresign = async (
 
   const presign = await mediaApi.presignUpload({
     filename: finalFile.name,
+    display_name: opts?.displayName?.trim() || deriveDisplayNameFromFilename(file.name),
     content_type: contentType,
     size: finalFile.size,
   });

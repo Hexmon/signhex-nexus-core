@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, RefreshCcw, SendHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { resolveMediaDisplayName } from "@/lib/media";
 import type { ChatMessage, MediaAsset } from "@/api/types";
 import type { ChatPendingUiMessage } from "@/components/chat/types";
 import { MessageItem } from "@/components/chat/MessageItem";
@@ -249,11 +250,11 @@ export function MessageList({
                       media={media}
                       url={media?.media_url}
                       type={media?.content_type}
-                      alt={media?.filename || mediaId}
+                      alt={resolveMediaDisplayName(media) || mediaId}
                       className="h-20 w-full"
                     />
                     <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {media?.filename || mediaId}
+                      {resolveMediaDisplayName(media) || mediaId}
                     </p>
                   </div>
                 );

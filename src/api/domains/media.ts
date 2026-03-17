@@ -4,6 +4,7 @@ import type { MediaAsset, MediaListParams, MediaType, PaginatedResponse } from "
 
 export interface PresignPayload {
   filename: string;
+  display_name?: string;
   content_type: string;
   size: number;
 }

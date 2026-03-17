@@ -60,6 +60,7 @@ export interface ScheduleWizardState {
   scheduleItemSyncScheduleId?: string | null;
   scheduleName: string;
   scheduleDescription: string;
+  timezone: string;
   startAt: string;
   endAt: string;
   priority: number;
@@ -96,6 +97,7 @@ const initialState: ScheduleWizardState = {
   scheduleItemSyncScheduleId: null,
   scheduleName: "",
   scheduleDescription: "",
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   startAt: "",
   endAt: "",
   priority: 0,
@@ -232,7 +234,13 @@ export default function ScheduleCreator() {
 
   const createScheduleMutation = useSafeMutation(
     {
-      mutationFn: (payload: { name: string; description?: string; start_at: string; end_at: string }) =>
+      mutationFn: (payload: {
+        name: string;
+        description?: string;
+        timezone?: string;
+        start_at: string;
+        end_at: string;
+      }) =>
         schedulesApi.create(payload),
     },
     "Unable to create schedule."
@@ -272,7 +280,7 @@ export default function ScheduleCreator() {
   const buildScheduleSyncKey = () => {
     const name = wizardState.scheduleName.trim();
     const description = wizardState.scheduleDescription.trim();
-    return `${name}|${description}|${wizardState.startAt}|${wizardState.endAt}`;
+    return `${name}|${description}|${wizardState.timezone}|${wizardState.startAt}|${wizardState.endAt}`;
   };
 
   const buildScheduleItemSyncKey = () => {
@@ -411,6 +419,7 @@ export default function ScheduleCreator() {
           const schedule = await createScheduleMutation.mutateAsync({
             name: wizardState.scheduleName.trim(),
             description: wizardState.scheduleDescription.trim() || undefined,
+            timezone: wizardState.timezone || undefined,
             start_at: formatScheduleTimestamp(wizardState.startAt),
             end_at: formatScheduleTimestamp(wizardState.endAt),
           });
@@ -641,6 +650,7 @@ export default function ScheduleCreator() {
           <StepScheduleDetails
             scheduleName={wizardState.scheduleName}
             scheduleDescription={wizardState.scheduleDescription}
+            timezone={wizardState.timezone}
             startAt={wizardState.startAt}
             endAt={wizardState.endAt}
             priority={wizardState.priority}

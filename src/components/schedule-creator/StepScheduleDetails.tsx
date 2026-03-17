@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 interface StepScheduleDetailsProps {
   scheduleName: string;
   scheduleDescription: string;
+  timezone: string;
   startAt: string;
   endAt: string;
   priority: number;
@@ -22,6 +23,7 @@ interface StepScheduleDetailsProps {
   onUpdate: (updates: Partial<{
     scheduleName: string;
     scheduleDescription: string;
+    timezone: string;
     startAt: string;
     endAt: string;
     priority: number;
@@ -37,6 +39,7 @@ const priorityOptions = [
 export function StepScheduleDetails({
   scheduleName,
   scheduleDescription,
+  timezone,
   startAt,
   endAt,
   priority,
@@ -44,6 +47,23 @@ export function StepScheduleDetails({
   isCheckingAvailability,
   onUpdate,
 }: StepScheduleDetailsProps) {
+  const currentTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const timezoneOptions = Array.from(
+    new Set([
+      currentTimezone,
+      "UTC",
+      "Asia/Kolkata",
+      "Asia/Dubai",
+      "Europe/London",
+      "Europe/Berlin",
+      "America/New_York",
+      "America/Chicago",
+      "America/Denver",
+      "America/Los_Angeles",
+      "Australia/Sydney",
+    ]),
+  );
+
   const formatLocalDateTime = (value: Date) => {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -120,6 +140,25 @@ export function StepScheduleDetails({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Audit Timezone</Label>
+              <Select value={timezone} onValueChange={(value) => onUpdate({ timezone: value })}>
+                <SelectTrigger aria-label="Schedule timezone">
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {timezoneOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Stored for audit and operator visibility. Playback still executes against UTC timestamps.
+              </p>
             </div>
           </Card>
         </div>

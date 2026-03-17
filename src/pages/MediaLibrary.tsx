@@ -23,6 +23,7 @@ import {
   type UploadMediaResult,
 } from "@/lib/mediaUploadFlow";
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
+import { deriveDisplayNameFromFilename, resolveMediaDisplayName } from "@/lib/media";
 
 type MediaLibraryLocationState = {
   returnTo?: string;
@@ -59,6 +60,7 @@ export default function MediaLibrary() {
   const [activeTab, setActiveTab] = useState("all");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadMediaResult | null>(null);
   const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
@@ -68,6 +70,7 @@ export default function MediaLibrary() {
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       return uploadMediaWithPresign(file, {
+        displayName,
         onPrepared: (result) => {
           setUploadResult((previous) =>
             previous
@@ -96,6 +99,7 @@ export default function MediaLibrary() {
       toast({ title: "Upload complete", description });
       setIsUploadOpen(false);
       setSelectedFile(null);
+      setDisplayName("");
       setUploadProgress(0);
       void queryClient.invalidateQueries({ queryKey: ["media"] });
       if (locationState?.returnTo) {
@@ -166,6 +170,7 @@ export default function MediaLibrary() {
     const file = input.files?.[0];
     if (!file) {
       setSelectedFile(null);
+      setDisplayName("");
       setUploadResult(null);
       setUploadProgress(0);
       return;
@@ -180,12 +185,14 @@ export default function MediaLibrary() {
       });
       input.value = "";
       setSelectedFile(null);
+      setDisplayName("");
       setUploadResult(null);
       setUploadProgress(0);
       return;
     }
 
     setSelectedFile(file);
+    setDisplayName(deriveDisplayNameFromFilename(file.name));
     setUploadResult(null);
     setUploadProgress(0);
   };
@@ -266,7 +273,7 @@ export default function MediaLibrary() {
     return { total, images, videos, documents };
   }, [media]);
 
-  const resolveMediaLabel = (media: MediaAsset) => media.name || media.filename || "Untitled media";
+  const resolveMediaLabel = (media: MediaAsset) => resolveMediaDisplayName(media);
   const resolveMediaUpdatedLabel = (media: MediaAsset) =>
     formatRelativeMediaTime(media.updated_at ?? media.created_at);
 
@@ -425,6 +432,7 @@ export default function MediaLibrary() {
           setIsUploadOpen(open);
           if (!open) {
             setSelectedFile(null);
+            setDisplayName("");
             setUploadResult(null);
             setUploadProgress(0);
           }
@@ -466,6 +474,18 @@ export default function MediaLibrary() {
                 )}
               </div>
             )}
+            {selectedFile && (
+              <div className="space-y-2">
+                <Label htmlFor="media-display-name">Display name</Label>
+                <Input
+                  id="media-display-name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="Enter a user-friendly name"
+                  disabled={isUploading}
+                />
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               We request a presigned upload URL, upload directly to storage, then mark the media READY.
             </p>
@@ -474,7 +494,7 @@ export default function MediaLibrary() {
             <Button variant="outline" onClick={() => setIsUploadOpen(false)} disabled={isUploading}>
               Cancel
             </Button>
-            <Button onClick={handleUpload} disabled={!selectedFile || isUploading}>
+            <Button onClick={handleUpload} disabled={!selectedFile || !displayName.trim() || isUploading}>
               {isUploading ? "Uploading..." : "Upload"}
             </Button>
           </DialogFooter>

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { formatChatTime } from "@/lib/chatTime";
 import type { ChatMessage, MediaAsset } from "@/api/types";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -164,6 +165,9 @@ export function MessageItem({
             const trustedUrl =
               media?.media_url ||
               (typeof attachment === "object" ? attachment.media_url || undefined : undefined);
+            const attachmentLabel =
+              resolveMediaDisplayName(media) ||
+              (typeof attachment === "object" ? attachment.filename || "Attachment" : attachmentId || "Attachment");
 
             return (
               <div
@@ -174,11 +178,11 @@ export function MessageItem({
                   media={media}
                   url={trustedUrl}
                   type={media?.content_type || (typeof attachment === "object" ? attachment.content_type : undefined)}
-                  alt={media?.filename || (typeof attachment === "object" ? attachment.filename : "Attachment")}
+                  alt={attachmentLabel}
                   className="h-36 w-full"
                 />
                 <div className="truncate text-xs text-muted-foreground">
-                  {media?.filename || (typeof attachment === "object" ? attachment.filename : attachmentId)}
+                  {attachmentLabel}
                 </div>
                 {trustedUrl && (
                   <Button
@@ -191,9 +195,7 @@ export function MessageItem({
                         type:
                           media?.content_type ||
                           (typeof attachment === "object" ? attachment.content_type : undefined),
-                        alt:
-                          media?.filename ||
-                          (typeof attachment === "object" ? attachment.filename : "Attachment"),
+                        alt: attachmentLabel,
                       })
                     }
                     aria-label="View attachment in wide modal"

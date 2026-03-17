@@ -95,6 +95,7 @@ describe("uploadMediaWithPresign", () => {
 
     expect(mockedMediaApi.presignUpload).toHaveBeenCalledWith({
       filename: "poster.webp",
+      display_name: "poster",
       content_type: "image/webp",
       size: 220_000,
     });
@@ -147,6 +148,7 @@ describe("uploadMediaWithPresign", () => {
 
     expect(mockedMediaApi.presignUpload).toHaveBeenCalledWith({
       filename: "report.pdf",
+      display_name: "report",
       content_type: "application/pdf",
       size: 450_000,
     });

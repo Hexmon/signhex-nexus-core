@@ -42,6 +42,7 @@ import type { MediaAsset, MediaType } from "@/api/types";
 import { ApiError } from "@/api/apiClient";
 import type { Layout } from "@/pages/Layouts";
 import type { SlotMedia } from "@/pages/ScheduleCreator";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 interface StepMediaAssignProps {
     layout: Layout;
@@ -91,7 +92,7 @@ export function StepMediaAssign({ layout, slotMedia, onUpdateSlotMedia }: StepMe
         const query = mediaSearch.trim().toLowerCase();
         if (!query) return mediaItems;
         return mediaItems.filter((item) => {
-            const name = (item.filename || item.name || "").toLowerCase();
+            const name = resolveMediaDisplayName(item).toLowerCase();
             return name.includes(query);
         });
     }, [mediaItems, mediaSearch]);
@@ -115,7 +116,7 @@ export function StepMediaAssign({ layout, slotMedia, onUpdateSlotMedia }: StepMe
         return "DOCUMENT";
     };
 
-    const resolveMediaName = (media: MediaAsset) => media.filename || media.name || "Untitled media";
+    const resolveMediaName = (media: MediaAsset) => resolveMediaDisplayName(media);
 
     const handleAddMedia = (media: MediaAsset) => {
         if (!selectedSlotId) return;

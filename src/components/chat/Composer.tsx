@@ -19,6 +19,7 @@ import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/cha
 import { useToast } from "@/hooks/use-toast";
 import { useChatUserDirectory } from "@/hooks/chat/useChatQueries";
 import type { ChatMentionPolicy, User } from "@/api/types";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 interface ComposerProps {
   disabled?: boolean;
@@ -244,7 +245,7 @@ export function Composer({
 
           const nextAttachment: ChatPendingAttachment = {
             mediaId: media.id,
-            fileName: media.filename,
+            fileName: resolveMediaDisplayName(media),
             contentType: media.content_type,
             size: media.size,
             previewUrl: media.media_url,
@@ -258,7 +259,7 @@ export function Composer({
             status: "uploaded",
             mediaId: media.id,
             previewUrl: media.media_url ?? undefined,
-            fileName: media.filename,
+            fileName: resolveMediaDisplayName(media),
             contentType: media.content_type || item.contentType,
             size: media.size ?? result.finalSize,
             didCompress: result.didCompress,

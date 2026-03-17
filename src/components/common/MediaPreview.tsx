@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { MediaAsset } from "@/api/types";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 type MediaPreviewProps = {
   media?: MediaAsset;
@@ -65,7 +66,7 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
         {!pdfLoaded && <div className="absolute inset-0 animate-pulse bg-muted" />}
         <iframe
           src={sourceUrl}
-          title={alt ?? media?.name ?? media?.filename ?? "PDF preview"}
+          title={alt ?? resolveMediaDisplayName(media) ?? "PDF preview"}
           onLoad={() => setPdfLoaded(true)}
           className={cn("h-full w-full border-0 transition-opacity", pdfLoaded ? "opacity-100" : "opacity-0")}
         />
@@ -77,7 +78,7 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
     return (
       <img
         src={sourceUrl}
-        alt={alt ?? media?.name ?? media?.filename ?? "Media preview"}
+        alt={alt ?? resolveMediaDisplayName(media) ?? "Media preview"}
         className={cn("rounded-md object-cover bg-muted", className)}
       />
     );

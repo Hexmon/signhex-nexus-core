@@ -1,4 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Monitor, ShieldAlert, Users, Zap } from "lucide-react";
+import { emergencyApi } from "@/api/domains/emergency";
+import { mediaApi } from "@/api/domains/media";
+import { resolveMediaDisplayName } from "@/lib/media";
+import { screensApi } from "@/api/domains/screens";
+import { queryKeys } from "@/api/queryKeys";
+import type { EmergencyRecord } from "@/api/types";
+import { useAuthorization } from "@/hooks/useAuthorization";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -7,264 +20,556 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Zap } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 
 interface EmergencyTakeoverModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (config: TakeoverConfig) => void;
+  onUpdated?: () => void;
 }
 
-export interface TakeoverConfig {
-  title: string;
-  message: string;
-  mediaUrl?: string;
-  scope: "all" | "department" | "screens";
-  targetIds?: string[];
-  duration: number; // minutes
-  auditNote: string;
-  confirmed: boolean;
-}
+type ScopeMode = "all" | "groups" | "screens";
+type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+const severityOptions: Severity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
+
+const toIsoDateTime = (value: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
+const getScopeLabel = (emergency: EmergencyRecord) => {
+  if (emergency.scope === "GLOBAL") return "All screens";
+  if (emergency.scope === "GROUP") return `${emergency.screen_group_ids?.length ?? 0} group(s)`;
+  if (emergency.scope === "SCREEN") return `${emergency.screen_ids?.length ?? 0} screen(s)`;
+  return emergency.scope ?? "Unknown scope";
+};
 
 export function EmergencyTakeoverModal({
   open,
   onOpenChange,
-  onConfirm,
+  onUpdated,
 }: EmergencyTakeoverModalProps) {
-  const [config, setConfig] = useState<TakeoverConfig>({
-    title: "",
-    message: "",
-    mediaUrl: "",
-    scope: "all",
-    duration: 30,
-    auditNote: "",
-    confirmed: false,
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { can, isAdminOrSuperAdmin } = useAuthorization();
+  const canManageEmergency = isAdminOrSuperAdmin || can("update", "Screen");
+
+  const [message, setMessage] = useState("");
+  const [severity, setSeverity] = useState<Severity>("HIGH");
+  const [scope, setScope] = useState<ScopeMode>("all");
+  const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [mediaId, setMediaId] = useState<string>("none");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [auditNote, setAuditNote] = useState("");
+  const [confirmedGlobal, setConfirmedGlobal] = useState(false);
+  const [clearTargetId, setClearTargetId] = useState<string | null>(null);
+  const [clearReason, setClearReason] = useState("");
+
+  const emergencyStatusQuery = useQuery({
+    queryKey: queryKeys.emergencyStatus,
+    queryFn: emergencyApi.status,
+    enabled: open,
+    staleTime: 15_000,
+    refetchInterval: open ? 30_000 : false,
   });
 
-  const { toast } = useToast();
+  const mediaQuery = useQuery({
+    queryKey: [...queryKeys.media, "emergency-picker"],
+    queryFn: () => mediaApi.list({ page: 1, limit: 100, status: "READY" }),
+    enabled: open,
+    staleTime: 60_000,
+  });
 
-  const handleConfirm = () => {
-    if (!config.title.trim()) {
-      toast({
-        title: "Title Required",
-        description: "Please provide a title for this emergency takeover.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const screensQuery = useQuery({
+    queryKey: queryKeys.screens,
+    queryFn: () => screensApi.list({ page: 1, limit: 100 }),
+    enabled: open,
+    staleTime: 60_000,
+  });
 
-    if (!config.message.trim() && !config.mediaUrl) {
-      toast({
-        title: "Content Required",
-        description: "Please provide either a message or media URL.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const groupsQuery = useQuery({
+    queryKey: queryKeys.screenGroups,
+    queryFn: () => screensApi.listGroups({ page: 1, limit: 100 }),
+    enabled: open,
+    staleTime: 60_000,
+  });
 
-    if (!config.auditNote.trim()) {
-      toast({
-        title: "Audit Note Required",
-        description: "Please provide a reason for this emergency takeover for audit purposes.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const activeEmergencies = emergencyStatusQuery.data?.active_emergencies ?? [];
+  const mediaItems = mediaQuery.data?.items ?? [];
+  const screens = screensQuery.data?.items ?? [];
+  const groups = groupsQuery.data?.items ?? [];
 
-    if (!config.confirmed) {
-      toast({
-        title: "Confirmation Required",
-        description: "Please confirm that you understand the impact of this action.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    onConfirm(config);
-    resetForm();
-    onOpenChange(false);
-  };
+  const groupedScreenIds = useMemo(() => {
+    const screenMap = new Map(screens.map((screen) => [screen.id, screen.name || screen.id]));
+    return screenMap;
+  }, [screens]);
 
   const resetForm = () => {
-    setConfig({
-      title: "",
-      message: "",
-      mediaUrl: "",
-      scope: "all",
-      duration: 30,
-      auditNote: "",
-      confirmed: false,
-    });
+    setMessage("");
+    setSeverity("HIGH");
+    setScope("all");
+    setSelectedScreenIds([]);
+    setSelectedGroupIds([]);
+    setMediaId("none");
+    setExpiresAt("");
+    setAuditNote("");
+    setConfirmedGlobal(false);
+    setClearTargetId(null);
+    setClearReason("");
   };
 
-  const handleCancel = () => {
-    resetForm();
-    onOpenChange(false);
+  const invalidateEmergencyState = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.emergencyStatus }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensScheduleTimeline() }),
+    ]);
+    onUpdated?.();
+  };
+
+  const triggerMutation = useMutation({
+    mutationFn: () =>
+      emergencyApi.trigger({
+        message: message.trim() || undefined,
+        severity,
+        media_id: mediaId !== "none" ? mediaId : undefined,
+        target_all: scope === "all" ? true : undefined,
+        screen_ids: scope === "screens" ? selectedScreenIds : undefined,
+        screen_group_ids: scope === "groups" ? selectedGroupIds : undefined,
+        expires_at: toIsoDateTime(expiresAt),
+        audit_note: auditNote.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      toast({
+        title: "Emergency activated",
+        description: "Emergency takeover has been activated and broadcast to affected screens.",
+      });
+      await invalidateEmergencyState();
+      resetForm();
+    },
+    onError: (error) => {
+      const messageText = error instanceof Error ? error.message : "Unable to activate emergency takeover.";
+      toast({ title: "Activation failed", description: messageText, variant: "destructive" });
+    },
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: ({ emergencyId, reason }: { emergencyId: string; reason: string }) =>
+      emergencyApi.clear(emergencyId, { clear_reason: reason }),
+    onSuccess: async () => {
+      toast({
+        title: "Emergency cleared",
+        description: "The emergency takeover has been cleared.",
+      });
+      setClearTargetId(null);
+      setClearReason("");
+      await invalidateEmergencyState();
+    },
+    onError: (error) => {
+      const messageText = error instanceof Error ? error.message : "Unable to clear emergency takeover.";
+      toast({ title: "Clear failed", description: messageText, variant: "destructive" });
+    },
+  });
+
+  const toggleSelection = (current: string[], id: string, setter: (next: string[]) => void) => {
+    setter(current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
+  };
+
+  const handleActivate = async () => {
+    if (!canManageEmergency) {
+      toast({
+        title: "Permission denied",
+        description: "You do not have permission to trigger an emergency takeover.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!message.trim() && mediaId === "none") {
+      toast({
+        title: "Emergency content required",
+        description: "Provide an ad hoc message or select emergency media before activation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!auditNote.trim()) {
+      toast({
+        title: "Audit note required",
+        description: "Explain why this emergency takeover is being activated.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (scope === "screens" && selectedScreenIds.length === 0) {
+      toast({
+        title: "Select target screens",
+        description: "Choose at least one screen for a screen-scoped emergency.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (scope === "groups" && selectedGroupIds.length === 0) {
+      toast({
+        title: "Select target groups",
+        description: "Choose at least one screen group for a group-scoped emergency.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (scope === "all" && !confirmedGlobal) {
+      toast({
+        title: "Global confirmation required",
+        description: "Confirm that you understand the impact of a system-wide emergency takeover.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await triggerMutation.mutateAsync();
+  };
+
+  const handleClear = async (emergencyId: string) => {
+    if (!clearReason.trim()) {
+      toast({
+        title: "Clear reason required",
+        description: "Provide a reason before clearing an active emergency.",
+        variant: "destructive",
+      });
+      return;
+    }
+    await clearMutation.mutateAsync({ emergencyId, reason: clearReason.trim() });
+  };
+
+  const handleClose = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm();
+    }
+    onOpenChange(nextOpen);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-warning" />
+            <ShieldAlert className="h-5 w-5 text-destructive" />
             Emergency Takeover
           </DialogTitle>
           <DialogDescription>
-            Immediately override all scheduled content across selected screens. This action will be audited.
+            Trigger a scoped emergency override using the backend contract. Emergency playback overrides scheduled content immediately.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="takeover-title">
-              Takeover Title <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="takeover-title"
-              placeholder="e.g., Emergency Announcement - Building Evacuation"
-              value={config.title}
-              onChange={(e) => setConfig({ ...config, title: e.target.value })}
-            />
-          </div>
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-5">
+            <div className="rounded-lg border p-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="emergency-message">Emergency message</Label>
+                  <Textarea
+                    id="emergency-message"
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    rows={4}
+                    placeholder="Evacuate the premises immediately and follow the nearest marked exit."
+                  />
+                </div>
 
-          {/* Message */}
-          <div className="space-y-2">
-            <Label htmlFor="takeover-message">Emergency Message</Label>
-            <Textarea
-              id="takeover-message"
-              placeholder="Enter the emergency message to display..."
-              value={config.message}
-              onChange={(e) => setConfig({ ...config, message: e.target.value })}
-              rows={4}
-            />
-          </div>
+                <div className="space-y-2">
+                  <Label>Severity</Label>
+                  <Select value={severity} onValueChange={(value) => setSeverity(value as Severity)}>
+                    <SelectTrigger aria-label="Emergency severity">
+                      <SelectValue placeholder="Select severity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {severityOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {/* Media URL (optional) */}
-          <div className="space-y-2">
-            <Label htmlFor="media-url">Media URL (Optional)</Label>
-            <Input
-              id="media-url"
-              type="url"
-              placeholder="https://example.com/emergency-media.jpg"
-              value={config.mediaUrl}
-              onChange={(e) => setConfig({ ...config, mediaUrl: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              Provide a URL to display media instead of text
-            </p>
-          </div>
+                <div className="space-y-2">
+                  <Label>Emergency media</Label>
+                  <Select value={mediaId} onValueChange={setMediaId}>
+                    <SelectTrigger aria-label="Emergency media">
+                      <SelectValue placeholder="Optional emergency media" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No media override</SelectItem>
+                      {mediaItems.map((media) => (
+                        <SelectItem key={media.id} value={media.id}>
+                          {resolveMediaDisplayName(media)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {/* Scope */}
-          <div className="space-y-2">
-            <Label htmlFor="scope">Scope</Label>
-            <Select
-              value={config.scope}
-              onValueChange={(value) =>
-                setConfig({ ...config, scope: value as TakeoverConfig["scope"] })
-              }
-            >
-              <SelectTrigger id="scope">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Screens (System-wide)</SelectItem>
-                <SelectItem value="department">Specific Department</SelectItem>
-                <SelectItem value="screens">Specific Screens</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <div className="space-y-2">
+                  <Label>Target scope</Label>
+                  <Select
+                    value={scope}
+                    onValueChange={(value) => {
+                      setScope(value as ScopeMode);
+                      setSelectedScreenIds([]);
+                      setSelectedGroupIds([]);
+                      setConfirmedGlobal(false);
+                    }}
+                  >
+                    <SelectTrigger aria-label="Emergency scope">
+                      <SelectValue placeholder="Select scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All screens</SelectItem>
+                      <SelectItem value="groups">Screen groups</SelectItem>
+                      <SelectItem value="screens">Specific screens</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {/* Duration */}
-          <div className="space-y-2">
-            <Label htmlFor="duration">Maximum Duration (minutes)</Label>
-            <Select 
-              value={config.duration.toString()} 
-              onValueChange={(value) => setConfig({ ...config, duration: parseInt(value) })}
-            >
-              <SelectTrigger id="duration">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15">15 minutes</SelectItem>
-                <SelectItem value="30">30 minutes</SelectItem>
-                <SelectItem value="60">1 hour</SelectItem>
-                <SelectItem value="120">2 hours</SelectItem>
-                <SelectItem value="240">4 hours</SelectItem>
-                <SelectItem value="1440">24 hours</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="emergency-expires-at">Expires at</Label>
+                  <Input
+                    id="emergency-expires-at"
+                    type="datetime-local"
+                    value={expiresAt}
+                    onChange={(event) => setExpiresAt(event.target.value)}
+                  />
+                </div>
 
-          {/* Audit Note */}
-          <div className="space-y-2">
-            <Label htmlFor="audit-note">
-              Audit Note <span className="text-destructive">*</span>
-            </Label>
-            <Textarea
-              id="audit-note"
-              placeholder="Explain the reason for this emergency takeover (required for compliance and audit trail)"
-              value={config.auditNote}
-              onChange={(e) => setConfig({ ...config, auditNote: e.target.value })}
-              rows={3}
-            />
-          </div>
-
-          {/* Warning Box */}
-          <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg space-y-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div className="space-y-2 flex-1">
-                <p className="font-semibold text-sm">Critical Action - Impact:</p>
-                <ul className="text-xs space-y-1 list-disc list-inside text-muted-foreground">
-                  <li>Immediately interrupts all currently playing content</li>
-                  <li>Affects {config.scope === "all" ? "ALL screens system-wide" : 
-                             config.scope === "department" ? "all screens in selected department" :
-                             "selected screens only"}</li>
-                  <li>Scheduled content will resume after takeover expires</li>
-                  <li>Action is permanently logged in audit trail</li>
-                  <li>Notification sent to all affected departments</li>
-                </ul>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="emergency-audit-note">Audit note</Label>
+                  <Textarea
+                    id="emergency-audit-note"
+                    value={auditNote}
+                    onChange={(event) => setAuditNote(event.target.value)}
+                    rows={3}
+                    placeholder="Explain why this override is required and who authorized it."
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Confirmation Checkbox */}
-            <div className="flex items-start gap-2 pt-2 border-t border-destructive/20">
-              <Checkbox
-                id="confirm-takeover"
-                checked={config.confirmed}
-                onCheckedChange={(checked) => setConfig({ ...config, confirmed: checked as boolean })}
-              />
-              <label
-                htmlFor="confirm-takeover"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                I understand the impact and confirm this emergency action is necessary
-              </label>
+              {scope === "all" && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-medium">System-wide override</p>
+                      <p className="text-sm text-muted-foreground">
+                        This takeover interrupts scheduled playback on every paired screen until cleared or expired.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="confirm-global-emergency"
+                      checked={confirmedGlobal}
+                      onCheckedChange={(checked) => setConfirmedGlobal(Boolean(checked))}
+                    />
+                    <label htmlFor="confirm-global-emergency" className="text-sm leading-5">
+                      I understand the scope and confirm that a global emergency takeover is required.
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {scope === "screens" && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4 text-primary" />
+                    <p className="font-medium">Target screens</p>
+                    <Badge variant="secondary">{selectedScreenIds.length}</Badge>
+                  </div>
+                  <ScrollArea className="h-48 rounded-lg border p-3">
+                    <div className="space-y-2">
+                      {screens.map((screen) => (
+                        <label key={screen.id} className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+                          <Checkbox
+                            checked={selectedScreenIds.includes(screen.id)}
+                            onCheckedChange={() =>
+                              toggleSelection(selectedScreenIds, screen.id, setSelectedScreenIds)
+                            }
+                          />
+                          <div>
+                            <p className="font-medium">{screen.name || screen.id}</p>
+                            <p className="text-xs text-muted-foreground">{screen.location || screen.id}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {scope === "groups" && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    <p className="font-medium">Target groups</p>
+                    <Badge variant="secondary">{selectedGroupIds.length}</Badge>
+                  </div>
+                  <ScrollArea className="h-48 rounded-lg border p-3">
+                    <div className="space-y-2">
+                      {groups.map((group) => (
+                        <label key={group.id} className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+                          <Checkbox
+                            checked={selectedGroupIds.includes(group.id)}
+                            onCheckedChange={() =>
+                              toggleSelection(selectedGroupIds, group.id, setSelectedGroupIds)
+                            }
+                          />
+                          <div>
+                            <p className="font-medium">{group.name || group.id}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(group.screen_ids?.length ?? 0) > 0
+                                ? `${group.screen_ids?.length ?? 0} screens`
+                                : group.description || group.id}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Active emergencies</p>
+                  <p className="text-sm text-muted-foreground">
+                    {emergencyStatusQuery.data?.active ? `${emergencyStatusQuery.data.active_count ?? activeEmergencies.length} active` : "No active emergency"}
+                  </p>
+                </div>
+                {emergencyStatusQuery.data?.active && (
+                  <Badge variant="destructive">{emergencyStatusQuery.data.active_count ?? activeEmergencies.length}</Badge>
+                )}
+              </div>
+              <Separator />
+              <ScrollArea className="h-[26rem] pr-2">
+                <div className="space-y-3">
+                  {activeEmergencies.length === 0 && (
+                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      No active emergency takeover. Scheduled playback is the current source of truth.
+                    </div>
+                  )}
+
+                  {activeEmergencies.map((emergency) => (
+                    <div key={emergency.id} className="rounded-lg border p-3 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="destructive">{emergency.severity}</Badge>
+                            <Badge variant="outline">{getScopeLabel(emergency)}</Badge>
+                          </div>
+                          <p className="font-medium">{emergency.message || "Media-based emergency takeover"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Triggered {formatDateTime(emergency.triggered_at || emergency.created_at)}
+                          </p>
+                          {emergency.expires_at && (
+                            <p className="text-xs text-muted-foreground">
+                              Expires {formatDateTime(emergency.expires_at)}
+                            </p>
+                          )}
+                          {emergency.scope === "SCREEN" && emergency.screen_ids?.length ? (
+                            <p className="text-xs text-muted-foreground">
+                              Targets: {emergency.screen_ids.map((id) => groupedScreenIds.get(id) || id).join(", ")}
+                            </p>
+                          ) : null}
+                          {emergency.audit_note && (
+                            <p className="text-xs text-muted-foreground">Audit note: {emergency.audit_note}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setClearTargetId(emergency.id);
+                            setClearReason("");
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+
+                      {clearTargetId === emergency.id && (
+                        <div className="rounded-md bg-muted/50 p-3 space-y-3">
+                          <Label htmlFor={`clear-reason-${emergency.id}`}>Clear reason</Label>
+                          <Textarea
+                            id={`clear-reason-${emergency.id}`}
+                            value={clearReason}
+                            onChange={(event) => setClearReason(event.target.value)}
+                            rows={3}
+                            placeholder="Incident resolved. Resume scheduled playback."
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setClearTargetId(null);
+                                setClearReason("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={clearMutation.isPending}
+                              onClick={() => void handleClear(emergency.id)}
+                            >
+                              Confirm clear
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
+          <Button variant="outline" onClick={() => handleClose(false)}>
+            Close
           </Button>
-          <Button 
-            variant="destructive" 
-            onClick={handleConfirm}
-            disabled={!config.confirmed || !config.title.trim() || !config.auditNote.trim()}
+          <Button
+            variant={scope === "all" ? "destructive" : "default"}
+            onClick={() => void handleActivate()}
+            disabled={!canManageEmergency || triggerMutation.isPending}
           >
-            <Zap className="h-4 w-4 mr-2" />
-            Activate Emergency Takeover
+            <Zap className="mr-2 h-4 w-4" />
+            {triggerMutation.isPending ? "Activating..." : "Activate emergency"}
           </Button>
         </DialogFooter>
       </DialogContent>

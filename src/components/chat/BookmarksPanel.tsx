@@ -3,6 +3,7 @@ import { ExternalLink, Link2, MessageSquare, Paperclip, Trash2 } from "lucide-re
 import type { ChatBookmark, MediaAsset } from "@/api/types";
 import type { ChatPendingAttachment } from "@/components/chat/types";
 import { AttachmentPicker } from "@/components/chat/AttachmentPicker";
+import { resolveMediaDisplayName } from "@/lib/media";
 import { MediaPreview } from "@/components/common/MediaPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,11 +209,11 @@ export function BookmarksPanel({
                       media={media}
                       url={media?.media_url}
                       type={media?.content_type}
-                      alt={media?.filename || bookmark.label}
+                      alt={resolveMediaDisplayName(media) || bookmark.label}
                       className="h-16 w-16"
                     />
                     <p className="truncate text-xs text-muted-foreground">
-                      {media?.filename || bookmark.media_asset_id || "File bookmark"}
+                      {resolveMediaDisplayName(media) || bookmark.media_asset_id || "File bookmark"}
                     </p>
                   </div>
                 )}
