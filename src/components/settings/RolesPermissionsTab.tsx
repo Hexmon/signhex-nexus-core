@@ -26,6 +26,7 @@ import { usePermissionsMetadata, useRolesApi, useRolesList } from "@/hooks/useRo
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { useAppSelector } from "@/store/hooks";
 import type { Role, RolePermissionGrant } from "@/api/types";
+import { canEditSystemRole, canViewRoleInSettings } from "@/lib/access";
 
 const emptyGrant = (actions: string[], subjects: string[]): RolePermissionGrant => ({
   action: actions[0] ?? "",
@@ -38,9 +39,12 @@ export function RolesPermissionsTab() {
   const { createRole, updateRole, deleteRole } = useRolesApi();
   const { isAdminOrSuperAdmin } = useAuthorization();
   const currentRoleName = useAppSelector((state) => state.auth.user?.role);
-  const allowSystemRoleEdits = isAdminOrSuperAdmin || currentRoleName === "SUPER_ADMIN";
+  const allowSystemRoleEdits = currentRoleName === "SUPER_ADMIN";
 
-  const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+  const roles = useMemo(
+    () => (rolesData?.items ?? []).filter((role) => !role.is_system || canViewRoleInSettings(currentRoleName, role.name)),
+    [currentRoleName, rolesData?.items],
+  );
   const actions = metadata?.actions ?? [];
   const subjects = metadata?.subjects ?? [];
 
@@ -139,7 +143,7 @@ export function RolesPermissionsTab() {
             Manage role definitions and permission grants across the workspace.
           </p>
         </div>
-        <Button onClick={() => { setEditingRole(null); setIsDialogOpen(true); }}>
+        <Button onClick={() => { setEditingRole(null); setIsDialogOpen(true); }} disabled={!allowSystemRoleEdits}>
           <Plus className="mr-2 h-4 w-4" />
           New Role
         </Button>
@@ -186,7 +190,7 @@ export function RolesPermissionsTab() {
                       variant="outline"
                       size="sm"
                       onClick={() => { setEditingRole(role); setIsDialogOpen(true); }}
-                      disabled={role.is_system && !allowSystemRoleEdits}
+                      disabled={role.is_system && !canEditSystemRole(currentRoleName, role.name)}
                     >
                       <Pencil className="mr-2 h-3 w-3" />
                       Edit
@@ -195,7 +199,7 @@ export function RolesPermissionsTab() {
                       variant="outline"
                       size="sm"
                       className="text-destructive"
-                      disabled={role.is_system && !allowSystemRoleEdits}
+                      disabled={role.is_system && !canEditSystemRole(currentRoleName, role.name)}
                       onClick={() => setRoleToDelete(role)}
                     >
                       <Trash2 className="mr-2 h-3 w-3" />
@@ -343,7 +347,7 @@ export function RolesPermissionsTab() {
           });
         }}
         isLoading={deleteRole.isPending}
-        confirmDisabled={roleToDelete?.is_system && !allowSystemRoleEdits}
+        confirmDisabled={Boolean(roleToDelete?.is_system && !canEditSystemRole(currentRoleName, roleToDelete.name))}
       />
     </div>
   );

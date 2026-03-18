@@ -10,6 +10,7 @@ type UseUsersApiOptions = {
     usersLimit?: number;
     invitationsPage?: number;
     invitationsLimit?: number;
+    enableInvitations?: boolean;
 };
 
 export const useUsersApi = ({
@@ -17,6 +18,7 @@ export const useUsersApi = ({
     usersLimit = 100,
     invitationsPage = 1,
     invitationsLimit = 100,
+    enableInvitations = true,
 }: UseUsersApiOptions = {}) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
@@ -42,6 +44,7 @@ export const useUsersApi = ({
                 page: invitationsPage,
                 limit: invitationsLimit,
             }),
+        enabled: enableInvitations,
         retry: false,
         refetchOnWindowFocus: false,
         staleTime: 0,

@@ -12,6 +12,8 @@ import type { User } from "@/api/types";
 import type { UserFormData } from "@/types/user";
 import { useRolesList } from "@/hooks/useRolesApi";
 import { mapUsersErrorToUx } from "@/lib/usersErrors";
+import { useAppSelector } from "@/store/hooks";
+import { canManageUserTarget, isAdminLike } from "@/lib/access";
 
 interface UserFormProps {
     user?: User | null;
@@ -21,6 +23,7 @@ interface UserFormProps {
 }
 
 export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps) {
+    const currentUser = useAppSelector((state) => state.auth.user);
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState<UserFormData>({
         email: user?.email || "",
@@ -32,13 +35,21 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
         is_active: user?.is_active ?? true,
     });
 
+    const canPickDepartment = isAdminLike(currentUser?.role);
     const { data: departmentsData, isLoading: isDepartmentsLoading } = useQuery({
         queryKey: ["departments"],
         queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
+        enabled: canPickDepartment,
     });
 
     const { data: rolesData, isLoading: isRolesLoading, error: rolesError } = useRolesList();
-    const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+    const roles = useMemo(
+        () =>
+            (rolesData?.items ?? []).filter((role) =>
+                canManageUserTarget(currentUser, role.name, currentUser?.department_id),
+            ),
+        [currentUser, rolesData?.items],
+    );
     const rolesErrorMessage = rolesError ? mapUsersErrorToUx(rolesError, "Failed to load roles") : null;
 
     useEffect(() => {
@@ -48,10 +59,10 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
             first_name: user?.first_name || "",
             last_name: user?.last_name || "",
             role_id: user?.role_id || "",
-            department_id: user?.department_id || "",
+            department_id: currentUser?.role === "DEPARTMENT" ? currentUser.department_id || "" : user?.department_id || "",
             is_active: user?.is_active ?? true,
         });
-    }, [user]);
+    }, [currentUser?.department_id, currentUser?.role, user]);
 
     useEffect(() => {
         if (!formData.role_id && roles.length > 0) {
@@ -60,6 +71,7 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
     }, [formData.role_id, roles]);
 
     const departments = departmentsData?.items || [];
+    const currentDepartmentLabel = currentUser?.department_id ? "Assigned to your department" : "No department assigned";
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -211,7 +223,9 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
 
             <div className="space-y-2">
                 <Label htmlFor="department_id">Department (Optional)</Label>
-                {isDepartmentsLoading ? (
+                {!canPickDepartment ? (
+                    <Input id="department_id" value={currentDepartmentLabel} disabled />
+                ) : isDepartmentsLoading ? (
                     <div className="flex items-center gap-2 p-2 border rounded-md">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Loading departments...</span>
@@ -224,6 +238,7 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
                     <Select
                         value={formData.department_id || "none"}
                         onValueChange={(value: string) => updateField("department_id", value === "none" ? "" : value)}
+                        disabled={!canPickDepartment}
                     >
                         <SelectTrigger id="department_id">
                             <SelectValue placeholder="Select department" />

@@ -20,6 +20,8 @@ import { queryKeys } from "@/api/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/api/apiClient";
 import type { ScheduleRequestListItem } from "@/api/types";
+import { useAppSelector } from "@/store/hooks";
+import { canManageEmergency } from "@/lib/access";
 
 const PAGE_SIZE = 10;
 
@@ -64,6 +66,8 @@ const getRequesterLabel = (request?: ScheduleRequestListItem) => {
 export default function ScheduleQueue() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const currentUser = useAppSelector((state) => state.auth.user);
+  const showEmergencyTakeover = canManageEmergency(currentUser);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
   const [selectedRequest, setSelectedRequest] = useState<ScheduleRequestListItem | null>(null);
@@ -180,10 +184,12 @@ export default function ScheduleQueue() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsEmergencyModalOpen(true)}>
-              <Zap className="h-4 w-4 mr-2" />
-              Emergency Takeover
-            </Button>
+            {showEmergencyTakeover && (
+              <Button variant="outline" size="sm" onClick={() => setIsEmergencyModalOpen(true)}>
+                <Zap className="h-4 w-4 mr-2" />
+                Emergency Takeover
+              </Button>
+            )}
             <Button size="sm" onClick={() => navigate("/schedule/new")}>
               <Plus className="h-4 w-4 mr-2" />
               New Request
@@ -481,15 +487,17 @@ export default function ScheduleQueue() {
         </Tabs>
       </div>
 
-      <EmergencyTakeoverModal
-        open={isEmergencyModalOpen}
-        onOpenChange={setIsEmergencyModalOpen}
-        onUpdated={() => {
-          void summaryQuery.refetch();
-          void refetchRequests();
-          void deviceScheduleQuery.refetch();
-        }}
-      />
+      {showEmergencyTakeover && (
+        <EmergencyTakeoverModal
+          open={isEmergencyModalOpen}
+          onOpenChange={setIsEmergencyModalOpen}
+          onUpdated={() => {
+            void summaryQuery.refetch();
+            void refetchRequests();
+            void deviceScheduleQuery.refetch();
+          }}
+        />
+      )}
 
       {/* Right Panel - Detail Drawer */}
       {selectedRequest && (

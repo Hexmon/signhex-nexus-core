@@ -1,12 +1,14 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAppSelector } from "@/store/hooks";
 import { useAuthorization } from "@/hooks/useAuthorization";
+import { canAccessModule, type ModuleKey } from "@/lib/access";
 
 interface ProtectedRouteProps {
   children: React.ReactElement;
   requirePermissions?: Array<{ action: string; subject: string }>;
   requireAny?: boolean;
   allowRoles?: string[];
+  moduleKey?: ModuleKey;
 }
 
 export function ProtectedRoute({
@@ -14,6 +16,7 @@ export function ProtectedRoute({
   requirePermissions,
   requireAny = true,
   allowRoles,
+  moduleKey,
 }: ProtectedRouteProps) {
   const location = useLocation();
   const { token, user } = useAppSelector((state) => state.auth);
@@ -25,6 +28,13 @@ export function ProtectedRoute({
 
   if (!isAuthed) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (moduleKey) {
+    if (isAuthzLoading) return null;
+    if (!canAccessModule(moduleKey, user ?? undefined, can)) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   if (requirePermissions?.length) {

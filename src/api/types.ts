@@ -86,6 +86,7 @@ export interface LayoutItem {
   description: string;
   aspect_ratio: string;
   spec: LayoutSpec;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +97,7 @@ export interface LayoutSummary {
   description?: string | null;
   aspect_ratio?: string;
   spec: LayoutSlot[] | LayoutSpec;
+  created_by?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -778,6 +780,7 @@ export interface MediaAsset {
   source_bucket?: string;
   source_key?: string;
   media_url?: string | null;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -790,6 +793,7 @@ export interface Schedule {
   start_at: string;
   end_at: string;
   is_active?: boolean;
+  created_by?: string;
 }
 
 export interface ScheduleItemPayload {

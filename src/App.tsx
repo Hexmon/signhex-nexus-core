@@ -68,35 +68,29 @@ const App = () => (
                     <AppHeader />
                     <main className="flex-1 p-6 overflow-auto">
                       <Routes>
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/schedule" element={<ScheduleQueue />} />
-                        <Route path="/schedule/new" element={<ScheduleCreator />} />
-                        <Route path="/layouts" element={<Layouts />} />
-                        <Route path="/layouts/new" element={<LayoutEditor />} />
-                        <Route path="/layouts/:id" element={<LayoutEditor />} />
+                        <Route path="/dashboard" element={<ProtectedRoute moduleKey="dashboard"><Dashboard /></ProtectedRoute>} />
+                        <Route path="/schedule" element={<ProtectedRoute moduleKey="schedule"><ScheduleQueue /></ProtectedRoute>} />
+                        <Route path="/schedule/new" element={<ProtectedRoute moduleKey="schedule"><ScheduleCreator /></ProtectedRoute>} />
+                        <Route path="/layouts" element={<ProtectedRoute moduleKey="layouts"><Layouts /></ProtectedRoute>} />
+                        <Route path="/layouts/new" element={<ProtectedRoute moduleKey="layouts"><LayoutEditor /></ProtectedRoute>} />
+                        <Route path="/layouts/:id" element={<ProtectedRoute moduleKey="layouts"><LayoutEditor /></ProtectedRoute>} />
                         <Route path="/requests" element={<Requests />} />
-                        <Route path="/departments" element={<Departments />} />
-                        <Route path="/operators" element={<Operators />} />
-                        <Route path="/users" element={<Users />} />
-                        <Route path="/chat" element={<Conversations />} />
-                        <Route path="/chat/:conversationId" element={<Conversations />} />
-                        <Route path="/chat/:conversationId/thread/:threadRootId" element={<Conversations />} />
-                        <Route path="/conversations" element={<Conversations />} />
-                        <Route path="/conversations/:conversationId" element={<Conversations />} />
-                        <Route path="/conversations/:conversationId/thread/:threadRootId" element={<Conversations />} />
-                        <Route path="/notifications" element={<Notifications />} />
-                        <Route path="/screens" element={<Screens />} />
-                        <Route path="/media" element={<MediaLibrary />} />
+                        <Route path="/departments" element={<ProtectedRoute moduleKey="departments"><Departments /></ProtectedRoute>} />
+                        <Route path="/operators" element={<ProtectedRoute moduleKey="operators"><Operators /></ProtectedRoute>} />
+                        <Route path="/users" element={<ProtectedRoute moduleKey="users"><Users /></ProtectedRoute>} />
+                        <Route path="/chat" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/chat/:conversationId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/chat/:conversationId/thread/:threadRootId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/conversations" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/conversations/:conversationId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/conversations/:conversationId/thread/:threadRootId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
+                        <Route path="/notifications" element={<ProtectedRoute moduleKey="notifications"><Notifications /></ProtectedRoute>} />
+                        <Route path="/screens" element={<ProtectedRoute moduleKey="screens"><Screens /></ProtectedRoute>} />
+                        <Route path="/media" element={<ProtectedRoute moduleKey="media"><MediaLibrary /></ProtectedRoute>} />
                         <Route
                           path="/reports"
                           element={
-                            <ProtectedRoute
-                              requirePermissions={[
-                                { action: "read", subject: "Report" },
-                                { action: "read", subject: "AuditLog" },
-                              ]}
-                              requireAny
-                            >
+                            <ProtectedRoute moduleKey="reports">
                               <Reports />
                             </ProtectedRoute>
                           }
@@ -104,11 +98,7 @@ const App = () => (
                         <Route
                           path="/settings"
                           element={
-                            <ProtectedRoute
-                              requirePermissions={[{ action: "read", subject: "Settings" }]}
-                              allowRoles={["SUPER_ADMIN", "ADMIN"]}
-                              requireAny
-                            >
+                            <ProtectedRoute moduleKey="settings">
                               <Settings />
                             </ProtectedRoute>
                           }

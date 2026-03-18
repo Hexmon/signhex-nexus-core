@@ -42,6 +42,8 @@ import {
   getServerNowFromOffset,
   isHeartbeatStale,
 } from "@/hooks/screens/screensRealtimeUtils";
+import { useAppSelector } from "@/store/hooks";
+import { isAdminLike } from "@/lib/access";
 
 const PAGE_SIZE = 9;
 
@@ -70,6 +72,8 @@ const formatDateTime = (value?: string | null) => {
 
 export default function Screens() {
   const queryClient = useQueryClient();
+  const currentUser = useAppSelector((state) => state.auth.user);
+  const canManageScreens = isAdminLike(currentUser?.role);
   const [search, setSearch] = useState("");
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -88,6 +92,7 @@ export default function Screens() {
   const { data: pairingsData } = useQuery({
     queryKey: ["device-pairings"],
     queryFn: () => devicePairingApi.list({ page: 1, limit: 10 }),
+    enabled: canManageScreens,
   });
 
   const screens = useMemo(() => overviewQuery.data?.screens ?? [], [overviewQuery.data?.screens]);
@@ -202,12 +207,16 @@ export default function Screens() {
       <PageHeader
         title="Screens"
         description="Manage and monitor all display screens across locations"
-        actionLabel="Pair Device"
-        actionIcon={<QrCode className="h-4 w-4" />}
-        onAction={() => {
-          setRecoveryScreenId(null);
-          setIsPairModalOpen(true);
-        }}
+        actionLabel={canManageScreens ? "Pair Device" : undefined}
+        actionIcon={canManageScreens ? <QrCode className="h-4 w-4" /> : undefined}
+        onAction={
+          canManageScreens
+            ? () => {
+                setRecoveryScreenId(null);
+                setIsPairModalOpen(true);
+              }
+            : undefined
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -385,26 +394,30 @@ export default function Screens() {
                     <Eye className="h-3 w-3 mr-1" />
                     Details
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setRecoveryScreenId(id);
-                      setIsPairModalOpen(true);
-                    }}
-                    aria-label={`Recover Screen ${name}`}
-                  >
-                    <QrCode className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDeleteScreen(id)}
-                    disabled={deleteScreen.isPending}
-                    aria-label={`Delete Screen ${name}`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  {canManageScreens ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setRecoveryScreenId(id);
+                          setIsPairModalOpen(true);
+                        }}
+                        aria-label={`Recover Screen ${name}`}
+                      >
+                        <QrCode className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeleteScreen(id)}
+                        disabled={deleteScreen.isPending}
+                        aria-label={`Delete Screen ${name}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </Card>
             );
@@ -421,14 +434,16 @@ export default function Screens() {
               <Users className="h-4 w-4 text-primary" />
               <h2 className="font-semibold">Screen Groups</h2>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsGroupModalOpen(true)}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Create Group
-            </Button>
+            {canManageScreens ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsGroupModalOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Create Group
+              </Button>
+            ) : null}
           </div>
 
           <div className="divide-y rounded-md border max-h-72 overflow-auto">
@@ -462,25 +477,26 @@ export default function Screens() {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(event) => handleEditGroup(id, event)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(event) => handleDeleteGroup(id, event)}
-                          disabled={deleteGroup.isPending}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      {canManageScreens ? (
+                        <div className="flex items-center gap-2 ml-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => handleEditGroup(id, event)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => handleDeleteGroup(id, event)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -489,6 +505,7 @@ export default function Screens() {
           </div>
         </Card>
 
+        {canManageScreens ? (
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -552,6 +569,7 @@ export default function Screens() {
             )}
           </div>
         </Card>
+        ) : null}
       </div>
 
       <PairDeviceModal

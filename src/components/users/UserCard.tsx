@@ -9,9 +9,11 @@ interface UserCardProps {
     user: User;
     onEdit: () => void;
     onDelete: () => void;
+    canEdit?: boolean;
+    canDelete?: boolean;
 }
 
-export function UserCard({ user, onEdit, onDelete }: UserCardProps) {
+export function UserCard({ user, onEdit, onDelete, canEdit = true, canDelete = true }: UserCardProps) {
     const { id, email, first_name, last_name, role, is_active } = user;
     const fullName = `${first_name || ""} ${last_name || ""}`.trim();
     const displayName = fullName || email;
@@ -38,26 +40,32 @@ export function UserCard({ user, onEdit, onDelete }: UserCardProps) {
                         {is_active ? "Active" : "Inactive"}
                     </Badge>
                 </div>
-                <div className="flex gap-2 pt-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={onEdit}
-                    >
-                        <Pencil className="mr-2 h-3 w-3" />
-                        Edit
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 text-destructive hover:text-destructive"
-                        onClick={onDelete}
-                    >
-                        <Trash2 className="mr-2 h-3 w-3" />
-                        Delete
-                    </Button>
-                </div>
+                {(canEdit || canDelete) && (
+                    <div className="flex gap-2 pt-2">
+                        {canEdit && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={onEdit}
+                            >
+                                <Pencil className="mr-2 h-3 w-3" />
+                                Edit
+                            </Button>
+                        )}
+                        {canDelete && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 text-destructive hover:text-destructive"
+                                onClick={onDelete}
+                            >
+                                <Trash2 className="mr-2 h-3 w-3" />
+                                Delete
+                            </Button>
+                        )}
+                    </div>
+                )}
             </CardContent>
         </Card>
     );

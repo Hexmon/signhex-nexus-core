@@ -42,6 +42,8 @@ import { layoutsApi } from "@/api/domains/layouts";
 import { queryKeys } from "@/api/queryKeys";
 import type { LayoutItem, LayoutListParams } from "@/api/types";
 import { PageNavigation } from "@/components/common/PageNavigation";
+import { useAppSelector } from "@/store/hooks";
+import { canManageLayoutRecord } from "@/lib/access";
 
 const ITEMS_PER_PAGE = 9;
 const aspectRatios = ["16:9", "9:16", "1:1", "4:3", "21:9"];
@@ -104,6 +106,7 @@ function getPreviewDimensions(ratio: string, maxWidth: number): { width: number;
 const Layouts = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const currentUser = useAppSelector((state) => state.auth.user);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [aspectRatioFilter, setAspectRatioFilter] = useState<string>("all");
@@ -308,7 +311,9 @@ const Layouts = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {layouts.map((layout) => (
+              {layouts.map((layout) => {
+                const canManageLayout = canManageLayoutRecord(currentUser, layout);
+                return (
                 <TableRow key={layout.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -343,6 +348,7 @@ const Layouts = () => {
                           View
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          disabled={!canManageLayout}
                           onClick={() => navigate(`/layouts/${layout.id}`)}
                         >
                           <Pencil className="mr-2 h-4 w-4" />
@@ -350,6 +356,7 @@ const Layouts = () => {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
+                          disabled={!canManageLayout}
                           onClick={() => setDeleteTarget(layout)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -359,7 +366,8 @@ const Layouts = () => {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>

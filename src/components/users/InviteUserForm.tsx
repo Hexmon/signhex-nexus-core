@@ -11,6 +11,8 @@ import { departmentsApi } from "@/api/domains/departments";
 import type { InviteFormData } from "@/types/user";
 import { useRolesList } from "@/hooks/useRolesApi";
 import { mapUsersErrorToUx } from "@/lib/usersErrors";
+import { useAppSelector } from "@/store/hooks";
+import { canManageUserTarget, isAdminLike } from "@/lib/access";
 
 interface InviteUserFormProps {
     onSubmit: (data: InviteFormData) => void;
@@ -19,20 +21,30 @@ interface InviteUserFormProps {
 }
 
 export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserFormProps) {
+    const currentUser = useAppSelector((state) => state.auth.user);
     const [formData, setFormData] = useState<InviteFormData>({
         email: "",
         role_id: "",
-        department_id: "",
+        department_id: currentUser?.role === "DEPARTMENT" ? currentUser.department_id || "" : "",
     });
+    const canPickDepartment = isAdminLike(currentUser?.role);
 
     const { data: departmentsData, isLoading: isDepartmentsLoading } = useQuery({
         queryKey: ["departments"],
         queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
+        enabled: canPickDepartment,
     });
 
     const { data: rolesData, isLoading: isRolesLoading, error: rolesError } = useRolesList();
-    const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+    const roles = useMemo(
+        () =>
+            (rolesData?.items ?? []).filter((role) =>
+                canManageUserTarget(currentUser, role.name, currentUser?.department_id),
+            ),
+        [currentUser, rolesData?.items],
+    );
     const rolesErrorMessage = rolesError ? mapUsersErrorToUx(rolesError, "Failed to load roles") : null;
+    const currentDepartmentLabel = currentUser?.department_id ? "Assigned to your department" : "No department assigned";
 
     useEffect(() => {
         if (!formData.role_id && roles.length > 0) {
@@ -109,7 +121,9 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
 
             <div className="space-y-2">
                 <Label htmlFor="invite-department">Department (Optional)</Label>
-                {isDepartmentsLoading ? (
+                {!canPickDepartment ? (
+                    <Input id="invite-department" value={currentDepartmentLabel} disabled />
+                ) : isDepartmentsLoading ? (
                     <div className="flex items-center gap-2 p-2 border rounded-md">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Loading departments...</span>
@@ -122,6 +136,7 @@ export function InviteUserForm({ onSubmit, onCancel, isLoading }: InviteUserForm
                     <Select
                         value={formData.department_id || "none"}
                         onValueChange={(value: string) => updateField("department_id", value === "none" ? "" : value)}
+                        disabled={!canPickDepartment}
                     >
                         <SelectTrigger id="invite-department">
                             <SelectValue placeholder="Select department" />

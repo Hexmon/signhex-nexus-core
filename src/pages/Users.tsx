@@ -17,10 +17,14 @@ import { UserCard } from "@/components/users/UserCard";
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
 import { mapUsersErrorToUx } from "@/lib/usersErrors";
 import { PageNavigation } from "@/components/common/PageNavigation";
+import { useAppSelector } from "@/store/hooks";
+import { canManageUserTarget } from "@/lib/access";
 
 const PAGE_SIZE = 9;
 
 export default function Users() {
+    const currentUser = useAppSelector((state) => state.auth.user);
+    const canManageUsers = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN" || currentUser?.role === "DEPARTMENT";
     const [searchQuery, setSearchQuery] = useState("");
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -35,6 +39,7 @@ export default function Users() {
         usersLimit: PAGE_SIZE,
         invitationsPage,
         invitationsLimit: PAGE_SIZE,
+        enableInvitations: canManageUsers,
     });
     const { data, isLoading, error: usersError } = listUsers;
     const { data: invitationsData, isLoading: isLoadingInvitations, error: invitationsError } = listInvitations;
@@ -75,6 +80,14 @@ export default function Users() {
                 );
             }),
         [invitations, searchQuery],
+    );
+    const visibleUsers = useMemo(
+        () =>
+            filteredUsers.map((user) => ({
+                user,
+                canManageTarget: canManageUserTarget(currentUser, user.role, user.department_id),
+            })),
+        [currentUser, filteredUsers],
     );
 
     const usersTotalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
@@ -171,24 +184,26 @@ export default function Users() {
                         Manage user accounts, roles, and permissions
                     </p>
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add User
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setIsCreateOpen(true)}>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Create User Directly
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setIsInviteOpen(true)}>
-                            <Mail className="mr-2 h-4 w-4" />
-                            Send Invitation
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                {canManageUsers ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add User
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setIsCreateOpen(true)}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Create User Directly
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setIsInviteOpen(true)}>
+                                <Mail className="mr-2 h-4 w-4" />
+                                Send Invitation
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : null}
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -196,10 +211,12 @@ export default function Users() {
                     <TabsTrigger value="users">
                         Active Users ({users.length})
                     </TabsTrigger>
-                    <TabsTrigger value="invitations">
-                        <Mail className="mr-2 h-4 w-4" />
-                        Pending Invitations ({invitations.length})
-                    </TabsTrigger>
+                    {canManageUsers ? (
+                        <TabsTrigger value="invitations">
+                            <Mail className="mr-2 h-4 w-4" />
+                            Pending Invitations ({invitations.length})
+                        </TabsTrigger>
+                    ) : null}
                 </TabsList>
 
                 <div className="mt-6 flex items-center gap-4">
@@ -213,7 +230,7 @@ export default function Users() {
                         />
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {activeTab === "users"
+                        {activeTab === "users" || !canManageUsers
                             ? `${data?.total ?? filteredUsers.length} ${(data?.total ?? filteredUsers.length) === 1 ? "user" : "users"}`
                             : `${invitationsData?.total ?? filteredInvitations.length} ${(invitationsData?.total ?? filteredInvitations.length) === 1 ? "invitation" : "invitations"}`
                         }
@@ -240,12 +257,14 @@ export default function Users() {
                     ) : (
                         <div className="space-y-6">
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {filteredUsers.map((user) => (
+                                {visibleUsers.map(({ user, canManageTarget }) => (
                                     <UserCard
                                         key={user.id}
                                         user={user}
                                         onEdit={() => setEditingUser(user)}
                                         onDelete={() => setDeletingUser(user)}
+                                        canEdit={canManageTarget}
+                                        canDelete={canManageTarget}
                                     />
                                 ))}
                             </div>
@@ -258,6 +277,7 @@ export default function Users() {
                     )}
                 </TabsContent>
 
+                {canManageUsers ? (
                 <TabsContent value="invitations" className="mt-6">
                     {invitationsErrorMessage ? (
                         <Alert variant="destructive">
@@ -298,10 +318,11 @@ export default function Users() {
                         </div>
                     )}
                 </TabsContent>
+                ) : null}
             </Tabs>
 
             {/* Create User Dialog */}
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <Dialog open={canManageUsers && isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Create New User</DialogTitle>
@@ -318,7 +339,7 @@ export default function Users() {
             </Dialog>
 
             {/* Invite User Dialog */}
-            <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+            <Dialog open={canManageUsers && isInviteOpen} onOpenChange={setIsInviteOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Invite User</DialogTitle>

@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAppSelector } from "@/store/hooks";
 import {
   getFriendlyUploadError,
   uploadMediaWithPresign,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/mediaUploadFlow";
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
 import { deriveDisplayNameFromFilename, resolveMediaDisplayName } from "@/lib/media";
+import { canDeleteMediaRecord } from "@/lib/access";
 
 type MediaLibraryLocationState = {
   returnTo?: string;
@@ -57,6 +59,7 @@ export default function MediaLibrary() {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as MediaLibraryLocationState | null;
+  const currentUser = useAppSelector((state) => state.auth.user);
   const [activeTab, setActiveTab] = useState("all");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -395,6 +398,7 @@ export default function MediaLibrary() {
                     <Button
                       variant="destructive"
                       size="sm"
+                      disabled={!canDeleteMediaRecord(currentUser, item)}
                       onClick={(e) => {
                         e.stopPropagation();
                         confirmDelete(item);

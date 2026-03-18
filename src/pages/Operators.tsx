@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus } from "lucide-react";
+import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +28,14 @@ import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { useRolesList } from "@/hooks/useRolesApi";
 import { getRoleBadgeClass } from "@/lib/roleBadges";
 import { PageNavigation } from "@/components/common/PageNavigation";
+import { useAppSelector } from "@/store/hooks";
+import { departmentsApi } from "@/api/domains/departments";
+import { canManageOperatorsModule, isAdminLike } from "@/lib/access";
 
 const PAGE_SIZE = 9;
 
 export default function Operators() {
+  const currentUser = useAppSelector((state) => state.auth.user);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -62,6 +66,15 @@ export default function Operators() {
   const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
   const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
   const operatorRole = useMemo(() => roles.find((role) => role.name === "OPERATOR") ?? null, [roles]);
+  const canManageOperators = canManageOperatorsModule(currentUser);
+  const canPickDepartment = isAdminLike(currentUser?.role);
+  const { data: departmentsData, isLoading: isDepartmentsLoading } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
+    enabled: canPickDepartment,
+  });
+  const departments = departmentsData?.items ?? [];
+  const departmentMap = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
   const passwordMismatch = !selectedUser && Boolean(formData.confirm_password) && formData.password !== formData.confirm_password;
 
   useEffect(() => {
@@ -104,8 +117,9 @@ export default function Operators() {
         email: selectedUser.email,
         first_name: selectedUser.first_name ?? "",
         last_name: selectedUser.last_name ?? "",
-        role_id: selectedUser.role_id,
-        department_id: selectedUser.department_id ?? "",
+        role_id: operatorRole?.id ?? selectedUser.role_id,
+        department_id:
+          currentUser?.role === "DEPARTMENT" ? currentUser.department_id ?? "" : selectedUser.department_id ?? "",
         password: "",
         confirm_password: "",
       });
@@ -114,19 +128,19 @@ export default function Operators() {
         email: "",
         first_name: "",
         last_name: "",
-        role_id: "",
-        department_id: "",
+        role_id: operatorRole?.id ?? "",
+        department_id: currentUser?.role === "DEPARTMENT" ? currentUser.department_id ?? "" : "",
         password: "",
         confirm_password: "",
       });
     }
-  }, [selectedUser, isFormOpen]);
+  }, [currentUser?.department_id, currentUser?.role, isFormOpen, operatorRole?.id, selectedUser]);
 
   useEffect(() => {
-    if (!selectedUser && !formData.role_id && roles.length > 0) {
-      setFormData((prev) => ({ ...prev, role_id: operatorRole?.id ?? roles[0].id }));
+    if (operatorRole && formData.role_id !== operatorRole.id) {
+      setFormData((prev) => ({ ...prev, role_id: operatorRole.id }));
     }
-  }, [formData.role_id, operatorRole?.id, roles, selectedUser]);
+  }, [formData.role_id, operatorRole]);
 
   const createOrUpdate = useSafeMutation({
     mutationFn: async () => {
@@ -203,12 +217,16 @@ export default function Operators() {
       <PageHeader
         title="Operators"
         description="Manage system operators and their permissions."
-        actionLabel="Add Operator"
-        actionIcon={<Plus className="h-4 w-4" />}
-        onAction={() => {
-          setSelectedUser(null);
-          setIsFormOpen(true);
-        }}
+        actionLabel={canManageOperators ? "Add Operator" : undefined}
+        actionIcon={canManageOperators ? <Plus className="h-4 w-4" /> : undefined}
+        onAction={
+          canManageOperators
+            ? () => {
+                setSelectedUser(null);
+                setIsFormOpen(true);
+              }
+            : undefined
+        }
       />
 
       <div className="flex items-center gap-4 flex-wrap">
@@ -243,6 +261,7 @@ export default function Operators() {
                     <div className="text-xs text-muted-foreground">{operator.id}</div>
                   </div>
                 </div>
+                {canManageOperators ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -294,6 +313,7 @@ export default function Operators() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                ) : null}
               </CardHeader>
               <CardContent className="pt-0 space-y-3">
                 <div className="flex items-center justify-between">
@@ -313,7 +333,7 @@ export default function Operators() {
                 </div>
                 {operator.department_id && (
                   <Badge variant="outline" className="text-xs">
-                    Department: {operator.department_id}
+                    Department: {departmentMap.get(operator.department_id) ?? operator.department_id}
                   </Badge>
                 )}
               </CardContent>
@@ -323,7 +343,7 @@ export default function Operators() {
           <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={canManageOperators && isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>{selectedUser ? "Edit Operator" : "Add Operator"}</DialogTitle>
@@ -399,40 +419,49 @@ export default function Operators() {
                 <Label htmlFor="role">Role</Label>
                 {isRolesLoading ? (
                   <div className="flex items-center gap-2 p-2 border rounded-md">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Loading roles...</span>
                   </div>
-                ) : roles.length === 0 ? (
+                ) : !operatorRole ? (
                   <div className="p-2 border rounded-md text-sm text-muted-foreground">
-                    No roles available
+                    Operator role is not available
+                  </div>
+                ) : (
+                  <Input id="role" value="Operator" disabled />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                {!canPickDepartment ? (
+                  <Input id="department" value={currentUser?.department_id ? "Assigned to your department" : "No department assigned"} disabled />
+                ) : isDepartmentsLoading ? (
+                  <div className="flex items-center gap-2 p-2 border rounded-md">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Loading departments...</span>
+                  </div>
+                ) : departments.length === 0 ? (
+                  <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                    No departments available
                   </div>
                 ) : (
                   <Select
-                    value={formData.role_id}
-                    onValueChange={(val) => setFormData((p) => ({ ...p, role_id: val }))}
+                    value={formData.department_id || "none"}
+                    onValueChange={(val) => setFormData((p) => ({ ...p, department_id: val === "none" ? "" : val }))}
                     disabled={createOrUpdate.isPending}
                   >
-                    <SelectTrigger id="role">
-                      <SelectValue placeholder="Select role" />
+                    <SelectTrigger id="department">
+                      <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.id}>
-                          {role.name === "OPERATOR" ? "Operator" : role.name}
+                      <SelectItem value="none">None</SelectItem>
+                      {departments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="department">Department ID</Label>
-                <Input
-                  id="department"
-                  value={formData.department_id}
-                  onChange={(e) => setFormData((p) => ({ ...p, department_id: e.target.value }))}
-                  placeholder="optional"
-                  disabled={createOrUpdate.isPending}
-                />
               </div>
             </div>
           </div>
@@ -446,7 +475,8 @@ export default function Operators() {
                 createOrUpdate.isPending ||
                 !formData.email.trim() ||
                 (!selectedUser && (!formData.password.trim() || !formData.confirm_password.trim() || passwordMismatch)) ||
-                !formData.role_id
+                !formData.role_id ||
+                !canManageOperators
               }
             >
               {createOrUpdate.isPending ? "Saving..." : selectedUser ? "Update" : "Create"}

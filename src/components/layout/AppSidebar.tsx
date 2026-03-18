@@ -29,44 +29,40 @@ import signhexLogo from "@/assets/signhex-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { useAppSelector } from "@/store/hooks";
+import { canAccessModule, type ModuleKey } from "@/lib/access";
 
 type NavItem = {
   title: string;
   url: string;
   icon: LucideIcon;
+  moduleKey?: ModuleKey;
   permissions?: Array<{ action: string; subject: string }>;
   requireAny?: boolean;
   allowRoles?: string[];
 };
 
 const navItems: NavItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Media Library", url: "/media", icon: FolderOpen },
-  { title: "Layouts", url: "/layouts", icon: PanelsTopLeft },
-  { title: "Screens", url: "/screens", icon: Monitor },
-  { title: "Schedule Queue", url: "/schedule", icon: Calendar },
-  { title: "Conversations", url: "/chat", icon: Kanban },
-  { title: "Notifications", url: "/notifications", icon: BellRing },
-  { title: "Operators", url: "/operators", icon: Users },
-  { title: "Departments", url: "/departments", icon: Building2 },
-  { title: "Users", url: "/users", icon: Users },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
+  { title: "Media Library", url: "/media", icon: FolderOpen, moduleKey: "media" },
+  { title: "Layouts", url: "/layouts", icon: PanelsTopLeft, moduleKey: "layouts" },
+  { title: "Screens", url: "/screens", icon: Monitor, moduleKey: "screens" },
+  { title: "Schedule Queue", url: "/schedule", icon: Calendar, moduleKey: "schedule" },
+  { title: "Conversations", url: "/chat", icon: Kanban, moduleKey: "conversations" },
+  { title: "Notifications", url: "/notifications", icon: BellRing, moduleKey: "notifications" },
+  { title: "Operators", url: "/operators", icon: Users, moduleKey: "operators" },
+  { title: "Departments", url: "/departments", icon: Building2, moduleKey: "departments" },
+  { title: "Users", url: "/users", icon: Users, moduleKey: "users" },
   {
     title: "Reports & Logs",
     url: "/reports",
     icon: FileBarChart,
-    permissions: [
-      { action: "read", subject: "Report" },
-      { action: "read", subject: "AuditLog" },
-    ],
-    requireAny: true,
+    moduleKey: "reports",
   },
   {
     title: "Site Settings",
     url: "/settings",
     icon: Settings,
-    permissions: [{ action: "read", subject: "Settings" }],
-    requireAny: true,
-    allowRoles: ["SUPER_ADMIN", "ADMIN"],
+    moduleKey: "settings",
   },
 ];
 
@@ -77,6 +73,10 @@ export function AppSidebar() {
   const user = useAppSelector((appState) => appState.auth.user);
 
   const visibleNavItems = navItems.filter((item) => {
+    if (item.moduleKey) {
+      if (isAuthzLoading) return false;
+      return canAccessModule(item.moduleKey, user ?? undefined, can);
+    }
     if (item.allowRoles?.length && user?.role && item.allowRoles.includes(user.role)) return true;
     if (!item.permissions?.length) return true;
     if (isAuthzLoading) return false;
