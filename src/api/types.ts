@@ -87,6 +87,7 @@ export interface LayoutItem {
   aspect_ratio: string;
   spec: LayoutSpec;
   created_by?: string | null;
+  is_shared?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +99,7 @@ export interface LayoutSummary {
   aspect_ratio?: string;
   spec: LayoutSlot[] | LayoutSpec;
   created_by?: string | null;
+  is_shared?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -155,6 +157,77 @@ export interface OrgSetting {
   value: unknown;
 }
 
+export interface GeneralSettings {
+  company_name: string;
+  timezone: string;
+  language: string;
+}
+
+export interface BrandingSettings {
+  app_name: string;
+  logo_media_id: string | null;
+  icon_media_id: string | null;
+  favicon_media_id: string | null;
+  logo_url: string | null;
+  icon_url: string | null;
+  favicon_url: string | null;
+}
+
+export interface PasswordPolicySettings {
+  min_length: number;
+  require_uppercase: boolean;
+  require_lowercase: boolean;
+  require_number: boolean;
+  require_special: boolean;
+}
+
+export interface SecuritySettings {
+  idle_timeout_minutes: number;
+  password_policy: PasswordPolicySettings;
+}
+
+export interface AppearanceSettings {
+  theme_mode: "light" | "dark" | "system";
+  accent_preset: "crimson" | "blue" | "emerald" | "amber" | "slate";
+  sidebar_mode: "expanded" | "collapsed" | "auto";
+}
+
+export interface BackupSettings {
+  automatic_enabled: boolean;
+  interval_hours: number;
+  log_level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+}
+
+export interface BackupRunDownload {
+  bucket: string;
+  object_key: string;
+  name: string;
+  size: number;
+  content_type: string;
+  storage_object_id: string;
+  url: string;
+}
+
+export interface BackupRun {
+  id: string;
+  trigger_type: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  error_message: string | null;
+  downloads: BackupRunDownload[];
+}
+
+export interface RecentAppLog {
+  id: string;
+  timestamp: string;
+  logger: string;
+  level: string;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
 export interface DefaultMediaSetting {
   media_id: string | null;
   media?: MediaAsset | null;
@@ -170,6 +243,20 @@ export interface DefaultMediaVariantsSetting {
   global_media_id: string | null;
   global_media?: MediaAsset | null;
   variants: DefaultMediaVariantSetting[];
+}
+
+export type DefaultMediaTargetType = "SCREEN" | "GROUP";
+
+export interface DefaultMediaTargetAssignment {
+  target_type: DefaultMediaTargetType;
+  target_id: string;
+  media_id: string;
+  aspect_ratio: string;
+  media?: MediaAsset | null;
+}
+
+export interface DefaultMediaTargetsSetting {
+  assignments: DefaultMediaTargetAssignment[];
 }
 
 export interface Conversation {
@@ -370,6 +457,9 @@ export interface Screen {
   id: string;
   name: string;
   location?: string | null;
+  aspect_ratio?: string | null;
+  width?: number | null;
+  height?: number | null;
   status?: string;
   is_active?: boolean;
   last_heartbeat_at?: string | null;

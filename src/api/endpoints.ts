@@ -156,8 +156,17 @@ export const endpoints = {
   },
   settings: {
     base: "/settings",
+    general: "/settings/general",
+    branding: "/settings/branding",
+    security: "/settings/security",
+    appearance: "/settings/appearance",
+    backups: "/settings/backups",
+    backupRun: "/settings/backups/run",
+    backupHistory: "/settings/backups/history",
+    logs: "/settings/logs",
     defaultMedia: "/settings/default-media",
     defaultMediaVariants: "/settings/default-media/variants",
+    defaultMediaTargets: "/settings/default-media/targets",
   },
   ssoConfig: {
     base: "/sso-config",

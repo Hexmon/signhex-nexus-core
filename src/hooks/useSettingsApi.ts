@@ -3,7 +3,157 @@ import { settingsApi } from "@/api/domains/settings";
 import { queryKeys } from "@/api/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/api/apiClient";
-import type { DefaultMediaSetting, DefaultMediaVariantsSetting } from "@/api/types";
+import type {
+  AppearanceSettings,
+  BackupSettings,
+  BrandingSettings,
+  DefaultMediaSetting,
+  DefaultMediaTargetsSetting,
+  DefaultMediaVariantsSetting,
+  GeneralSettings,
+  SecuritySettings,
+} from "@/api/types";
+
+function useSettingsMutation<TPayload, TData>(
+  mutationFn: (payload: TPayload) => Promise<TData>,
+  queryKey: readonly unknown[],
+  title: string,
+  description: string,
+) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKey, data);
+      void queryClient.invalidateQueries({ queryKey });
+      toast({ title, description });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update failed",
+        description: error instanceof ApiError ? error.message : "Unable to save settings.",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export const useGeneralSettings = () =>
+  useQuery({
+    queryKey: queryKeys.settingsGeneral,
+    queryFn: settingsApi.getGeneral,
+    staleTime: 60_000,
+  });
+
+export const useUpdateGeneralSettings = () =>
+  useSettingsMutation<GeneralSettings, GeneralSettings>(
+    settingsApi.updateGeneral,
+    queryKeys.settingsGeneral,
+    "General settings updated",
+    "General settings have been saved."
+  );
+
+export const useBrandingSettings = () =>
+  useQuery({
+    queryKey: queryKeys.settingsBranding,
+    queryFn: settingsApi.getBranding,
+    staleTime: 60_000,
+  });
+
+export const useUpdateBrandingSettings = () =>
+  useSettingsMutation<
+    Omit<BrandingSettings, "logo_url" | "icon_url" | "favicon_url">,
+    BrandingSettings
+  >(
+    settingsApi.updateBranding,
+    queryKeys.settingsBranding,
+    "Branding updated",
+    "Brand assets and app name have been saved."
+  );
+
+export const useSecuritySettings = () =>
+  useQuery({
+    queryKey: queryKeys.settingsSecurity,
+    queryFn: settingsApi.getSecurity,
+    staleTime: 60_000,
+  });
+
+export const useUpdateSecuritySettings = () =>
+  useSettingsMutation<SecuritySettings, SecuritySettings>(
+    settingsApi.updateSecurity,
+    queryKeys.settingsSecurity,
+    "Security settings updated",
+    "Session timeout and password requirements have been saved."
+  );
+
+export const useAppearanceSettings = () =>
+  useQuery({
+    queryKey: queryKeys.settingsAppearance,
+    queryFn: settingsApi.getAppearance,
+    staleTime: 60_000,
+  });
+
+export const useUpdateAppearanceSettings = () =>
+  useSettingsMutation<AppearanceSettings, AppearanceSettings>(
+    settingsApi.updateAppearance,
+    queryKeys.settingsAppearance,
+    "Appearance updated",
+    "Theme and sidebar preferences have been saved."
+  );
+
+export const useBackupSettings = () =>
+  useQuery({
+    queryKey: queryKeys.settingsBackups,
+    queryFn: settingsApi.getBackups,
+    staleTime: 60_000,
+  });
+
+export const useUpdateBackupSettings = () =>
+  useSettingsMutation<BackupSettings, BackupSettings>(
+    settingsApi.updateBackups,
+    queryKeys.settingsBackups,
+    "Advanced settings updated",
+    "Backup and log settings have been saved."
+  );
+
+export const useBackupRuns = () =>
+  useQuery({
+    queryKey: queryKeys.settingsBackupRuns,
+    queryFn: settingsApi.listBackupRuns,
+    refetchInterval: 30_000,
+  });
+
+export const useRunBackupNow = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: settingsApi.runBackup,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settingsBackupRuns });
+      toast({
+        title: "Backup queued",
+        description: "A full backup job has been queued.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Backup failed",
+        description: error instanceof ApiError ? error.message : "Unable to queue backup.",
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+export const useRecentLogs = (filters?: { level?: string; limit?: number }) =>
+  useQuery({
+    queryKey: queryKeys.settingsLogs(filters),
+    queryFn: () => settingsApi.listLogs(filters),
+    refetchInterval: 15_000,
+  });
 
 export const useDefaultMedia = () =>
   useQuery({
@@ -33,8 +183,6 @@ export const useUpdateDefaultMedia = () => {
       };
       queryClient.setQueryData(queryKeys.defaultMedia, nextData);
       void queryClient.invalidateQueries({ queryKey: queryKeys.defaultMedia });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-
       toast({
         title: resolvedMediaId ? "Default media updated" : "Default media cleared",
         description: resolvedMediaId
@@ -68,8 +216,6 @@ export const useUpdateDefaultMediaVariants = () => {
 
       queryClient.setQueryData(queryKeys.defaultMediaVariants, nextData);
       void queryClient.invalidateQueries({ queryKey: queryKeys.defaultMediaVariants });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-
       toast({
         title: "Default media variants updated",
         description: "Aspect-ratio fallback media has been saved.",
@@ -77,6 +223,42 @@ export const useUpdateDefaultMediaVariants = () => {
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Unable to update default media variants.";
+      toast({
+        title: "Update failed",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+export const useDefaultMediaTargets = () =>
+  useQuery({
+    queryKey: queryKeys.defaultMediaTargets,
+    queryFn: settingsApi.getDefaultMediaTargets,
+    staleTime: 60_000,
+  });
+
+export const useUpdateDefaultMediaTargets = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: settingsApi.updateDefaultMediaTargets,
+    onSuccess: (data) => {
+      const nextData: DefaultMediaTargetsSetting = {
+        assignments: data?.assignments ?? [],
+      };
+
+      queryClient.setQueryData(queryKeys.defaultMediaTargets, nextData);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.defaultMediaTargets });
+      toast({
+        title: "Default media assignments updated",
+        description: "Screen and group default media assignments have been saved.",
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Unable to update default media assignments.";
       toast({
         title: "Update failed",
         description: message,

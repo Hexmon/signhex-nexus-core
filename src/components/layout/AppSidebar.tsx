@@ -25,11 +25,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import signhexLogo from "@/assets/signhex-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { useAppSelector } from "@/store/hooks";
 import { canAccessModule, type ModuleKey } from "@/lib/access";
+import { useBrandingSettings } from "@/hooks/useSettingsApi";
 
 type NavItem = {
   title: string;
@@ -71,6 +71,7 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
   const { can, isLoading: isAuthzLoading } = useAuthorization();
   const user = useAppSelector((appState) => appState.auth.user);
+  const { data: branding } = useBrandingSettings();
 
   const visibleNavItems = navItems.filter((item) => {
     if (item.moduleKey) {
@@ -90,18 +91,24 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
       <SidebarContent>
         <div className={`flex items-center px-4 py-6 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-          <img 
-            src={signhexLogo} 
-            alt="Signhex" 
-            className={`${isCollapsed ? 'h-8 w-8' : 'h-10 w-10'} object-contain`}
-          />
+          {branding?.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt={branding.app_name}
+              className={`${isCollapsed ? 'h-8 w-8' : 'h-10 w-10'} object-contain`}
+            />
+          ) : (
+            <div className={`${isCollapsed ? 'h-8 w-8' : 'h-10 w-10'} rounded-xl bg-primary/15 flex items-center justify-center text-primary font-semibold`}>
+              {(branding?.app_name ?? "S").slice(0, 1)}
+            </div>
+          )}
           {!isCollapsed && (
             <div className="flex flex-col">
               <span
                 className="font-bold text-lg"
                 style={{ color: "hsl(var(--sidebar-primary))" }}
               >
-                Signhex
+                {branding?.app_name ?? "Signhex"}
               </span>
               <span className="text-xs text-muted-foreground">
                 {user?.role ?? "User"}

@@ -1,4 +1,4 @@
-import type { LayoutItem, MediaAsset, RoleName, User } from "@/api/types";
+import type { LayoutItem, MediaAsset, Role, RoleName, User } from "@/api/types";
 
 type CanFn = (action: string, subject: string) => boolean;
 
@@ -54,6 +54,24 @@ export const canAccessModule = (moduleKey: ModuleKey, user: User | null | undefi
 };
 
 export const canManageEmergency = (user: User | null | undefined) => isAdminLike(user?.role);
+
+export const canManageBrandingSettings = (
+  user: User | null | undefined,
+  role: Role | undefined,
+  can: CanFn,
+) => {
+  if (user?.role === "SUPER_ADMIN") return true;
+  if (user?.role === "ADMIN") {
+    return Boolean(
+      role?.permissions?.grants?.some(
+        (grant) =>
+          grant.subject === "BrandingSettings" &&
+          (grant.action === "manage" || grant.action === "update" || grant.action === "read"),
+      ),
+    );
+  }
+  return can("manage", "BrandingSettings") || can("update", "BrandingSettings");
+};
 
 export const canManageLayoutRecord = (user: User | null | undefined, layout: Pick<LayoutItem, "created_by">) =>
   isAdminLike(user?.role) || Boolean(user?.id && layout.created_by && layout.created_by === user.id);

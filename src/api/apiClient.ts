@@ -39,6 +39,7 @@ export class ApiError extends Error {
 }
 
 type TokenProvider = () => string | undefined | null;
+type RefreshedAuthHandler = (payload: { token: string; expiresAt?: string }) => void;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const inferredOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
@@ -76,6 +77,7 @@ export class ApiClient {
   private authTokenProvider: TokenProvider = () => undefined;
   private apiKeyProvider: TokenProvider = () => undefined;
   private csrfTokenProvider: TokenProvider = () => undefined;
+  private refreshedAuthHandler?: RefreshedAuthHandler;
   private inflightGetRequests = new Map<string, Promise<unknown>>();
 
   setAuthTokenProvider(getToken: TokenProvider) {
@@ -86,6 +88,9 @@ export class ApiClient {
   }
   setCsrfTokenProvider(getToken: TokenProvider) {
     this.csrfTokenProvider = getToken;
+  }
+  setRefreshedAuthHandler(handler: RefreshedAuthHandler) {
+    this.refreshedAuthHandler = handler;
   }
 
   async request<TResponse, TBody = unknown>(options: ApiRequestOptions<TBody>): Promise<TResponse> {
@@ -139,6 +144,12 @@ export class ApiClient {
         const contentType = response.headers.get("content-type");
         const isJson = contentType?.includes("application/json");
         const payload = isJson ? await response.json() : await response.text();
+        const refreshedToken = response.headers.get("x-access-token");
+        const refreshedExpiresAt = response.headers.get("x-access-token-expires-at") ?? undefined;
+
+        if (refreshedToken && this.refreshedAuthHandler) {
+          this.refreshedAuthHandler({ token: refreshedToken, expiresAt: refreshedExpiresAt });
+        }
 
         if (!response.ok) {
           const envelope = isJson ? parseErrorEnvelope(payload) : undefined;

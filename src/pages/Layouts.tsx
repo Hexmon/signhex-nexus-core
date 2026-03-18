@@ -319,6 +319,7 @@ const Layouts = () => {
                     <div className="flex items-center gap-2">
                       <LayoutGrid className="h-4 w-4 text-muted-foreground" />
                       {layout.name}
+                      {layout.is_shared ? <Badge variant="secondary">Shared</Badge> : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground max-w-[300px] truncate">
@@ -364,6 +365,11 @@ const Layouts = () => {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    {!canManageLayout && layout.is_shared ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Shared admin template
+                      </p>
+                    ) : null}
                   </TableCell>
                 </TableRow>
                 );

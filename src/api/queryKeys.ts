@@ -41,8 +41,17 @@ export const queryKeys = {
   presentations: ["presentations"] as const,
   users: ["users"] as const,
   settings: ["settings"] as const,
+  settingsGeneral: ["settings", "general"] as const,
+  settingsBranding: ["settings", "branding"] as const,
+  settingsSecurity: ["settings", "security"] as const,
+  settingsAppearance: ["settings", "appearance"] as const,
+  settingsBackups: ["settings", "backups"] as const,
+  settingsBackupRuns: ["settings", "backups", "history"] as const,
+  settingsLogs: (filters?: { level?: string; limit?: number }) =>
+    ["settings", "logs", filters?.level ?? null, filters?.limit ?? null] as const,
   defaultMedia: ["settings", "default-media"] as const,
   defaultMediaVariants: ["settings", "default-media-variants"] as const,
+  defaultMediaTargets: ["settings", "default-media-targets"] as const,
   roles: (filters?: { page?: number; limit?: number; search?: string }) =>
     ["roles", filters?.page, filters?.limit, filters?.search] as const,
   role: (roleId?: string) => ["role", roleId] as const,

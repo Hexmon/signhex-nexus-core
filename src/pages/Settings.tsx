@@ -1,12 +1,26 @@
-import { useState } from "react";
-import { Save, Bell, Lock, Palette, Globe, Database, Zap, Key, Webhook, Shield, FileBarChart, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Brush,
+  Clock3,
+  Database,
+  Globe,
+  ImageUp,
+  Lock,
+  Palette,
+  Save,
+  Shield,
+  Upload,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -14,177 +28,439 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { RolesPermissionsTab } from "@/components/settings/RolesPermissionsTab";
 import { DefaultMediaSection } from "@/components/settings/DefaultMediaSection";
+import { useAuthorization } from "@/hooks/useAuthorization";
+import { useAppSelector } from "@/store/hooks";
+import {
+  useAppearanceSettings,
+  useBackupRuns,
+  useBackupSettings,
+  useBrandingSettings,
+  useGeneralSettings,
+  useRecentLogs,
+  useRunBackupNow,
+  useSecuritySettings,
+  useUpdateAppearanceSettings,
+  useUpdateBackupSettings,
+  useUpdateBrandingSettings,
+  useUpdateGeneralSettings,
+  useUpdateSecuritySettings,
+} from "@/hooks/useSettingsApi";
+import { canManageBrandingSettings } from "@/lib/access";
+import { mediaApi } from "@/api/domains/media";
+import type { MediaAsset } from "@/api/types";
+import { uploadMediaWithPresign, validateUploadFile, getFriendlyUploadError } from "@/lib/mediaUploadFlow";
+import { useToast } from "@/hooks/use-toast";
 
-const Settings = () => {
+const BRANDING_FIELDS = [
+  { key: "logo_media_id", label: "Logo", hint: "Shown in the sidebar and login screen." },
+  { key: "icon_media_id", label: "App icon", hint: "Used in compact UI surfaces." },
+  { key: "favicon_media_id", label: "Favicon", hint: "Shown in the browser tab." },
+] as const;
+
+const sidebarModes = [
+  { value: "expanded", label: "Always expanded" },
+  { value: "collapsed", label: "Always collapsed" },
+  { value: "auto", label: "Auto responsive" },
+] as const;
+
+const accentPresets = [
+  { value: "crimson", label: "Crimson" },
+  { value: "blue", label: "Blue" },
+  { value: "emerald", label: "Emerald" },
+  { value: "amber", label: "Amber" },
+  { value: "slate", label: "Slate" },
+] as const;
+
+function BrandingAssetField({
+  label,
+  hint,
+  mediaId,
+  mediaUrl,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  mediaId: string | null;
+  mediaUrl: string | null;
+  onChange: (nextId: string | null, nextUrl?: string | null) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [twoFactorAuth, setTwoFactorAuth] = useState(false);
-  const [autoBackup, setAutoBackup] = useState(true);
+  const mediaQuery = useQuery({
+    queryKey: ["settings", "branding", "media-picker"],
+    queryFn: () => mediaApi.list({ limit: 50, status: "READY" as never }),
+    staleTime: 60_000,
+    enabled: pickerOpen,
+  });
 
-  const handleSaveSettings = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Your settings have been updated successfully.",
-    });
+  const mediaItems = mediaQuery.data?.items ?? [];
+
+  const handleUpload = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+
+    const validationError = validateUploadFile(file);
+    if (validationError) {
+      toast({ title: "Upload failed", description: validationError, variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const result = await uploadMediaWithPresign(file, { displayName: `${label} ${file.name}` });
+      onChange(result.media.id, result.media.url ?? null);
+      toast({ title: `${label} updated`, description: "Uploaded media is now assigned." });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: getFriendlyUploadError(error),
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Site Settings</h1>
-          <p className="text-muted-foreground">
-            Configure system preferences and application settings
-          </p>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{label}</CardTitle>
+        <CardDescription>{hint}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
+            {mediaUrl ? (
+              <img src={mediaUrl} alt={label} className="h-full w-full object-contain" />
+            ) : (
+              <ImageUp className="h-6 w-6 text-muted-foreground" />
+            )}
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">
+              {mediaId ? "Assigned from media library" : "No media assigned"}
+            </div>
+            <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setPickerOpen(true)}>
+                <Brush className="mr-2 h-4 w-4" />
+                Choose existing
+              </Button>
+              <Label className="inline-flex">
+                <Input
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => void handleUpload(event.target.files)}
+                  disabled={uploading}
+                />
+                <Button type="button" variant="outline" disabled={uploading} asChild>
+                  <span>
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploading ? "Uploading..." : "Upload new"}
+                  </span>
+                </Button>
+              </Label>
+              {mediaId ? (
+                <Button variant="ghost" onClick={() => onChange(null, null)}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <Button onClick={handleSaveSettings}>
-          <Save className="mr-2 h-4 w-4" />
-          Save Changes
-        </Button>
+
+        <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Select {label}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 md:grid-cols-2">
+              {mediaItems.map((media) => (
+                <button
+                  key={media.id}
+                  type="button"
+                  className="rounded-lg border p-3 text-left hover:border-primary transition-colors"
+                  onClick={() => {
+                    onChange(media.id, media.url ?? null);
+                    setPickerOpen(false);
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 rounded bg-muted/40 overflow-hidden flex items-center justify-center">
+                      {media.url ? (
+                        <img src={media.url} alt={media.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <ImageUp className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{media.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{media.display_name ?? media.name}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
+const Settings = () => {
+  const { toast } = useToast();
+  const { can, role } = useAuthorization();
+  const currentUser = useAppSelector((state) => state.auth.user);
+  const canEditBranding = canManageBrandingSettings(currentUser ?? undefined, role, can);
+
+  const generalQuery = useGeneralSettings();
+  const brandingQuery = useBrandingSettings();
+  const securityQuery = useSecuritySettings();
+  const appearanceQuery = useAppearanceSettings();
+  const backupSettingsQuery = useBackupSettings();
+  const backupRunsQuery = useBackupRuns();
+  const [logLevelFilter, setLogLevelFilter] = useState<string>("all");
+  const recentLogsQuery = useRecentLogs({
+    limit: 100,
+    level: logLevelFilter === "all" ? undefined : logLevelFilter,
+  });
+
+  const updateGeneral = useUpdateGeneralSettings();
+  const updateBranding = useUpdateBrandingSettings();
+  const updateSecurity = useUpdateSecuritySettings();
+  const updateAppearance = useUpdateAppearanceSettings();
+  const updateBackups = useUpdateBackupSettings();
+  const runBackupNow = useRunBackupNow();
+
+  const [general, setGeneral] = useState({ company_name: "", timezone: "UTC", language: "en" });
+  const [branding, setBranding] = useState({
+    app_name: "",
+    logo_media_id: null as string | null,
+    icon_media_id: null as string | null,
+    favicon_media_id: null as string | null,
+    logo_url: null as string | null,
+    icon_url: null as string | null,
+    favicon_url: null as string | null,
+  });
+  const [security, setSecurity] = useState({
+    idle_timeout_minutes: 30,
+    password_policy: {
+      min_length: 12,
+      require_uppercase: true,
+      require_lowercase: true,
+      require_number: true,
+      require_special: true,
+    },
+  });
+  const [appearance, setAppearance] = useState({
+    theme_mode: "light" as const,
+    accent_preset: "crimson" as const,
+    sidebar_mode: "expanded" as const,
+  });
+  const [backups, setBackups] = useState({
+    automatic_enabled: false,
+    interval_hours: 24,
+    log_level: "info" as const,
+  });
+
+  useEffect(() => {
+    if (generalQuery.data) setGeneral(generalQuery.data);
+  }, [generalQuery.data]);
+
+  useEffect(() => {
+    if (brandingQuery.data) setBranding(brandingQuery.data);
+  }, [brandingQuery.data]);
+
+  useEffect(() => {
+    if (securityQuery.data) setSecurity(securityQuery.data);
+  }, [securityQuery.data]);
+
+  useEffect(() => {
+    if (appearanceQuery.data) setAppearance(appearanceQuery.data);
+  }, [appearanceQuery.data]);
+
+  useEffect(() => {
+    if (backupSettingsQuery.data) setBackups(backupSettingsQuery.data);
+  }, [backupSettingsQuery.data]);
+
+  const backupRuns = backupRunsQuery.data?.items ?? [];
+  const recentLogs = recentLogsQuery.data?.items ?? [];
+
+  const brandingPreviewName = branding.app_name.trim() || "Signhex CMS";
+
+  const handleBrandingAssetChange = (
+    key: "logo_media_id" | "icon_media_id" | "favicon_media_id",
+    nextId: string | null,
+    nextUrl?: string | null,
+  ) => {
+    const urlKey = key === "logo_media_id" ? "logo_url" : key === "icon_media_id" ? "icon_url" : "favicon_url";
+    setBranding((current) => ({
+      ...current,
+      [key]: nextId,
+      [urlKey]: nextUrl ?? current[urlKey],
+    }));
+  };
+
+  const passwordRequirementSummary = useMemo(() => {
+    const rules = [];
+    if (security.password_policy.require_uppercase) rules.push("uppercase");
+    if (security.password_policy.require_lowercase) rules.push("lowercase");
+    if (security.password_policy.require_number) rules.push("number");
+    if (security.password_policy.require_special) rules.push("special");
+    return rules.join(", ");
+  }, [security.password_policy]);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Site Settings</h1>
+        <p className="text-muted-foreground">
+          Configure organization-wide branding, security, appearance, and operational settings.
+        </p>
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="general">
-            <Globe className="mr-2 h-4 w-4" />
-            General
-          </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="mr-2 h-4 w-4" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="security">
-            <Lock className="mr-2 h-4 w-4" />
-            Security
-          </TabsTrigger>
-          <TabsTrigger value="appearance">
-            <Palette className="mr-2 h-4 w-4" />
-            Appearance
-          </TabsTrigger>
-          <TabsTrigger value="advanced">
-            <Zap className="mr-2 h-4 w-4" />
-            Advanced
-          </TabsTrigger>
-          <TabsTrigger value="roles">
-            <Users className="mr-2 h-4 w-4" />
-            Roles
-          </TabsTrigger>
-          <TabsTrigger value="enterprise">
-            <Shield className="mr-2 h-4 w-4" />
-            Enterprise
-          </TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="general"><Globe className="mr-2 h-4 w-4" />General</TabsTrigger>
+          <TabsTrigger value="branding"><ImageUp className="mr-2 h-4 w-4" />Branding</TabsTrigger>
+          <TabsTrigger value="security"><Lock className="mr-2 h-4 w-4" />Security</TabsTrigger>
+          <TabsTrigger value="appearance"><Palette className="mr-2 h-4 w-4" />Appearance</TabsTrigger>
+          <TabsTrigger value="default-media"><Shield className="mr-2 h-4 w-4" />Default Media</TabsTrigger>
+          <TabsTrigger value="advanced"><Database className="mr-2 h-4 w-4" />Advanced</TabsTrigger>
+          <TabsTrigger value="roles"><Users className="mr-2 h-4 w-4" />Roles</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>General Settings</CardTitle>
-              <CardDescription>
-                Manage your site's basic configuration and preferences
-              </CardDescription>
+              <CardTitle>General</CardTitle>
+              <CardDescription>Default locale and organization details for the CMS.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="site-name">Site Name</Label>
-                <Input id="site-name" defaultValue="SignHex CMS" />
+                <Label htmlFor="company-name">Company name</Label>
+                <Input
+                  id="company-name"
+                  value={general.company_name}
+                  onChange={(event) => setGeneral((current) => ({ ...current, company_name: event.target.value }))}
+                />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="company-name">Company Name</Label>
-                <Input id="company-name" defaultValue="Acme Corporation" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Input
+                    id="timezone"
+                    value={general.timezone}
+                    onChange={(event) => setGeneral((current) => ({ ...current, timezone: event.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="language">Language</Label>
+                  <Input
+                    id="language"
+                    value={general.language}
+                    onChange={(event) => setGeneral((current) => ({ ...current, language: event.target.value }))}
+                  />
+                </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Default Timezone</Label>
-                <Select defaultValue="utc-5">
-                  <SelectTrigger id="timezone">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="utc-8">Pacific Time (UTC-8)</SelectItem>
-                    <SelectItem value="utc-7">Mountain Time (UTC-7)</SelectItem>
-                    <SelectItem value="utc-6">Central Time (UTC-6)</SelectItem>
-                    <SelectItem value="utc-5">Eastern Time (UTC-5)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="language">Default Language</Label>
-                <Select defaultValue="en">
-                  <SelectTrigger id="language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="es">Spanish</SelectItem>
-                    <SelectItem value="fr">French</SelectItem>
-                    <SelectItem value="de">German</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Button onClick={() => updateGeneral.mutate(general)} disabled={updateGeneral.isPending}>
+                <Save className="mr-2 h-4 w-4" />
+                Save General
+              </Button>
             </CardContent>
           </Card>
-          <DefaultMediaSection />
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-4">
+        <TabsContent value="branding" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
+              <CardTitle>Branding</CardTitle>
               <CardDescription>
-                Control how you receive updates and alerts
+                Manage the app name, logo, icon, and favicon used throughout the CMS.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive email updates about system events
-                  </p>
+            <CardContent className="space-y-4">
+              {!canEditBranding ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Branding is restricted. By default only Super Admin can edit it unless the role is explicitly granted
+                  the branding permission.
                 </div>
-                <Switch
-                  checked={emailNotifications}
-                  onCheckedChange={setEmailNotifications}
-                />
-              </div>
+              ) : null}
+              <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="app-name">Application name</Label>
+                    <Input
+                      id="app-name"
+                      value={branding.app_name}
+                      disabled={!canEditBranding}
+                      onChange={(event) => setBranding((current) => ({ ...current, app_name: event.target.value }))}
+                    />
+                  </div>
 
-              <Separator />
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {BRANDING_FIELDS.map((field) => (
+                      <BrandingAssetField
+                        key={field.key}
+                        label={field.label}
+                        hint={field.hint}
+                        mediaId={branding[field.key]}
+                        mediaUrl={branding[field.key === "logo_media_id" ? "logo_url" : field.key === "icon_media_id" ? "icon_url" : "favicon_url"]}
+                        onChange={(nextId, nextUrl) => handleBrandingAssetChange(field.key, nextId, nextUrl)}
+                      />
+                    ))}
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Push Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Get push notifications for critical alerts
-                  </p>
+                  <Button
+                    onClick={() =>
+                      updateBranding.mutate({
+                        app_name: branding.app_name,
+                        logo_media_id: branding.logo_media_id,
+                        icon_media_id: branding.icon_media_id,
+                        favicon_media_id: branding.favicon_media_id,
+                      })
+                    }
+                    disabled={!canEditBranding || updateBranding.isPending}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Branding
+                  </Button>
                 </div>
-                <Switch
-                  checked={pushNotifications}
-                  onCheckedChange={setPushNotifications}
-                />
-              </div>
 
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Notification Frequency</Label>
-                <Select defaultValue="realtime">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="realtime">Real-time</SelectItem>
-                    <SelectItem value="hourly">Hourly Digest</SelectItem>
-                    <SelectItem value="daily">Daily Digest</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Card className="bg-muted/20">
+                  <CardHeader>
+                    <CardTitle className="text-base">Preview</CardTitle>
+                    <CardDescription>How the CMS identity will appear in the shell.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-xl border bg-card p-4 flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+                        {branding.logo_url ? (
+                          <img src={branding.logo_url} alt={brandingPreviewName} className="h-full w-full object-contain" />
+                        ) : (
+                          <ImageUp className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-semibold">{brandingPreviewName}</p>
+                        <p className="text-sm text-muted-foreground">CMS identity preview</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {branding.icon_media_id ? <Badge>Icon ready</Badge> : null}
+                      {branding.favicon_media_id ? <Badge variant="outline">Favicon ready</Badge> : null}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
@@ -193,57 +469,85 @@ const Settings = () => {
         <TabsContent value="security" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Security Settings</CardTitle>
-              <CardDescription>
-                Protect your account and data with security features
-              </CardDescription>
+              <CardTitle>Security</CardTitle>
+              <CardDescription>Working session timeout and password requirement controls.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Two-Factor Authentication</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Add an extra layer of security to your account
-                  </p>
-                </div>
-                <Switch
-                  checked={twoFactorAuth}
-                  onCheckedChange={setTwoFactorAuth}
-                />
-              </div>
-
-              <Separator />
-
               <div className="space-y-2">
-                <Label htmlFor="session-timeout">Session Timeout (minutes)</Label>
+                <Label htmlFor="session-timeout">Idle session timeout (minutes)</Label>
                 <Input
                   id="session-timeout"
                   type="number"
-                  defaultValue="30"
-                  min="5"
-                  max="1440"
+                  min={5}
+                  max={1440}
+                  value={security.idle_timeout_minutes}
+                  onChange={(event) =>
+                    setSecurity((current) => ({
+                      ...current,
+                      idle_timeout_minutes: Number(event.target.value || 30),
+                    }))
+                  }
                 />
               </div>
 
               <Separator />
 
-              <div className="space-y-2">
-                <Label>Password Requirements</Label>
-                <Select defaultValue="strong">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="basic">Basic (8+ characters)</SelectItem>
-                    <SelectItem value="moderate">
-                      Moderate (8+ chars, numbers)
-                    </SelectItem>
-                    <SelectItem value="strong">
-                      Strong (8+ chars, numbers, symbols)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-medium">Password requirements</h3>
+                  <p className="text-sm text-muted-foreground">
+                    New passwords must be at least {security.password_policy.min_length} characters and include {passwordRequirementSummary || "no extra character classes"}.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="min-length">Minimum length</Label>
+                    <Input
+                      id="min-length"
+                      type="number"
+                      min={8}
+                      max={128}
+                      value={security.password_policy.min_length}
+                      onChange={(event) =>
+                        setSecurity((current) => ({
+                          ...current,
+                          password_policy: {
+                            ...current.password_policy,
+                            min_length: Number(event.target.value || 12),
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                  {[
+                    ["require_uppercase", "Require uppercase"],
+                    ["require_lowercase", "Require lowercase"],
+                    ["require_number", "Require number"],
+                    ["require_special", "Require special character"],
+                  ].map(([key, label]) => (
+                    <div key={key} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="text-sm">{label}</span>
+                      <Switch
+                        checked={security.password_policy[key as keyof typeof security.password_policy] as boolean}
+                        onCheckedChange={(checked) =>
+                          setSecurity((current) => ({
+                            ...current,
+                            password_policy: {
+                              ...current.password_policy,
+                              [key]: checked,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              <Button onClick={() => updateSecurity.mutate(security)} disabled={updateSecurity.isPending}>
+                <Save className="mr-2 h-4 w-4" />
+                Save Security
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -251,126 +555,203 @@ const Settings = () => {
         <TabsContent value="appearance" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Appearance Settings</CardTitle>
-              <CardDescription>
-                Customize how the application looks and feels
-              </CardDescription>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>Theme, accent, and sidebar behavior for the entire CMS.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Theme</Label>
-                <Select defaultValue="light">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Accent Color</Label>
-                <div className="flex gap-2">
-                  <div className="h-10 w-10 rounded-md bg-blue-500 cursor-pointer border-2 border-blue-600" />
-                  <div className="h-10 w-10 rounded-md bg-purple-500 cursor-pointer" />
-                  <div className="h-10 w-10 rounded-md bg-green-500 cursor-pointer" />
-                  <div className="h-10 w-10 rounded-md bg-orange-500 cursor-pointer" />
-                  <div className="h-10 w-10 rounded-md bg-red-500 cursor-pointer" />
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Theme mode</Label>
+                  <Select
+                    value={appearance.theme_mode}
+                    onValueChange={(value: "light" | "dark" | "system") =>
+                      setAppearance((current) => ({ ...current, theme_mode: value }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Accent preset</Label>
+                  <Select
+                    value={appearance.accent_preset}
+                    onValueChange={(value: typeof appearance.accent_preset) =>
+                      setAppearance((current) => ({ ...current, accent_preset: value }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {accentPresets.map((preset) => (
+                        <SelectItem key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Sidebar mode</Label>
+                  <Select
+                    value={appearance.sidebar_mode}
+                    onValueChange={(value: typeof appearance.sidebar_mode) =>
+                      setAppearance((current) => ({ ...current, sidebar_mode: value }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {sidebarModes.map((mode) => (
+                        <SelectItem key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Sidebar Behavior</Label>
-                <Select defaultValue="expanded">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expanded">Always Expanded</SelectItem>
-                    <SelectItem value="collapsed">Always Collapsed</SelectItem>
-                    <SelectItem value="auto">Auto (Responsive)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Button onClick={() => updateAppearance.mutate(appearance)} disabled={updateAppearance.isPending}>
+                <Save className="mr-2 h-4 w-4" />
+                Save Appearance
+              </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="default-media" className="space-y-4">
+          <DefaultMediaSection />
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Advanced Settings</CardTitle>
-              <CardDescription>
-                Configure advanced system options and integrations
-              </CardDescription>
+              <CardTitle>Backups</CardTitle>
+              <CardDescription>Automatic full backups for PostgreSQL and MinIO archives.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4" />
-                    <Label>Automatic Backup</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically backup database daily
-                  </p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">Automatic backups</p>
+                  <p className="text-sm text-muted-foreground">Run recurring full backups into the archives bucket.</p>
                 </div>
                 <Switch
-                  checked={autoBackup}
-                  onCheckedChange={setAutoBackup}
+                  checked={backups.automatic_enabled}
+                  onCheckedChange={(checked) => setBackups((current) => ({ ...current, automatic_enabled: checked }))}
                 />
               </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="cache-duration">Cache Duration (hours)</Label>
-                <Input
-                  id="cache-duration"
-                  type="number"
-                  defaultValue="24"
-                  min="1"
-                  max="168"
-                />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="api-key">API Key</Label>
-                <div className="flex gap-2">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="backup-interval">Backup interval (hours)</Label>
                   <Input
-                    id="api-key"
-                    type="password"
-                    defaultValue="sk_test_1234567890"
-                    readOnly
+                    id="backup-interval"
+                    type="number"
+                    min={1}
+                    max={168}
+                    value={backups.interval_hours}
+                    onChange={(event) =>
+                      setBackups((current) => ({ ...current, interval_hours: Number(event.target.value || 24) }))
+                    }
                   />
-                  <Button variant="outline">Regenerate</Button>
+                </div>
+                <div className="space-y-2">
+                  <Label>Log level</Label>
+                  <Select
+                    value={backups.log_level}
+                    onValueChange={(value: typeof backups.log_level) =>
+                      setBackups((current) => ({ ...current, log_level: value }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["trace", "debug", "info", "warn", "error", "fatal"].map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {level.toUpperCase()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => updateBackups.mutate(backups)} disabled={updateBackups.isPending}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Advanced
+                </Button>
+                <Button variant="outline" onClick={() => runBackupNow.mutate()} disabled={runBackupNow.isPending}>
+                  <Database className="mr-2 h-4 w-4" />
+                  {runBackupNow.isPending ? "Queueing..." : "Run Backup Now"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-              <Separator />
+          <Card>
+            <CardHeader>
+              <CardTitle>Backup history</CardTitle>
+              <CardDescription>Recent manual and automatic backup runs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {backupRuns.map((run) => (
+                <div key={run.id} className="rounded-lg border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{run.trigger_type}</Badge>
+                      <Badge>{run.status}</Badge>
+                      <span className="text-sm text-muted-foreground">{new Date(run.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {run.downloads.map((download) => (
+                        <Button key={download.object_key} asChild size="sm" variant="ghost">
+                          <a href={download.url} target="_blank" rel="noreferrer">{download.name}</a>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  {run.error_message ? (
+                    <p className="mt-2 text-sm text-destructive">{run.error_message}</p>
+                  ) : null}
+                </div>
+              ))}
+              {backupRuns.length === 0 ? <p className="text-sm text-muted-foreground">No backup history yet.</p> : null}
+            </CardContent>
+          </Card>
 
-              <div className="space-y-2">
-                <Label>Log Level</Label>
-                <Select defaultValue="info">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent logs</CardTitle>
+              <CardDescription>Recent backend application logs filtered by runtime log level.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Clock3 className="h-4 w-4 text-muted-foreground" />
+                  <Label>Log filter</Label>
+                </div>
+                <Select value={logLevelFilter} onValueChange={setLogLevelFilter}>
+                  <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="debug">Debug (Verbose)</SelectItem>
-                    <SelectItem value="info">Info (Standard)</SelectItem>
-                    <SelectItem value="warning">Warning (Important)</SelectItem>
-                    <SelectItem value="error">Error (Critical Only)</SelectItem>
+                    <SelectItem value="all">All levels</SelectItem>
+                    {["trace", "debug", "info", "warn", "error", "fatal"].map((level) => (
+                      <SelectItem key={level} value={level}>{level.toUpperCase()}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="rounded-lg border bg-black text-slate-100 p-4 max-h-[420px] overflow-auto space-y-3">
+                {recentLogs.map((log) => (
+                  <div key={log.id} className="text-xs font-mono">
+                    <div className="flex flex-wrap items-center gap-2 text-slate-400">
+                      <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      <Badge variant="outline" className="border-slate-600 text-slate-200">{log.level}</Badge>
+                      <span>{log.logger}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-50">{log.message}</p>
+                  </div>
+                ))}
+                {recentLogs.length === 0 ? <p className="text-sm text-slate-400">No logs available.</p> : null}
               </div>
             </CardContent>
           </Card>
@@ -378,78 +759,6 @@ const Settings = () => {
 
         <TabsContent value="roles" className="space-y-4">
           <RolesPermissionsTab />
-        </TabsContent>
-
-        <TabsContent value="enterprise" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Enterprise Features</CardTitle>
-              <CardDescription>
-                Advanced enterprise capabilities and integrations
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div 
-                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => navigate('/api-keys')}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Key className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">API Key Management</h3>
-                    <p className="text-sm text-muted-foreground">Generate and manage API keys with scoped permissions</p>
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => navigate('/webhooks')}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Webhook className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">Webhooks Configuration</h3>
-                    <p className="text-sm text-muted-foreground">Configure webhooks with delivery logs and test sends</p>
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => navigate('/sso-config')}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Shield className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">SSO / OIDC Setup</h3>
-                    <p className="text-sm text-muted-foreground">Configure Single Sign-On authentication</p>
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => navigate('/proof-of-play')}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FileBarChart className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">Proof of Play Reports</h3>
-                    <p className="text-sm text-muted-foreground">Detailed playback logs and compliance reporting</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

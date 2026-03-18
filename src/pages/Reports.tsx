@@ -23,6 +23,7 @@ export default function Reports() {
   const { toast } = useToast();
   const [resourceFilter, setResourceFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const debouncedResource = useDebounce(resourceFilter, 400);
   const debouncedAction = useDebounce(actionFilter, 400);
   const { can, isLoading: isAuthzLoading } = useAuthorization();
@@ -106,6 +107,27 @@ export default function Reports() {
     [],
   );
 
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      const csv = await proofOfPlayApi.export();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Unable to export proof-of-play CSV.";
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -114,9 +136,9 @@ export default function Reports() {
           <p className="text-muted-foreground">View KPIs and recent proof-of-play records.</p>
         </div>
         {canReadReports && (
-          <Button>
+          <Button onClick={handleExportCsv} disabled={isExporting}>
             <Download className="mr-2 h-4 w-4" />
-            Export CSV
+            {isExporting ? "Exporting..." : "Export CSV"}
           </Button>
         )}
       </div>

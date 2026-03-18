@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Image as ImageIcon, Video, FileText, Upload, MonitorPlay } from "lucide-react";
+import { FileText, Image as ImageIcon, MonitorPlay, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchBar } from "@/components/common/SearchBar";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -16,24 +19,32 @@ import { mediaApi } from "@/api/domains/media";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
 import {
-  useDefaultMedia,
-  useDefaultMediaVariants,
-  useUpdateDefaultMedia,
-  useUpdateDefaultMediaVariants,
+  useDefaultMediaTargets,
+  useUpdateDefaultMediaTargets,
 } from "@/hooks/useSettingsApi";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { ApiError } from "@/api/apiClient";
-import type { DefaultMediaVariantSetting, MediaAsset, MediaType, ScreenAspectRatio } from "@/api/types";
+import type {
+  DefaultMediaTargetAssignment,
+  MediaAsset,
+  MediaType,
+  Screen,
+  ScreenGroup,
+} from "@/api/types";
 import { resolveMediaDisplayName } from "@/lib/media";
 
 const MEDIA_PAGE_SIZE = 100;
 
-type PickerTarget =
-  | { type: "global" }
-  | { type: "variant"; aspectRatio: string };
+type PickerContext =
+  | { type: "SCREEN"; targetIds: string[]; aspectRatio: string }
+  | { type: "GROUP"; targetIds: string[]; aspectRatio: string };
 
-type RemoveTarget = PickerTarget | null;
+type RemoveContext = {
+  targetType: "SCREEN" | "GROUP";
+  targetId: string;
+  label: string;
+} | null;
 
 const resolveMediaType = (media: MediaAsset): MediaType => {
   if (media.type) {
@@ -42,25 +53,17 @@ const resolveMediaType = (media: MediaAsset): MediaType => {
       return type as MediaType;
     }
   }
-  const contentType = media.content_type || "";
+  const contentType = media.content_type || media.source_content_type || "";
   if (contentType.startsWith("image/")) return "IMAGE";
   if (contentType.startsWith("video/")) return "VIDEO";
   return "DOCUMENT";
 };
 
-const resolveMediaName = (media: MediaAsset) => resolveMediaDisplayName(media);
-
 const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; mediaType: MediaType; sizeClass: string }) => {
   if (!media.media_url) {
     return (
       <div className={`${sizeClass} rounded-md bg-muted flex items-center justify-center text-muted-foreground`}>
-        {mediaType === "IMAGE" ? (
-          <ImageIcon className="h-5 w-5" />
-        ) : mediaType === "VIDEO" ? (
-          <Video className="h-5 w-5" />
-        ) : (
-          <FileText className="h-5 w-5" />
-        )}
+        {mediaType === "IMAGE" ? <ImageIcon className="h-5 w-5" /> : mediaType === "VIDEO" ? <Video className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
       </div>
     );
   }
@@ -68,12 +71,7 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
   if (mediaType === "IMAGE") {
     return (
       <div className={`${sizeClass} rounded-md overflow-hidden bg-muted`}>
-        <img
-          src={media.media_url}
-          alt={resolveMediaName(media)}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+        <img src={media.media_url} alt={resolveMediaDisplayName(media)} className="h-full w-full object-cover" loading="lazy" />
       </div>
     );
   }
@@ -81,12 +79,7 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
   if (mediaType === "VIDEO") {
     return (
       <div className={`${sizeClass} rounded-md overflow-hidden bg-muted`}>
-        <video
-          src={media.media_url}
-          className="h-full w-full object-cover"
-          muted
-          preload="metadata"
-        />
+        <video src={media.media_url} className="h-full w-full object-cover" muted preload="metadata" />
       </div>
     );
   }
@@ -98,338 +91,405 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
   );
 };
 
-const mergeAspectRatios = (
-  catalog: ScreenAspectRatio[] | undefined,
-  variants: DefaultMediaVariantSetting[] | undefined,
-): ScreenAspectRatio[] => {
-  const merged = new Map<string, ScreenAspectRatio>();
-  for (const item of [...(catalog || []), ...(variants || []).map((entry) => ({
-    id: null,
-    name: entry.aspect_ratio,
-    aspect_ratio: entry.aspect_ratio,
-    aspect_ratio_name: entry.aspect_ratio,
-    is_fallback: false,
-  }))]) {
-    if (!item.aspect_ratio) continue;
-    if (!merged.has(item.aspect_ratio)) {
-      merged.set(item.aspect_ratio, item);
+const resolveScreenAspectRatio = (screen: Screen) => {
+  if (screen.aspect_ratio?.trim()) return screen.aspect_ratio.trim();
+  const width = screen.width ?? null;
+  const height = screen.height ?? null;
+  if (!width || !height) return null;
+
+  const gcd = (a: number, b: number): number => {
+    let x = Math.abs(a);
+    let y = Math.abs(b);
+    while (y !== 0) {
+      const temp = y;
+      y = x % y;
+      x = temp;
     }
-  }
-  return Array.from(merged.values()).sort((left, right) => (left.aspect_ratio || "").localeCompare(right.aspect_ratio || ""));
+    return x || 1;
+  };
+
+  const divisor = gcd(width, height);
+  return `${width / divisor}:${height / divisor}`;
 };
 
-const MediaSummary = ({ media }: { media: MediaAsset | null }) => {
-  if (!media) {
-    return <p className="text-sm text-muted-foreground">No media assigned.</p>;
+const resolveTargetLabel = (
+  assignment: DefaultMediaTargetAssignment,
+  screensMap: Map<string, Screen>,
+  groupsMap: Map<string, ScreenGroup>,
+) => {
+  if (assignment.target_type === "SCREEN") {
+    return screensMap.get(assignment.target_id)?.name ?? "Unknown screen";
   }
-
-  const mediaType = resolveMediaType(media);
-  return (
-    <div className="flex flex-col md:flex-row md:items-center gap-4 rounded-lg border p-4">
-      <MediaPreview media={media} mediaType={mediaType} sizeClass="h-24 w-full md:w-32" />
-      <div className="space-y-2 min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-medium truncate">{resolveMediaName(media)}</h3>
-          <Badge variant="outline">{mediaType}</Badge>
-        </div>
-        <p className="text-xs text-muted-foreground font-mono break-all">{media.id}</p>
-        {media.content_type && <p className="text-xs text-muted-foreground">{media.content_type}</p>}
-      </div>
-    </div>
-  );
+  return groupsMap.get(assignment.target_id)?.name ?? "Unknown group";
 };
 
 export function DefaultMediaSection() {
-  const { toast } = useToast();
   const navigate = useNavigate();
-  const { isAdminOrSuperAdmin } = useAuthorization();
-  const canEdit = isAdminOrSuperAdmin;
+  const { toast } = useToast();
+  const { can } = useAuthorization();
+  const canEdit = can("update", "OrgSettings");
 
-  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<RemoveTarget>(null);
+  const [targetMode, setTargetMode] = useState<"SCREEN" | "GROUP">("SCREEN");
+  const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [pickerContext, setPickerContext] = useState<PickerContext | null>(null);
+  const [removeContext, setRemoveContext] = useState<RemoveContext>(null);
   const [mediaSearch, setMediaSearch] = useState("");
   const [mediaTypeFilter, setMediaTypeFilter] = useState("all");
 
-  const defaultMediaQuery = useDefaultMedia();
-  const defaultMediaVariantsQuery = useDefaultMediaVariants();
-  const updateDefaultMedia = useUpdateDefaultMedia();
-  const updateDefaultMediaVariants = useUpdateDefaultMediaVariants();
+  const assignmentsQuery = useDefaultMediaTargets();
+  const updateAssignments = useUpdateDefaultMediaTargets();
 
-  const isPickerOpen = pickerTarget !== null;
-  const isRemoveDialogOpen = removeTarget !== null;
-  const isSaving = updateDefaultMedia.isPending || updateDefaultMediaVariants.isPending;
-
-  useEffect(() => {
-    if (!defaultMediaQuery.isError) return;
-    const message =
-      defaultMediaQuery.error instanceof ApiError
-        ? defaultMediaQuery.error.message
-        : "Unable to load default media.";
-    toast({ title: "Load failed", description: message, variant: "destructive" });
-  }, [defaultMediaQuery.isError, defaultMediaQuery.error, toast]);
-
-  useEffect(() => {
-    if (!defaultMediaVariantsQuery.isError) return;
-    const message =
-      defaultMediaVariantsQuery.error instanceof ApiError
-        ? defaultMediaVariantsQuery.error.message
-        : "Unable to load default media variants.";
-    toast({ title: "Load failed", description: message, variant: "destructive" });
-  }, [defaultMediaVariantsQuery.isError, defaultMediaVariantsQuery.error, toast]);
-
-  const globalMediaId = defaultMediaQuery.data?.media_id ?? defaultMediaQuery.data?.media?.id ?? null;
-  const embeddedGlobalMedia = defaultMediaQuery.data?.media ?? null;
-
-  const mediaDetailsQuery = useQuery({
-    queryKey: queryKeys.mediaById(globalMediaId ?? undefined),
-    queryFn: () => mediaApi.getById(globalMediaId!),
-    enabled: Boolean(globalMediaId) && !embeddedGlobalMedia,
+  const screensQuery = useQuery({
+    queryKey: queryKeys.screens,
+    queryFn: () => screensApi.list({ page: 1, limit: 500 }),
     staleTime: 60_000,
   });
 
-  useEffect(() => {
-    if (!mediaDetailsQuery.isError) return;
-    const message =
-      mediaDetailsQuery.error instanceof ApiError
-        ? mediaDetailsQuery.error.message
-        : "Unable to load media details.";
-    toast({ title: "Load failed", description: message, variant: "destructive" });
-  }, [mediaDetailsQuery.isError, mediaDetailsQuery.error, toast]);
-
-  const aspectRatiosQuery = useQuery({
-    queryKey: ["screen-aspect-ratios", "default-media"],
-    queryFn: () => screensApi.listAspectRatios(),
+  const groupsQuery = useQuery({
+    queryKey: queryKeys.screenGroups,
+    queryFn: () => screensApi.listGroups({ page: 1, limit: 500 }),
     staleTime: 60_000,
   });
 
-  useEffect(() => {
-    if (!aspectRatiosQuery.isError) return;
-    const message =
-      aspectRatiosQuery.error instanceof ApiError
-        ? aspectRatiosQuery.error.message
-        : "Unable to load aspect ratios.";
-    toast({ title: "Load failed", description: message, variant: "destructive" });
-  }, [aspectRatiosQuery.isError, aspectRatiosQuery.error, toast]);
-
-  const activeGlobalMedia = embeddedGlobalMedia ?? mediaDetailsQuery.data ?? null;
-  const variantEntries = defaultMediaVariantsQuery.data?.variants ?? [];
-  const variantByAspectRatio = useMemo(
-    () =>
-      variantEntries.reduce<Record<string, DefaultMediaVariantSetting>>((acc, entry) => {
-        acc[entry.aspect_ratio] = entry;
-        return acc;
-      }, {}),
-    [variantEntries],
-  );
-
-  const aspectRatioOptions = useMemo(() => {
-    const catalog = [
-      ...(aspectRatiosQuery.data?.defaults ?? []),
-      ...(aspectRatiosQuery.data?.items ?? []),
-    ];
-    return mergeAspectRatios(catalog, variantEntries);
-  }, [aspectRatiosQuery.data, variantEntries]);
-
+  const isPickerOpen = pickerContext !== null;
   const typeFilter = (mediaTypeFilter === "all" ? undefined : mediaTypeFilter.toUpperCase()) as MediaType | undefined;
 
   const mediaListQuery = useQuery({
-    queryKey: ["media", "picker", typeFilter],
-    queryFn: () =>
-      mediaApi.list({
-        limit: MEDIA_PAGE_SIZE,
-        page: 1,
-        status: "READY",
-        type: typeFilter,
-      }),
+    queryKey: ["media", "default-media-picker", typeFilter],
+    queryFn: () => mediaApi.list({ limit: MEDIA_PAGE_SIZE, page: 1, status: "READY", type: typeFilter }),
     enabled: isPickerOpen,
     keepPreviousData: true,
   });
 
   useEffect(() => {
-    if (!mediaListQuery.isError) return;
-    const message =
-      mediaListQuery.error instanceof ApiError ? mediaListQuery.error.message : "Unable to load media.";
+    const error = assignmentsQuery.error || screensQuery.error || groupsQuery.error || mediaListQuery.error;
+    if (!error) return;
+    const message = error instanceof ApiError ? error.message : "Unable to load default media settings.";
     toast({ title: "Load failed", description: message, variant: "destructive" });
-  }, [mediaListQuery.isError, mediaListQuery.error, toast]);
+  }, [assignmentsQuery.error, screensQuery.error, groupsQuery.error, mediaListQuery.error, toast]);
+
+  const screens = useMemo(() => screensQuery.data?.items ?? [], [screensQuery.data]);
+  const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data]);
+  const assignments = useMemo(() => assignmentsQuery.data?.assignments ?? [], [assignmentsQuery.data]);
+  const screensMap = useMemo(() => new Map(screens.map((screen) => [screen.id, screen])), [screens]);
+  const groupsMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
+
+  const selectedScreens = useMemo(
+    () => selectedScreenIds.map((id) => screensMap.get(id)).filter((screen): screen is Screen => Boolean(screen)),
+    [selectedScreenIds, screensMap],
+  );
+
+  const selectedScreenAspectRatios = useMemo(
+    () => Array.from(new Set(selectedScreens.map((screen) => resolveScreenAspectRatio(screen)).filter((value): value is string => Boolean(value)))),
+    [selectedScreens],
+  );
+
+  const selectedGroup = selectedGroupId ? groupsMap.get(selectedGroupId) ?? null : null;
+  const selectedGroupScreens = useMemo(
+    () => (selectedGroup?.screen_ids ?? []).map((id) => screensMap.get(id)).filter((screen): screen is Screen => Boolean(screen)),
+    [selectedGroup, screensMap],
+  );
+  const selectedGroupAspectRatios = useMemo(
+    () => Array.from(new Set(selectedGroupScreens.map((screen) => resolveScreenAspectRatio(screen)).filter((value): value is string => Boolean(value)))),
+    [selectedGroupScreens],
+  );
+
+  const targetAspectRatio =
+    targetMode === "SCREEN"
+      ? selectedScreenAspectRatios.length === 1
+        ? selectedScreenAspectRatios[0]
+        : null
+      : selectedGroupAspectRatios.length === 1
+        ? selectedGroupAspectRatios[0]
+        : null;
+
+  const targetValidationMessage = useMemo(() => {
+    if (targetMode === "SCREEN") {
+      if (selectedScreenIds.length === 0) return "Select at least one screen.";
+      if (selectedScreenAspectRatios.length !== 1) {
+        return "Selected screens must all have the same aspect ratio.";
+      }
+      return null;
+    }
+
+    if (!selectedGroup) return "Select a screen group.";
+    if ((selectedGroup.screen_ids ?? []).length === 0) return "Selected group has no screens.";
+    if (selectedGroupAspectRatios.length !== 1) {
+      return "All screens in the selected group must share the same aspect ratio.";
+    }
+    return null;
+  }, [targetMode, selectedScreenIds.length, selectedScreenAspectRatios.length, selectedGroup, selectedGroupAspectRatios.length]);
 
   const mediaItems = useMemo(() => mediaListQuery.data?.items ?? [], [mediaListQuery.data]);
   const filteredMedia = useMemo(() => {
     const query = mediaSearch.trim().toLowerCase();
     if (!query) return mediaItems;
-    return mediaItems.filter((item) => {
-      const name = resolveMediaDisplayName(item).toLowerCase();
-      return name.includes(query);
-    });
+    return mediaItems.filter((item) => resolveMediaDisplayName(item).toLowerCase().includes(query));
   }, [mediaItems, mediaSearch]);
 
-  const buildNextVariants = (aspectRatio: string, mediaId: string | null) => {
-    const next = Object.fromEntries(variantEntries.map((entry) => [entry.aspect_ratio, entry.media_id]));
-    next[aspectRatio] = mediaId;
-    return next;
+  const assignmentsByKey = useMemo(
+    () =>
+      assignments.reduce<Record<string, DefaultMediaTargetAssignment>>((acc, assignment) => {
+        acc[`${assignment.target_type}:${assignment.target_id}`] = assignment;
+        return acc;
+      }, {}),
+    [assignments],
+  );
+
+  const updateAssignmentList = (nextAssignments: DefaultMediaTargetAssignment[]) => {
+    updateAssignments.mutate(nextAssignments, {
+      onSuccess: () => {
+        setPickerContext(null);
+        setRemoveContext(null);
+      },
+    });
+  };
+
+  const openPicker = () => {
+    if (!canEdit) return;
+    if (targetValidationMessage || !targetAspectRatio) {
+      toast({ title: "Invalid target selection", description: targetValidationMessage ?? "Select a valid target first.", variant: "destructive" });
+      return;
+    }
+
+    setPickerContext({
+      type: targetMode,
+      targetIds: targetMode === "SCREEN" ? selectedScreenIds : [selectedGroupId],
+      aspectRatio: targetAspectRatio,
+    });
   };
 
   const handleSelectMedia = (media: MediaAsset) => {
-    if (!pickerTarget || !canEdit || isSaving) return;
+    if (!pickerContext) return;
 
-    if (pickerTarget.type === "global") {
-      updateDefaultMedia.mutate(media.id, {
-        onSuccess: () => setPickerTarget(null),
-      });
-      return;
-    }
+    const nextAssignments = assignments.filter(
+      (assignment) =>
+        !pickerContext.targetIds.some(
+          (targetId) => assignment.target_type === pickerContext.type && assignment.target_id === targetId,
+        ),
+    );
 
-    updateDefaultMediaVariants.mutate(buildNextVariants(pickerTarget.aspectRatio, media.id), {
-      onSuccess: () => setPickerTarget(null),
-    });
+    updateAssignmentList([
+      ...nextAssignments,
+      ...pickerContext.targetIds.map((targetId) => ({
+        target_type: pickerContext.type,
+        target_id: targetId,
+        media_id: media.id,
+        aspect_ratio: pickerContext.aspectRatio,
+      })),
+    ]);
   };
 
   const handleRemove = () => {
-    if (!removeTarget || !canEdit || isSaving) return;
+    if (!removeContext) return;
+    const nextAssignments = assignments.filter(
+      (assignment) =>
+        !(assignment.target_type === removeContext.targetType && assignment.target_id === removeContext.targetId),
+    );
+    updateAssignmentList(nextAssignments);
+  };
 
-    if (removeTarget.type === "global") {
-      updateDefaultMedia.mutate(null, {
-        onSuccess: () => setRemoveTarget(null),
-      });
-      return;
-    }
-
-    updateDefaultMediaVariants.mutate(buildNextVariants(removeTarget.aspectRatio, null), {
-      onSuccess: () => setRemoveTarget(null),
-    });
+  const toggleScreenSelection = (screenId: string, checked: boolean) => {
+    setSelectedScreenIds((current) =>
+      checked ? Array.from(new Set([...current, screenId])) : current.filter((id) => id !== screenId),
+    );
   };
 
   const handleUploadNavigate = () => {
-    setPickerTarget(null);
+    setPickerContext(null);
     navigate("/media");
   };
 
-  const pickerTitle = pickerTarget?.type === "variant"
-    ? `Select Default Media for ${pickerTarget.aspectRatio}`
-    : "Select Global Default Media";
-
-  const removeDescription = removeTarget?.type === "variant"
-    ? `This will clear the default media for ${removeTarget.aspectRatio}. Screens with that aspect ratio will fall back to the global default if one is configured.`
-    : "This will clear the global default media setting. Only aspect-ratio-specific defaults will remain.";
+  const targetCards = assignments.map((assignment) => {
+    const label = resolveTargetLabel(assignment, screensMap, groupsMap);
+    return {
+      ...assignment,
+      label,
+      key: `${assignment.target_type}:${assignment.target_id}`,
+    };
+  });
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Default Media</CardTitle>
         <CardDescription>
-          When nothing is scheduled, the player will use aspect-ratio-specific fallback first, then the global default.
+          Assign fallback media to specific screens or groups only. Multi-screen selections are allowed only when all selected screens share the same aspect ratio.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Fallback precedence</p>
-          <p>1. Aspect-ratio default media</p>
-          <p>2. Global default media</p>
-          <p>3. Empty/idle state if no fallback is configured</p>
+          <p className="font-medium text-foreground">Scope rules</p>
+          <p>1. Default media is used only for the screens or groups you assign here.</p>
+          <p>2. Screen groups must contain screens with a single shared aspect ratio.</p>
+          <p>3. Untargeted screens stay empty when nothing is scheduled.</p>
+        </div>
+
+        <Tabs value={targetMode} onValueChange={(value) => setTargetMode(value as "SCREEN" | "GROUP")}>
+          <TabsList>
+            <TabsTrigger value="SCREEN">Specific Screens</TabsTrigger>
+            <TabsTrigger value="GROUP">Screen Group</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {targetMode === "SCREEN" ? (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-medium">Select screens</h3>
+                <p className="text-sm text-muted-foreground">Choose one or more screens with the same aspect ratio.</p>
+              </div>
+              {targetAspectRatio && <Badge variant="secondary">{targetAspectRatio}</Badge>}
+            </div>
+
+            <ScrollArea className="h-56 rounded-md border">
+              <div className="space-y-2 p-3">
+                {screensQuery.isLoading ? (
+                  Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-10 w-full" />)
+                ) : screens.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No screens found.</p>
+                ) : (
+                  screens.map((screen) => {
+                    const assignment = assignmentsByKey[`SCREEN:${screen.id}`];
+                    const aspectRatio = resolveScreenAspectRatio(screen) ?? "Unknown";
+                    return (
+                      <label key={screen.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Checkbox
+                            checked={selectedScreenIds.includes(screen.id)}
+                            onCheckedChange={(checked) => toggleScreenSelection(screen.id, Boolean(checked))}
+                            disabled={!canEdit}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{screen.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{screen.location || "No location"} · {aspectRatio}</p>
+                          </div>
+                        </div>
+                        {assignment && <Badge variant="outline">{resolveMediaDisplayName(assignment.media ?? { name: assignment.media_id })}</Badge>}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </section>
+        ) : (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-medium">Select a group</h3>
+                <p className="text-sm text-muted-foreground">The group must contain screens with one shared aspect ratio.</p>
+              </div>
+              {targetAspectRatio && <Badge variant="secondary">{targetAspectRatio}</Badge>}
+            </div>
+
+            <div className="space-y-3 rounded-md border p-4">
+              <div className="space-y-2">
+                <Label htmlFor="default-media-group">Screen group</Label>
+                <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={!canEdit}>
+                  <SelectTrigger id="default-media-group">
+                    <SelectValue placeholder="Select a group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedGroup && (
+                <div className="rounded-md bg-muted/40 p-3 text-sm">
+                  <p className="font-medium">{selectedGroup.name}</p>
+                  <p className="text-muted-foreground">{(selectedGroup.screen_ids ?? []).length} screens in this group</p>
+                  {selectedGroupScreens.length > 0 && (
+                    <p className="text-muted-foreground mt-1">
+                      Aspect ratios: {selectedGroupAspectRatios.join(", ") || "Unknown"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={openPicker} disabled={!canEdit || Boolean(targetValidationMessage) || updateAssignments.isPending}>
+            Assign media
+          </Button>
+          {targetValidationMessage && <p className="text-sm text-destructive">{targetValidationMessage}</p>}
         </div>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-medium">Global default media</h3>
-              <p className="text-sm text-muted-foreground">Used only when no aspect-ratio-specific fallback matches the screen.</p>
+              <h3 className="font-medium">Current assignments</h3>
+              <p className="text-sm text-muted-foreground">These defaults apply only to the listed targets and matching aspect ratios.</p>
             </div>
-            <Badge variant="secondary">Fallback tier 2</Badge>
+            <Badge variant="outline">{targetCards.length}</Badge>
           </div>
 
-          {defaultMediaQuery.isLoading || (globalMediaId && mediaDetailsQuery.isLoading) ? (
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-24 w-32" />
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-32" />
-              </div>
+          {assignmentsQuery.isLoading ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-36 w-full" />)}
+            </div>
+          ) : targetCards.length === 0 ? (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No default media assignments configured.
             </div>
           ) : (
-            <MediaSummary media={activeGlobalMedia} />
-          )}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              aria-label="Select global default media"
-              onClick={() => setPickerTarget({ type: "global" })}
-              disabled={!canEdit || isSaving}
-            >
-              Select global default
-            </Button>
-            {globalMediaId && (
-              <Button
-                variant="destructive"
-                aria-label="Clear global default media"
-                onClick={() => setRemoveTarget({ type: "global" })}
-                disabled={!canEdit || isSaving}
-              >
-                Clear global default
-              </Button>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-medium">Aspect-ratio fallback variants</h3>
-              <p className="text-sm text-muted-foreground">These override the global default for matching screens.</p>
-            </div>
-            <Badge variant="secondary">Fallback tier 1</Badge>
-          </div>
-
-          {aspectRatiosQuery.isLoading && !aspectRatioOptions.length ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-44 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {aspectRatioOptions.map((ratio) => {
-                const aspectRatio = ratio.aspect_ratio;
-                if (!aspectRatio) return null;
-                const variant = variantByAspectRatio[aspectRatio];
+            <div className="grid gap-3 md:grid-cols-2">
+              {targetCards.map((assignment) => {
+                const media = assignment.media;
+                const mediaType = media ? resolveMediaType(media) : "DOCUMENT";
                 return (
-                  <Card key={aspectRatio} className="border-muted-foreground/20">
-                    <CardContent className="p-4 space-y-3">
+                  <Card key={assignment.key}>
+                    <CardContent className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2">
                             <MonitorPlay className="h-4 w-4 text-muted-foreground" />
-                            <p className="font-medium">{aspectRatio}</p>
+                            <p className="font-medium">{assignment.label}</p>
                           </div>
-                          <p className="text-xs text-muted-foreground">{ratio.aspect_ratio_name || ratio.name || "Custom ratio"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {assignment.target_type === "SCREEN" ? "Screen" : "Group"} · {assignment.aspect_ratio}
+                          </p>
                         </div>
-                        <Badge variant={variant?.media_id ? "default" : "outline"}>
-                          {variant?.media_id ? "Configured" : "Uses global"}
+                        <Badge variant={assignment.target_type === "GROUP" ? "secondary" : "outline"}>
+                          {assignment.target_type === "GROUP" ? "Group" : "Screen"}
                         </Badge>
                       </div>
 
-                      <MediaSummary media={variant?.media ?? null} />
+                      {media ? (
+                        <div className="flex items-center gap-3 rounded-md border p-3">
+                          <MediaPreview media={media} mediaType={mediaType} sizeClass="h-20 w-24" />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{resolveMediaDisplayName(media)}</p>
+                            <p className="text-xs text-muted-foreground">{mediaType}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Media not found.</p>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          aria-label={`Assign default media for ${aspectRatio}`}
-                          onClick={() => setPickerTarget({ type: "variant", aspectRatio })}
-                          disabled={!canEdit || isSaving}
+                          onClick={() =>
+                            setRemoveContext({
+                              targetType: assignment.target_type,
+                              targetId: assignment.target_id,
+                              label: assignment.label,
+                            })
+                          }
+                          disabled={!canEdit || updateAssignments.isPending}
                         >
-                          {variant?.media_id ? "Replace media" : "Assign media"}
+                          Clear
                         </Button>
-                        {variant?.media_id && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            aria-label={`Clear default media for ${aspectRatio}`}
-                            onClick={() => setRemoveTarget({ type: "variant", aspectRatio })}
-                            disabled={!canEdit || isSaving}
-                          >
-                            Clear
-                          </Button>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -439,14 +499,16 @@ export function DefaultMediaSection() {
           )}
         </section>
 
-        {!canEdit && <p className="text-xs text-muted-foreground">Only admins can update these settings.</p>}
+        {!canEdit && <p className="text-xs text-muted-foreground">Only users with organization settings access can update default media.</p>}
       </CardContent>
 
-      <Dialog open={isPickerOpen} onOpenChange={(open) => !open && setPickerTarget(null)}>
+      <Dialog open={isPickerOpen} onOpenChange={(open) => !open && setPickerContext(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle>{pickerTitle}</DialogTitle>
+              <DialogTitle>
+                Select media for {pickerContext?.type === "GROUP" ? "group" : "screen selection"} {pickerContext ? `(${pickerContext.aspectRatio})` : ""}
+              </DialogTitle>
               <Button size="sm" variant="outline" onClick={handleUploadNavigate}>
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Media
@@ -487,34 +549,25 @@ export function DefaultMediaSection() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {filteredMedia.map((media) => {
                       const mediaType = resolveMediaType(media);
-                      const mediaName = resolveMediaName(media);
                       return (
                         <Card
                           key={media.id}
                           onClick={() => handleSelectMedia(media)}
-                          className="p-3 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all"
+                          className="cursor-pointer p-3 transition-all hover:border-primary/50 hover:shadow-md"
                         >
                           <div className="space-y-3">
                             <MediaPreview media={media} mediaType={mediaType} sizeClass="h-24 w-full" />
                             <div className="flex items-start gap-3">
                               <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                                {mediaType === "IMAGE" ? (
-                                  <ImageIcon className="h-4 w-4" />
-                                ) : mediaType === "VIDEO" ? (
-                                  <Video className="h-4 w-4" />
-                                ) : (
-                                  <FileText className="h-4 w-4" />
-                                )}
+                                {mediaType === "IMAGE" ? <ImageIcon className="h-4 w-4" /> : mediaType === "VIDEO" ? <Video className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{mediaName}</p>
+                                <p className="font-medium text-sm truncate">{resolveMediaDisplayName(media)}</p>
                                 <div className="flex items-center gap-2 mt-1">
                                   <Badge variant="outline" className="text-xs">
                                     {mediaType}
                                   </Badge>
-                                  {media.duration_seconds && (
-                                    <span className="text-xs text-muted-foreground">{media.duration_seconds}s</span>
-                                  )}
+                                  {media.duration_seconds && <span className="text-xs text-muted-foreground">{media.duration_seconds}s</span>}
                                 </div>
                               </div>
                             </div>
@@ -526,28 +579,22 @@ export function DefaultMediaSection() {
                 )}
               </ScrollArea>
             )}
-            {mediaListQuery.isFetching && !mediaListQuery.isLoading && (
-              <div className="text-xs text-muted-foreground">Refreshing...</div>
-            )}
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPickerTarget(null)}>
-              Cancel
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <ConfirmDialog
-        open={isRemoveDialogOpen}
-        title={removeTarget?.type === "variant" ? `Clear ${removeTarget.aspectRatio} default media?` : "Clear global default media?"}
-        description={removeDescription}
+        open={Boolean(removeContext)}
+        title="Clear default media assignment?"
+        description={
+          removeContext
+            ? `This removes the default media assignment for ${removeContext.label}.`
+            : ""
+        }
         confirmLabel="Clear"
         onConfirm={handleRemove}
-        onCancel={() => setRemoveTarget(null)}
-        isLoading={isSaving}
-        confirmDisabled={!canEdit}
+        onCancel={() => setRemoveContext(null)}
+        isLoading={updateAssignments.isPending}
       />
     </Card>
   );
