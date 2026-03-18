@@ -390,6 +390,7 @@ export interface Department {
   id: string;
   name: string;
   description?: string | null;
+  operators?: User[];
   created_at?: string;
   updated_at?: string;
 }

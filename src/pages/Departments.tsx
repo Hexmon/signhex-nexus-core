@@ -4,7 +4,8 @@ import { Plus } from "lucide-react";
 import { DepartmentCard } from "@/components/departments/DepartmentCard";
 import { DepartmentFormDialog } from "@/components/departments/DepartmentFormDialog";
 import { departmentsApi } from "@/api/domains/departments";
-import type { Department } from "@/api/types";
+import { usersApi } from "@/api/domains/users";
+import type { Department, User } from "@/api/types";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SearchBar } from "@/components/common/SearchBar";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -15,6 +16,27 @@ import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { PageNavigation } from "@/components/common/PageNavigation";
 
 const PAGE_SIZE = 9;
+const USERS_PAGE_SIZE = 100;
+
+const fetchAllOperators = async () => {
+  let page = 1;
+  let totalPages = 1;
+  const items: User[] = [];
+
+  while (page <= totalPages) {
+    const response = await usersApi.list({
+      page,
+      limit: USERS_PAGE_SIZE,
+      role: "OPERATOR",
+    });
+
+    items.push(...response.items);
+    totalPages = Math.max(1, Math.ceil((response.total ?? response.items.length) / USERS_PAGE_SIZE));
+    page += 1;
+  }
+
+  return items;
+};
 
 const Departments = () => {
   const queryClient = useQueryClient();
@@ -35,7 +57,32 @@ const Departments = () => {
     placeholderData: (previousData) => previousData,
   });
 
+  const operatorsQuery = useQuery({
+    queryKey: [...queryKeys.users, "departments-page", "operators"],
+    queryFn: fetchAllOperators,
+    staleTime: 60_000,
+  });
+
   const departments = useMemo(() => data?.items ?? [], [data]);
+  const operatorsByDepartment = useMemo(() => {
+    return (operatorsQuery.data ?? []).reduce<Record<string, User[]>>((acc, operator) => {
+      if (!operator.department_id) return acc;
+      if (!acc[operator.department_id]) {
+        acc[operator.department_id] = [];
+      }
+      acc[operator.department_id].push(operator);
+      return acc;
+    }, {});
+  }, [operatorsQuery.data]);
+
+  const departmentsWithOperators = useMemo(
+    () =>
+      departments.map((department) => ({
+        ...department,
+        operators: operatorsByDepartment[department.id] ?? [],
+      })),
+    [departments, operatorsByDepartment],
+  );
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
   useEffect(() => {
@@ -79,18 +126,23 @@ const Departments = () => {
 
   const filteredDepartments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return departments;
-    return departments.filter((dept) => {
+    if (!q) return departmentsWithOperators;
+    return departmentsWithOperators.filter((dept) => {
       const haystack = [
         dept.name,
         dept.description ?? "",
         dept.id,
+        ...(dept.operators ?? []).flatMap((operator) => [
+          operator.first_name ?? "",
+          operator.last_name ?? "",
+          operator.email,
+        ]),
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [departments, searchQuery]);
+  }, [departmentsWithOperators, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -154,9 +206,12 @@ const Departments = () => {
         }}
         onDelete={(deptId) => {
           if (!deptId) return;
-          const dept = departments.find((d) => d.id === deptId) || selectedDepartment;
-          if (dept) {
-            setDeleteTarget(dept);
+          const resolvedDepartment =
+            departmentsWithOperators.find((d) => d.id === deptId) ??
+            departments.find((d) => d.id === deptId) ??
+            selectedDepartment;
+          if (resolvedDepartment) {
+            setDeleteTarget(resolvedDepartment);
             setIsConfirmOpen(true);
           }
         }}

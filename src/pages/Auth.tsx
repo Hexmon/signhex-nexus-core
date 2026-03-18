@@ -14,7 +14,7 @@ import { setCredentials } from "@/store/authSlice";
 import { getCookie } from "@/lib/cookies";
 import { isValidEmail } from "@/lib/validation";
 import { STORAGE_KEYS } from "@/lib/constants";
-import { useBrandingSettings, useSecuritySettings } from "@/hooks/useSettingsApi";
+import { useBrandingSettings } from "@/hooks/useSettingsApi";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -25,7 +25,6 @@ const Auth = () => {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
   const { data: branding } = useBrandingSettings();
-  const { data: security } = useSecuritySettings();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -45,10 +44,10 @@ const Auth = () => {
       return;
     }
 
-    if (password.length < (security?.password_policy.min_length ?? 8)) {
+    if (password.length < 8) {
       toast({
         title: "Weak password",
-        description: `Password must be at least ${security?.password_policy.min_length ?? 8} characters.`,
+        description: "Password must be at least 8 characters.",
         variant: "destructive",
       });
       setIsLoading(false);
