@@ -27,6 +27,7 @@ import { SearchBar } from "@/components/common/SearchBar";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatCard } from "@/components/common/StatCard";
 import { PageNavigation } from "@/components/common/PageNavigation";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
@@ -80,6 +81,7 @@ export default function Screens() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [recoveryScreenId, setRecoveryScreenId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ScreenOverviewItem | null>(null);
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const [page, setPage] = useState(1);
@@ -185,8 +187,17 @@ export default function Screens() {
     return { total, online, recovery, stale, offline };
   }, [screens]);
 
-  const handleDeleteScreen = (screenId: string) => {
-    deleteScreen.mutate(screenId);
+  const handleDeleteScreen = (screen: ScreenOverviewItem) => {
+    setDeleteTarget(screen);
+  };
+
+  const confirmDeleteScreen = () => {
+    if (!deleteTarget) return;
+    deleteScreen.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+      },
+    });
   };
 
   const handleDeleteGroup = (groupId: string, event: React.MouseEvent) => {
@@ -410,7 +421,7 @@ export default function Screens() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDeleteScreen(id)}
+                        onClick={() => handleDeleteScreen(screen)}
                         disabled={deleteScreen.isPending}
                         aria-label={`Delete Screen ${name}`}
                       >
@@ -592,6 +603,65 @@ export default function Screens() {
           onOpenChange={(open) => !open && setSelectedGroupId(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete screen?"}
+        description="This action removes the screen from CMS."
+        confirmLabel={
+          deleteTarget &&
+          ((deleteTarget.active_items?.length ?? 0) > 0 ||
+            (deleteTarget.upcoming_items?.length ?? 0) > 0 ||
+            Boolean(deleteTarget.booked_until))
+            ? "Delete Anyway"
+            : "Delete Screen"
+        }
+        onConfirm={confirmDeleteScreen}
+        onCancel={() => {
+          if (deleteScreen.isPending) return;
+          setDeleteTarget(null);
+        }}
+        isLoading={deleteScreen.isPending}
+      >
+        {deleteTarget ? (
+          <div className="space-y-3">
+            {((deleteTarget.active_items?.length ?? 0) > 0 ||
+              (deleteTarget.upcoming_items?.length ?? 0) > 0 ||
+              Boolean(deleteTarget.booked_until)) && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">This screen currently has schedule targeting.</p>
+                    <p className="text-muted-foreground">
+                      Admin can still delete it, but the screen will be removed from current and upcoming schedule targeting.
+                    </p>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>Active items: {deleteTarget.active_items?.length ?? 0}</span>
+                      <span>Upcoming items: {deleteTarget.upcoming_items?.length ?? 0}</span>
+                      <span>
+                        Booked until: {deleteTarget.booked_until ? formatDateTime(deleteTarget.booked_until) : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <QrCode className="mt-0.5 h-4 w-4 text-destructive" />
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">Pairing code will be required again.</p>
+                  <p className="text-muted-foreground">
+                    If this screen is deleted, it can only be added back by pairing the device again with a Pairing Code.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </ConfirmDialog>
 
       {selectedScreenId && (
         <ScreenDetailsModal

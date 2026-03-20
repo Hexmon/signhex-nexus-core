@@ -1,43 +1,109 @@
-import { ApiError } from "../apiClient";
-import type { DeviceScheduleSnapshot } from "../types";
+import { apiClient, ApiError } from "../apiClient";
+import type { DeviceScheduleItem, DeviceScheduleSnapshot } from "../types";
 
-const DEVICE_API_BASE_URL =
-  import.meta.env.VITE_DEVICE_API_BASE_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== "undefined" ? window.location.origin : "");
+type RawDeviceSnapshotResponse = {
+  publish?: {
+    snapshot_id?: string;
+    published_at?: string;
+  } | null;
+  snapshot?: {
+    schedule?: {
+      id?: string;
+      items?: Array<{
+        id?: string;
+        start_at?: string;
+        end_at?: string;
+        presentation?: {
+          id?: string;
+          items?: Array<{
+            id?: string;
+            media_id?: string;
+            duration_seconds?: number;
+            fit_mode?: string;
+            audio_enabled?: boolean;
+            media?: {
+              id?: string;
+              type?: string;
+              media_url?: string | null;
+            } | null;
+          }>;
+          slots?: Array<{
+            id?: string;
+            media_id?: string;
+            duration_seconds?: number;
+            fit_mode?: string;
+            audio_enabled?: boolean;
+            media?: {
+              id?: string;
+              type?: string;
+              media_url?: string | null;
+            } | null;
+          }>;
+        } | null;
+      }>;
+    };
+  } | null;
+  media_urls?: Record<string, string>;
+};
 
-const buildUrl = (deviceId: string) => {
-  const base = DEVICE_API_BASE_URL.replace(/\/$/, "");
-  return `${base}/v1/device/${encodeURIComponent(deviceId)}/schedule`;
+const normalizeDeviceItems = (payload: RawDeviceSnapshotResponse): DeviceScheduleItem[] => {
+  const mediaUrls = payload.media_urls ?? {};
+  const scheduleItems = payload.snapshot?.schedule?.items ?? [];
+
+  return scheduleItems.flatMap((scheduleItem) => {
+    const presentationEntries = [
+      ...(scheduleItem.presentation?.items ?? []),
+      ...(scheduleItem.presentation?.slots ?? []),
+    ];
+
+    return presentationEntries
+      .filter((entry) => entry.media_id || entry.media?.id)
+      .map((entry, index) => {
+        const mediaId = entry.media_id ?? entry.media?.id ?? "";
+        const mediaType = (entry.media?.type ?? "unknown").toLowerCase();
+
+        return {
+          id: entry.id ?? `${scheduleItem.id ?? "schedule-item"}-${mediaId}-${index}`,
+          media_id: mediaId,
+          type: mediaType,
+          display_ms: entry.duration_seconds ? entry.duration_seconds * 1000 : undefined,
+          fit: entry.fit_mode ?? undefined,
+          media_url: mediaUrls[mediaId] ?? entry.media?.media_url ?? undefined,
+          muted: typeof entry.audio_enabled === "boolean" ? !entry.audio_enabled : undefined,
+        } satisfies DeviceScheduleItem;
+      });
+  });
 };
 
 export const deviceScheduleApi = {
   getSchedule: async (deviceId: string) => {
-    const response = await fetch(buildUrl(deviceId), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-    });
-
-    let payload: unknown;
     try {
-      payload = await response.json();
-    } catch {
-      payload = {};
-    }
+      const payload = await apiClient.request<RawDeviceSnapshotResponse>({
+        path: `/device/${encodeURIComponent(deviceId)}/snapshot`,
+        method: "GET",
+        query: { include_urls: true },
+      });
 
-    if (!response.ok) {
+      return {
+        id: payload.publish?.snapshot_id ?? deviceId,
+        generated_at: payload.publish?.published_at,
+        fetched_at: new Date().toISOString(),
+        media_urls: payload.media_urls ?? {},
+        schedule: {
+          id: payload.snapshot?.schedule?.id,
+          items: normalizeDeviceItems(payload),
+        },
+        emergency: payload.emergency,
+        default_media: payload.default_media,
+      } satisfies DeviceScheduleSnapshot;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
       throw new ApiError({
-        status: response.status,
-        message:
-          typeof payload === "object" && payload && "message" in payload
-            ? (payload as Record<string, unknown>)["message"]?.toString() ?? "Unable to fetch schedule"
-            : "Unable to fetch schedule",
+        status: 500,
+        message: error instanceof Error ? error.message : "Unable to fetch schedule",
       });
     }
-
-    return payload as DeviceScheduleSnapshot;
   },
 };

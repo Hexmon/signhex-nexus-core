@@ -3,6 +3,7 @@ import { settingsApi } from "@/api/domains/settings";
 import { queryKeys } from "@/api/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/api/apiClient";
+import { useAppSelector } from "@/store/hooks";
 import type {
   AppearanceSettings,
   BackupSettings,
@@ -13,6 +14,9 @@ import type {
   GeneralSettings,
   SecuritySettings,
 } from "@/api/types";
+
+const useSettingsQueriesEnabled = () =>
+  useAppSelector((state) => Boolean(state.auth.token || state.auth.user));
 
 function useSettingsMutation<TPayload, TData>(
   mutationFn: (payload: TPayload) => Promise<TData>,
@@ -41,11 +45,15 @@ function useSettingsMutation<TPayload, TData>(
 }
 
 export const useGeneralSettings = () =>
-  useQuery({
-    queryKey: queryKeys.settingsGeneral,
-    queryFn: settingsApi.getGeneral,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsGeneral,
+      queryFn: settingsApi.getGeneral,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateGeneralSettings = () =>
   useSettingsMutation<GeneralSettings, GeneralSettings>(
@@ -56,11 +64,15 @@ export const useUpdateGeneralSettings = () =>
   );
 
 export const useBrandingSettings = () =>
-  useQuery({
-    queryKey: queryKeys.settingsBranding,
-    queryFn: settingsApi.getBranding,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsBranding,
+      queryFn: settingsApi.getBranding,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateBrandingSettings = () =>
   useSettingsMutation<
@@ -74,11 +86,15 @@ export const useUpdateBrandingSettings = () =>
   );
 
 export const useSecuritySettings = () =>
-  useQuery({
-    queryKey: queryKeys.settingsSecurity,
-    queryFn: settingsApi.getSecurity,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsSecurity,
+      queryFn: settingsApi.getSecurity,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateSecuritySettings = () =>
   useSettingsMutation<SecuritySettings, SecuritySettings>(
@@ -89,11 +105,15 @@ export const useUpdateSecuritySettings = () =>
   );
 
 export const useAppearanceSettings = () =>
-  useQuery({
-    queryKey: queryKeys.settingsAppearance,
-    queryFn: settingsApi.getAppearance,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsAppearance,
+      queryFn: settingsApi.getAppearance,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateAppearanceSettings = () =>
   useSettingsMutation<AppearanceSettings, AppearanceSettings>(
@@ -104,11 +124,15 @@ export const useUpdateAppearanceSettings = () =>
   );
 
 export const useBackupSettings = () =>
-  useQuery({
-    queryKey: queryKeys.settingsBackups,
-    queryFn: settingsApi.getBackups,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsBackups,
+      queryFn: settingsApi.getBackups,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateBackupSettings = () =>
   useSettingsMutation<BackupSettings, BackupSettings>(
@@ -119,11 +143,15 @@ export const useUpdateBackupSettings = () =>
   );
 
 export const useBackupRuns = () =>
-  useQuery({
-    queryKey: queryKeys.settingsBackupRuns,
-    queryFn: settingsApi.listBackupRuns,
-    refetchInterval: 30_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsBackupRuns,
+      queryFn: settingsApi.listBackupRuns,
+      refetchInterval: 30_000,
+      enabled,
+    });
+  };
 
 export const useRunBackupNow = () => {
   const { toast } = useToast();
@@ -149,25 +177,37 @@ export const useRunBackupNow = () => {
 };
 
 export const useRecentLogs = (filters?: { level?: string; limit?: number }) =>
-  useQuery({
-    queryKey: queryKeys.settingsLogs(filters),
-    queryFn: () => settingsApi.listLogs(filters),
-    refetchInterval: 15_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.settingsLogs(filters),
+      queryFn: () => settingsApi.listLogs(filters),
+      refetchInterval: 15_000,
+      enabled,
+    });
+  };
 
 export const useDefaultMedia = () =>
-  useQuery({
-    queryKey: queryKeys.defaultMedia,
-    queryFn: settingsApi.getDefaultMedia,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.defaultMedia,
+      queryFn: settingsApi.getDefaultMedia,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useDefaultMediaVariants = () =>
-  useQuery({
-    queryKey: queryKeys.defaultMediaVariants,
-    queryFn: settingsApi.getDefaultMediaVariants,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.defaultMediaVariants,
+      queryFn: settingsApi.getDefaultMediaVariants,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateDefaultMedia = () => {
   const { toast } = useToast();
@@ -233,11 +273,15 @@ export const useUpdateDefaultMediaVariants = () => {
 };
 
 export const useDefaultMediaTargets = () =>
-  useQuery({
-    queryKey: queryKeys.defaultMediaTargets,
-    queryFn: settingsApi.getDefaultMediaTargets,
-    staleTime: 60_000,
-  });
+  {
+    const enabled = useSettingsQueriesEnabled();
+    return useQuery({
+      queryKey: queryKeys.defaultMediaTargets,
+      queryFn: settingsApi.getDefaultMediaTargets,
+      staleTime: 60_000,
+      enabled,
+    });
+  };
 
 export const useUpdateDefaultMediaTargets = () => {
   const { toast } = useToast();

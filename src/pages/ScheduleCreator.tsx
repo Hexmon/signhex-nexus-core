@@ -13,6 +13,7 @@ import { scheduleRequestsApi } from "@/api/domains/scheduleRequests";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
 import type { PresentationSlotPayload, ScheduleItemPayload, ScreenSnapshot } from "@/api/types";
+import { resolveQuickPresetRange, type ScheduleQuickPresetId } from "@/lib/scheduleQuickPresets";
 
 import { StepLayoutSelect } from "@/components/schedule-creator/StepLayoutSelect";
 import { StepMediaAssign } from "@/components/schedule-creator/StepMediaAssign";
@@ -208,6 +209,61 @@ export default function ScheduleCreator() {
     groupSnapshotQueries,
     isScheduleStep,
   ]);
+
+  const selectedTargetScheduleItems = useMemo(() => {
+    const seen = new Set<string>();
+
+    return [...screenSnapshotQueries, ...groupSnapshotQueries].flatMap((query) => {
+      const data = query.data as ScreenSnapshot | undefined;
+      const items = data?.snapshot?.schedule?.items ?? [];
+
+      return items.filter((item) => {
+        if (!item.id || seen.has(item.id)) {
+          return false;
+        }
+        seen.add(item.id);
+        return true;
+      });
+    });
+  }, [screenSnapshotQueries, groupSnapshotQueries]);
+
+  const applyQuickPreset = (preset: ScheduleQuickPresetId) => {
+    if (wizardState.selectedScreenIds.length === 0 && wizardState.selectedGroupIds.length === 0) {
+      toast({
+        title: "Select targets first",
+        description: "Choose at least one screen or group before using quick presets.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (scheduleTimingValidation.isChecking) {
+      toast({
+        title: "Checking availability",
+        description: "Wait for the selected screens and groups to finish loading schedule data.",
+      });
+      return;
+    }
+
+    const resolved = resolveQuickPresetRange(preset, selectedTargetScheduleItems, new Date());
+    if (!resolved) {
+      toast({
+        title: "No free time found",
+        description: "The selected screens/groups do not have a free slot in that preset range.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateState({
+      startAt: resolved.startAt,
+      endAt: resolved.endAt,
+      scheduleId: null,
+      scheduleSyncKey: null,
+      scheduleItemSyncKey: null,
+      scheduleItemSyncScheduleId: null,
+    });
+  };
 
   const createPresentationMutation = useSafeMutation(
     {
@@ -656,6 +712,8 @@ export default function ScheduleCreator() {
             priority={wizardState.priority}
             validationErrors={scheduleTimingValidation.errors}
             isCheckingAvailability={scheduleTimingValidation.isChecking}
+            hasSelectedTargets={wizardState.selectedScreenIds.length > 0 || wizardState.selectedGroupIds.length > 0}
+            onApplyQuickPreset={applyQuickPreset}
             onUpdate={(details) =>
               updateState({
                 ...details,

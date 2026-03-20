@@ -14,7 +14,6 @@ import { setCredentials } from "@/store/authSlice";
 import { getCookie } from "@/lib/cookies";
 import { isValidEmail } from "@/lib/validation";
 import { STORAGE_KEYS } from "@/lib/constants";
-import { useBrandingSettings } from "@/hooks/useSettingsApi";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -24,7 +23,6 @@ const Auth = () => {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
-  const { data: branding } = useBrandingSettings();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -99,15 +97,11 @@ const Auth = () => {
         {/* Logo */}
         <div className="text-center space-y-2">
           <div className="flex justify-center">
-            {branding?.logo_url ? (
-              <img src={branding.logo_url} alt={branding.app_name} className="h-16 w-16 object-contain" />
-            ) : (
-              <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-lg">
-                <Monitor className="w-10 h-10 text-primary-foreground" />
-              </div>
-            )}
+            <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-lg">
+              <Monitor className="w-10 h-10 text-primary-foreground" />
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">{branding?.app_name ?? "Signhex CMS"}</h1>
+          <h1 className="text-3xl font-bold text-foreground">Signhex CMS</h1>
           <p className="text-muted-foreground">Enterprise Digital Signage Management</p>
         </div>
 

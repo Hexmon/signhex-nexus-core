@@ -167,15 +167,19 @@ export class ApiClient {
       } catch (error) {
         if (error instanceof ApiError) {
           if (typeof window !== "undefined" && error.status === 401 && !options.path.includes("/auth/login")) {
-            try {
-              sessionStorage.setItem(
-                POST_LOGIN_REDIRECT_KEY,
-                window.location.pathname + window.location.search,
-              );
-            } catch {
-              /* ignore */
+            const isAlreadyOnLogin = window.location.pathname === "/login";
+
+            if (!isAlreadyOnLogin) {
+              try {
+                sessionStorage.setItem(
+                  POST_LOGIN_REDIRECT_KEY,
+                  window.location.pathname + window.location.search,
+                );
+              } catch {
+                /* ignore */
+              }
+              window.location.replace("/login");
             }
-            window.location.replace("/login");
           }
           throw error;
         }

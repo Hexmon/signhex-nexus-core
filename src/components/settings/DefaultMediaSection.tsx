@@ -35,6 +35,7 @@ import type {
 import { resolveMediaDisplayName } from "@/lib/media";
 
 const MEDIA_PAGE_SIZE = 100;
+const TARGETS_PAGE_SIZE = 100;
 
 type PickerContext =
   | { type: "SCREEN"; targetIds: string[]; aspectRatio: string }
@@ -123,6 +124,34 @@ const resolveTargetLabel = (
   return groupsMap.get(assignment.target_id)?.name ?? "Unknown group";
 };
 
+async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ items: T[]; total?: number; pagination?: { total?: number } }>,
+): Promise<T[]> {
+  const items: T[] = [];
+  let page = 1;
+  let total: number | undefined;
+
+  while (true) {
+    const response = await fetchPage(page);
+    items.push(...response.items);
+
+    const reportedTotal = response.pagination?.total ?? response.total;
+    total = typeof reportedTotal === "number" ? reportedTotal : total;
+
+    if (response.items.length < TARGETS_PAGE_SIZE) {
+      break;
+    }
+
+    if (typeof total === "number" && items.length >= total) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return items;
+}
+
 export function DefaultMediaSection() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -142,13 +171,27 @@ export function DefaultMediaSection() {
 
   const screensQuery = useQuery({
     queryKey: queryKeys.screens,
-    queryFn: () => screensApi.list({ page: 1, limit: 500 }),
+    queryFn: () =>
+      fetchAllPages((page) =>
+        screensApi.list({ page, limit: TARGETS_PAGE_SIZE }) as Promise<{
+          items: Screen[];
+          total?: number;
+          pagination?: { total?: number };
+        }>,
+      ),
     staleTime: 60_000,
   });
 
   const groupsQuery = useQuery({
     queryKey: queryKeys.screenGroups,
-    queryFn: () => screensApi.listGroups({ page: 1, limit: 500 }),
+    queryFn: () =>
+      fetchAllPages((page) =>
+        screensApi.listGroups({ page, limit: TARGETS_PAGE_SIZE }) as Promise<{
+          items: ScreenGroup[];
+          total?: number;
+          pagination?: { total?: number };
+        }>,
+      ),
     staleTime: 60_000,
   });
 
@@ -169,8 +212,8 @@ export function DefaultMediaSection() {
     toast({ title: "Load failed", description: message, variant: "destructive" });
   }, [assignmentsQuery.error, screensQuery.error, groupsQuery.error, mediaListQuery.error, toast]);
 
-  const screens = useMemo(() => screensQuery.data?.items ?? [], [screensQuery.data]);
-  const groups = useMemo(() => groupsQuery.data?.items ?? [], [groupsQuery.data]);
+  const screens = useMemo(() => screensQuery.data ?? [], [screensQuery.data]);
+  const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const assignments = useMemo(() => assignmentsQuery.data?.assignments ?? [], [assignmentsQuery.data]);
   const screensMap = useMemo(() => new Map(screens.map((screen) => [screen.id, screen])), [screens]);
   const groupsMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
@@ -237,11 +280,53 @@ export function DefaultMediaSection() {
     [assignments],
   );
 
+  const sanitizeAssignments = (items: DefaultMediaTargetAssignment[]) => {
+    const dropped: DefaultMediaTargetAssignment[] = [];
+    const kept = items.filter((assignment) => {
+      const exists =
+        assignment.target_type === "SCREEN"
+          ? screensMap.has(assignment.target_id)
+          : groupsMap.has(assignment.target_id);
+
+      if (!exists) {
+        dropped.push(assignment);
+      }
+
+      return exists;
+    });
+
+    return { kept, dropped };
+  };
+
   const updateAssignmentList = (nextAssignments: DefaultMediaTargetAssignment[]) => {
-    updateAssignments.mutate(nextAssignments, {
+    const { kept, dropped } = sanitizeAssignments(nextAssignments);
+
+    if (dropped.length > 0) {
+      toast({
+        title: "Some old targets were removed",
+        description:
+          "One or more previously assigned screens or groups no longer exist. They were removed before saving.",
+      });
+    }
+
+    updateAssignments.mutate(kept, {
       onSuccess: () => {
         setPickerContext(null);
         setRemoveContext(null);
+      },
+      onError: (error) => {
+        const message =
+          error instanceof ApiError && /screen not found|screen group not found/i.test(error.message)
+            ? "One or more selected screens or groups no longer exist. Refresh the page and try again."
+            : error instanceof ApiError
+              ? error.message
+              : "Unable to save default media targets.";
+
+        toast({
+          title: "Save failed",
+          description: message,
+          variant: "destructive",
+        });
       },
     });
   };

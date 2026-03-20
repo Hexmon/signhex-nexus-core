@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
+import { type ScheduleQuickPresetId } from "@/lib/scheduleQuickPresets";
 
 interface StepScheduleDetailsProps {
   scheduleName: string;
@@ -20,6 +21,8 @@ interface StepScheduleDetailsProps {
   priority: number;
   validationErrors?: string[];
   isCheckingAvailability?: boolean;
+  hasSelectedTargets?: boolean;
+  onApplyQuickPreset?: (preset: ScheduleQuickPresetId) => void;
   onUpdate: (updates: Partial<{
     scheduleName: string;
     scheduleDescription: string;
@@ -45,6 +48,8 @@ export function StepScheduleDetails({
   priority,
   validationErrors,
   isCheckingAvailability,
+  hasSelectedTargets,
+  onApplyQuickPreset,
   onUpdate,
 }: StepScheduleDetailsProps) {
   const currentTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -64,19 +69,19 @@ export function StepScheduleDetails({
     ]),
   );
 
-  const formatLocalDateTime = (value: Date) => {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, "0");
-    const day = String(value.getDate()).padStart(2, "0");
-    const hours = String(value.getHours()).padStart(2, "0");
-    const minutes = String(value.getMinutes()).padStart(2, "0");
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+  const quickPresets: Array<{ id: ScheduleQuickPresetId; label: string }> = [
+    { id: "today", label: "Today" },
+    { id: "tomorrow", label: "Tomorrow" },
+    { id: "this_week", label: "This Week" },
+    { id: "this_month", label: "This Month" },
+  ];
 
   const minDate = new Date();
   minDate.setSeconds(0, 0);
   minDate.setMinutes(minDate.getMinutes() + 1);
-  const minStartAt = formatLocalDateTime(minDate);
+  const minStartAt = `${minDate.getFullYear()}-${String(minDate.getMonth() + 1).padStart(2, "0")}-${String(
+    minDate.getDate(),
+  ).padStart(2, "0")}T${String(minDate.getHours()).padStart(2, "0")}:${String(minDate.getMinutes()).padStart(2, "0")}`;
   const minEndAt = startAt || minStartAt;
 
   return (
@@ -220,10 +225,14 @@ export function StepScheduleDetails({
                     const diffMs = end.getTime() - start.getTime();
                     if (diffMs < 0) return "Invalid range";
                     const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const minutes = Math.floor(diffMs / (1000 * 60));
                     const days = Math.floor(hours / 24);
                     const remainingHours = hours % 24;
                     if (days > 0) {
                       return `${days} day(s)${remainingHours > 0 ? `, ${remainingHours} hour(s)` : ""}`;
+                    }
+                    if (hours === 0) {
+                      return `${minutes} minute(s)`;
                     }
                     return `${hours} hour(s)`;
                   })()}
@@ -235,44 +244,27 @@ export function StepScheduleDetails({
           {/* Quick presets */}
           <Card className="p-4 space-y-3">
             <h3 className="font-medium text-sm">Quick Presets</h3>
+            <p className="text-xs text-muted-foreground">
+              Fills the first free slot available on the selected screens/groups inside the chosen range.
+            </p>
             <div className="flex flex-wrap gap-2">
-              {[
-                { label: "Today", days: 0 },
-                { label: "Tomorrow", days: 1 },
-                { label: "This Week", days: 7 },
-                { label: "This Month", days: 30 },
-              ].map((preset) => (
+              {quickPresets.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.id}
                   type="button"
-                  onClick={() => {
-                    const now = new Date();
-                    const start = new Date(now);
-                    start.setHours(9, 0, 0, 0);
-                    if (preset.days > 0) {
-                      start.setDate(start.getDate() + (preset.days === 1 ? 1 : 0));
-                    }
-                    if (start <= now) {
-                      start.setTime(now.getTime() + 60 * 1000);
-                    }
-                    const end = new Date(start);
-                    end.setDate(end.getDate() + preset.days);
-                    end.setHours(18, 0, 0, 0);
-                    if (end <= start) {
-                      end.setTime(start.getTime() + 60 * 60 * 1000);
-                    }
-
-                    onUpdate({
-                      startAt: formatLocalDateTime(start),
-                      endAt: formatLocalDateTime(end),
-                    });
-                  }}
-                  className="px-3 py-1 text-sm border rounded-full hover:bg-muted transition-colors"
+                  onClick={() => onApplyQuickPreset?.(preset.id)}
+                  disabled={!hasSelectedTargets || isCheckingAvailability}
+                  className="px-3 py-1 text-sm border rounded-full hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {preset.label}
                 </button>
               ))}
             </div>
+            {!hasSelectedTargets && (
+              <p className="text-xs text-muted-foreground">
+                Select at least one screen or group to use quick presets.
+              </p>
+            )}
           </Card>
         </div>
       </div>
