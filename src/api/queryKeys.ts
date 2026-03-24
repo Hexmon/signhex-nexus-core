@@ -50,6 +50,8 @@ export const queryKeys = {
   settingsLogs: (filters?: { level?: string; limit?: number }) =>
     ["settings", "logs", filters?.level ?? null, filters?.limit ?? null] as const,
   defaultMedia: ["settings", "default-media"] as const,
+  defaultMediaScreens: ["settings", "default-media", "screens"] as const,
+  defaultMediaScreenGroups: ["settings", "default-media", "screen-groups"] as const,
   defaultMediaVariants: ["settings", "default-media-variants"] as const,
   defaultMediaTargets: ["settings", "default-media-targets"] as const,
   roles: (filters?: { page?: number; limit?: number; search?: string }) =>
@@ -66,6 +68,22 @@ export const queryKeys = {
   }) =>
     ["schedule-requests", filters?.status, filters?.page, filters?.limit, filters?.include] as const,
   scheduleRequestSummary: ["schedule-requests", "status-summary"] as const,
+  scheduleReservationsPreview: (payload?: {
+    schedule_id?: string | null;
+    start_at?: string | null;
+    end_at?: string | null;
+    screen_ids?: string[];
+    screen_group_ids?: string[];
+  }) =>
+    [
+      "schedule-reservations",
+      "preview",
+      payload?.schedule_id ?? null,
+      payload?.start_at ?? null,
+      payload?.end_at ?? null,
+      (payload?.screen_ids ?? []).join(","),
+      (payload?.screen_group_ids ?? []).join(","),
+    ] as const,
   emergencyStatus: ["emergency-status"] as const,
   layouts: (filters?: {
     page?: number;

@@ -913,10 +913,47 @@ export interface ScheduleRequestPayload {
   notes?: string;
 }
 
+export interface ReservationSummary {
+  state: string | null;
+  token: string | null;
+  version: number | null;
+  hold_expires_at: string | null;
+  published_at: string | null;
+}
+
+export interface ReservationConflictItem {
+  screen_id: string;
+  screen_name: string;
+  start_at: string;
+  end_at: string;
+  conflict_start_at: string;
+  conflict_end_at: string;
+  state: string;
+  hold_expires_at: string | null;
+  owned_by_current_user: boolean;
+  schedule_request_id?: string | null;
+  schedule_id?: string | null;
+}
+
+export interface ScheduleReservationPreviewPayload {
+  schedule_id?: string;
+  start_at?: string;
+  end_at?: string;
+  screen_ids?: string[];
+  screen_group_ids?: string[];
+}
+
+export interface ScheduleReservationPreviewResponse {
+  resolved_screen_ids: string[];
+  reservation_conflicts: ReservationConflictItem[];
+}
+
 export interface ScheduleRequest {
   id: string;
   schedule_id: string;
   notes?: string | null;
+  status?: ScheduleRequestStatus;
+  reservation_summary?: ReservationSummary | null;
   created_at?: string;
 }
 
@@ -924,6 +961,7 @@ export type ScheduleRequestStatus =
   | "PENDING"
   | "APPROVED"
   | "REJECTED"
+  | "CANCELLED"
   | "PUBLISHED"
   | "EXPIRED"
   | string;
@@ -962,6 +1000,7 @@ export interface ScheduleRequestListItem {
   media?: MediaAsset[];
   screens?: Screen[];
   screen_groups?: ScreenGroup[];
+  reservation_summary?: ReservationSummary | null;
 }
 
 export interface ScheduleRequestPagination {
@@ -1028,6 +1067,7 @@ export interface ScheduleRequestReviewResponse {
   reviewed_by?: string;
   reviewed_at?: string;
   review_notes?: string | null;
+  reservation_summary?: ReservationSummary | null;
 }
 
 export interface ScheduleRequestPublishResponse {
@@ -1038,6 +1078,7 @@ export interface ScheduleRequestPublishResponse {
   snapshot_id?: string;
   resolved_screen_ids?: string[];
   targets?: number;
+  reservation_summary?: ReservationSummary | null;
 }
 
 export interface Publish {

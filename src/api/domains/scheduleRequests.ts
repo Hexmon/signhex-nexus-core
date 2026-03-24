@@ -39,6 +39,11 @@ export const scheduleRequestsApi = {
       method: "POST",
       body: payload,
     }),
+  cancel: (requestId: string) =>
+    apiClient.request<ScheduleRequestReviewResponse>({
+      path: endpoints.scheduleRequests.cancel(requestId),
+      method: "POST",
+    }),
   create: (payload: ScheduleRequestPayload) =>
     apiClient.request<ScheduleRequest>({
       path: endpoints.scheduleRequests.base,

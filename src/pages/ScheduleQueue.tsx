@@ -63,6 +63,15 @@ const getRequesterLabel = (request?: ScheduleRequestListItem) => {
   return user.email || user.id;
 };
 
+const formatReservationState = (request?: ScheduleRequestListItem) => {
+  const state = request?.reservation_summary?.state;
+  if (!state) return "No hold";
+  return state
+    .split("_")
+    .map((segment) => segment.charAt(0) + segment.slice(1).toLowerCase())
+    .join(" ");
+};
+
 export default function ScheduleQueue() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -132,12 +141,20 @@ export default function ScheduleQueue() {
     setTabTotals((prev) => ({ ...prev, [activeTab]: data.pagination.total }));
   }, [data?.pagination?.total, activeTab]);
 
-  const requests = useMemo(() => data?.items ?? [], [data]);
+  const requests = useMemo(() => (Array.isArray(data?.items) ? data.items : []), [data]);
 
-  const selectedDeviceId = selectedRequest?.screens?.[0]?.id;
+  const selectedDeviceId =
+    typeof selectedRequest?.screens?.[0]?.id === "string" && selectedRequest.screens[0].id.trim()
+      ? selectedRequest.screens[0].id
+      : undefined;
   const deviceScheduleQuery = useQuery({
-    queryKey: ["device-schedule", selectedDeviceId],
-    queryFn: () => deviceScheduleApi.getSchedule(selectedDeviceId!),
+    queryKey: ["device-schedule", selectedDeviceId ?? null],
+    queryFn: async () => {
+      if (!selectedDeviceId) {
+        throw new Error("Select a published request with a paired screen to load the device snapshot.");
+      }
+      return deviceScheduleApi.getSchedule(selectedDeviceId);
+    },
     enabled: activeTab === "published" && Boolean(selectedDeviceId),
     staleTime: 30_000,
   });
@@ -331,6 +348,7 @@ export default function ScheduleQueue() {
                       (sum, slot) => sum + (slot.duration_seconds || 0),
                       0,
                     );
+                    const reservationState = formatReservationState(request);
                     const hasMetadataRow = scheduleItemCount > 0 || slotCount > 0 || totalDurationSeconds > 0;
 
                     const handleCopyId = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -363,6 +381,7 @@ export default function ScheduleQueue() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <h3 className="font-semibold text-foreground">{scheduleName}</h3>
+                              <Badge variant="outline">{reservationState}</Badge>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>

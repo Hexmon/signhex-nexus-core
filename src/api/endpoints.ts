@@ -137,6 +137,10 @@ export const endpoints = {
     approve: (requestId: string) => `/schedule-requests/${requestId}/approve`,
     publish: (requestId: string) => `/schedule-requests/${requestId}/publish`,
     reject: (requestId: string) => `/schedule-requests/${requestId}/reject`,
+    cancel: (requestId: string) => `/schedule-requests/${requestId}/cancel`,
+  },
+  scheduleReservations: {
+    preview: "/schedule-reservations/preview",
   },
   screens: {
     base: "/screens",

@@ -78,14 +78,22 @@ const normalizeDeviceItems = (payload: RawDeviceSnapshotResponse): DeviceSchedul
 export const deviceScheduleApi = {
   getSchedule: async (deviceId: string) => {
     try {
+      const normalizedDeviceId = typeof deviceId === "string" ? deviceId.trim() : "";
+      if (!normalizedDeviceId) {
+        throw new ApiError({
+          status: 400,
+          message: "Device id is required to load the published device snapshot.",
+        });
+      }
+
       const payload = await apiClient.request<RawDeviceSnapshotResponse>({
-        path: `/device/${encodeURIComponent(deviceId)}/snapshot`,
+        path: `/device/${encodeURIComponent(normalizedDeviceId)}/snapshot`,
         method: "GET",
         query: { include_urls: true },
       });
 
       return {
-        id: payload.publish?.snapshot_id ?? deviceId,
+        id: payload.publish?.snapshot_id ?? normalizedDeviceId,
         generated_at: payload.publish?.published_at,
         fetched_at: new Date().toISOString(),
         media_urls: payload.media_urls ?? {},

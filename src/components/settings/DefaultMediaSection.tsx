@@ -133,12 +133,13 @@ async function fetchAllPages<T>(
 
   while (true) {
     const response = await fetchPage(page);
-    items.push(...response.items);
+    const pageItems = Array.isArray(response.items) ? response.items : [];
+    items.push(...pageItems);
 
     const reportedTotal = response.pagination?.total ?? response.total;
     total = typeof reportedTotal === "number" ? reportedTotal : total;
 
-    if (response.items.length < TARGETS_PAGE_SIZE) {
+    if (pageItems.length < TARGETS_PAGE_SIZE) {
       break;
     }
 
@@ -170,7 +171,7 @@ export function DefaultMediaSection() {
   const updateAssignments = useUpdateDefaultMediaTargets();
 
   const screensQuery = useQuery({
-    queryKey: queryKeys.screens,
+    queryKey: queryKeys.defaultMediaScreens,
     queryFn: () =>
       fetchAllPages((page) =>
         screensApi.list({ page, limit: TARGETS_PAGE_SIZE }) as Promise<{
@@ -183,7 +184,7 @@ export function DefaultMediaSection() {
   });
 
   const groupsQuery = useQuery({
-    queryKey: queryKeys.screenGroups,
+    queryKey: queryKeys.defaultMediaScreenGroups,
     queryFn: () =>
       fetchAllPages((page) =>
         screensApi.listGroups({ page, limit: TARGETS_PAGE_SIZE }) as Promise<{
@@ -212,9 +213,12 @@ export function DefaultMediaSection() {
     toast({ title: "Load failed", description: message, variant: "destructive" });
   }, [assignmentsQuery.error, screensQuery.error, groupsQuery.error, mediaListQuery.error, toast]);
 
-  const screens = useMemo(() => screensQuery.data ?? [], [screensQuery.data]);
-  const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
-  const assignments = useMemo(() => assignmentsQuery.data?.assignments ?? [], [assignmentsQuery.data]);
+  const screens = useMemo(() => (Array.isArray(screensQuery.data) ? screensQuery.data : []), [screensQuery.data]);
+  const groups = useMemo(() => (Array.isArray(groupsQuery.data) ? groupsQuery.data : []), [groupsQuery.data]);
+  const assignments = useMemo(
+    () => (Array.isArray(assignmentsQuery.data?.assignments) ? assignmentsQuery.data.assignments : []),
+    [assignmentsQuery.data],
+  );
   const screensMap = useMemo(() => new Map(screens.map((screen) => [screen.id, screen])), [screens]);
   const groupsMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
 
@@ -264,7 +268,10 @@ export function DefaultMediaSection() {
     return null;
   }, [targetMode, selectedScreenIds.length, selectedScreenAspectRatios.length, selectedGroup, selectedGroupAspectRatios.length]);
 
-  const mediaItems = useMemo(() => mediaListQuery.data?.items ?? [], [mediaListQuery.data]);
+  const mediaItems = useMemo(
+    () => (Array.isArray(mediaListQuery.data?.items) ? mediaListQuery.data.items : []),
+    [mediaListQuery.data],
+  );
   const filteredMedia = useMemo(() => {
     const query = mediaSearch.trim().toLowerCase();
     if (!query) return mediaItems;

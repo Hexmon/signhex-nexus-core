@@ -6,13 +6,20 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { ApiError } from "@/api/apiClient";
 import { presentationsApi } from "@/api/domains/presentations";
 import { schedulesApi } from "@/api/domains/schedules";
 import { scheduleRequestsApi } from "@/api/domains/scheduleRequests";
+import { scheduleReservationsApi } from "@/api/domains/scheduleReservations";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
-import type { PresentationSlotPayload, ScheduleItemPayload, ScreenSnapshot } from "@/api/types";
+import type {
+  PresentationSlotPayload,
+  ReservationConflictItem,
+  ScheduleItemPayload,
+  ScreenSnapshot,
+} from "@/api/types";
 import { resolveQuickPresetRange, type ScheduleQuickPresetId } from "@/lib/scheduleQuickPresets";
 
 import { StepLayoutSelect } from "@/components/schedule-creator/StepLayoutSelect";
@@ -105,6 +112,21 @@ const initialState: ScheduleWizardState = {
   approvalNotes: "",
 };
 
+const formatConflictLabel = (conflict: ReservationConflictItem) => {
+  const stateLabel = conflict.state.toLowerCase();
+  const ownerLabel = conflict.owned_by_current_user ? "you" : "another user";
+  const start = new Date(conflict.conflict_start_at);
+  const end = new Date(conflict.conflict_end_at);
+  const windowLabel =
+    Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
+      ? `${conflict.conflict_start_at} to ${conflict.conflict_end_at}`
+      : `${start.toLocaleString()} to ${end.toLocaleString()}`;
+  const expiryLabel = conflict.hold_expires_at
+    ? ` Hold expires ${new Date(conflict.hold_expires_at).toLocaleString()}.`
+    : "";
+  return `${conflict.screen_name} already has a ${stateLabel} reservation owned by ${ownerLabel} for ${windowLabel}.${expiryLabel}`;
+};
+
 export default function ScheduleCreator() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -139,6 +161,30 @@ export default function ScheduleCreator() {
       : [],
   });
 
+  const reservationPreviewEnabled =
+    isScheduleStep &&
+    (wizardState.selectedScreenIds.length > 0 || wizardState.selectedGroupIds.length > 0) &&
+    wizardState.startAt !== "" &&
+    wizardState.endAt !== "";
+
+  const reservationPreviewQuery = useQuery({
+    queryKey: queryKeys.scheduleReservationsPreview({
+      start_at: wizardState.startAt || null,
+      end_at: wizardState.endAt || null,
+      screen_ids: wizardState.selectedScreenIds,
+      screen_group_ids: wizardState.selectedGroupIds,
+    }),
+    queryFn: () =>
+      scheduleReservationsApi.preview({
+        start_at: formatScheduleTimestamp(wizardState.startAt),
+        end_at: formatScheduleTimestamp(wizardState.endAt),
+        screen_ids: wizardState.selectedScreenIds,
+        screen_group_ids: wizardState.selectedGroupIds,
+      }),
+    enabled: reservationPreviewEnabled,
+    staleTime: 15_000,
+  });
+
   const scheduleTimingValidation = useMemo(() => {
     const errors: string[] = [];
     const nowMs = Date.now();
@@ -165,12 +211,14 @@ export default function ScheduleCreator() {
     }
 
     const isChecking = isScheduleStep
-      ? [...screenSnapshotQueries, ...groupSnapshotQueries].some((query) => query.isLoading)
+      ? [...screenSnapshotQueries, ...groupSnapshotQueries].some((query) => query.isLoading) ||
+        reservationPreviewQuery.isLoading
       : false;
 
     const snapshotError = isScheduleStep
       ? [...screenSnapshotQueries, ...groupSnapshotQueries].find((query) => query.isError)?.error
       : undefined;
+    const reservationConflicts = reservationPreviewQuery.data?.reservation_conflicts ?? [];
 
     const scheduleItems = [...screenSnapshotQueries, ...groupSnapshotQueries].flatMap((query) => {
       const data = query.data as ScreenSnapshot | undefined;
@@ -196,6 +244,12 @@ export default function ScheduleCreator() {
     if (snapshotError) {
       errors.push("Unable to verify schedule conflicts. Please try again.");
     }
+    if (reservationConflicts.length > 0) {
+      errors.push(...reservationConflicts.map(formatConflictLabel));
+    }
+    if (!reservationConflicts.length && reservationPreviewQuery.error) {
+      errors.push("Unable to verify reservation conflicts. Please try again.");
+    }
 
     return {
       errors,
@@ -208,6 +262,9 @@ export default function ScheduleCreator() {
     screenSnapshotQueries,
     groupSnapshotQueries,
     isScheduleStep,
+    reservationPreviewQuery.data,
+    reservationPreviewQuery.error,
+    reservationPreviewQuery.isLoading,
   ]);
 
   const selectedTargetScheduleItems = useMemo(() => {
@@ -345,10 +402,10 @@ export default function ScheduleCreator() {
     return `${wizardState.presentationId}|${wizardState.startAt}|${wizardState.endAt}|${wizardState.priority}|${screenIds}|${groupIds}`;
   };
 
-  const formatScheduleTimestamp = (value: string) => {
+  function formatScheduleTimestamp(value: string) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toISOString();
-  };
+  }
 
   const canProceed = (): boolean => {
     switch (currentStep) {
@@ -556,8 +613,20 @@ export default function ScheduleCreator() {
         description: "Your schedule request has been submitted for approval.",
       });
       navigate("/schedule");
-    } catch {
-      // errors handled by useSafeMutation toast
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "CONFLICT") {
+        const details = error.details as
+          | { reservation_conflicts?: ReservationConflictItem[] }
+          | undefined;
+        const firstConflict = details?.reservation_conflicts?.[0];
+        if (firstConflict) {
+          toast({
+            title: "Screen reservation conflict",
+            description: formatConflictLabel(firstConflict),
+            variant: "destructive",
+          });
+        }
+      }
     } finally {
       setIsSubmitting(false);
     }
