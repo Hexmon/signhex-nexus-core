@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FileText, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MediaAsset } from "@/api/types";
 import { resolveMediaDisplayName } from "@/lib/media";
@@ -9,9 +10,31 @@ type MediaPreviewProps = {
   type?: string;
   alt?: string;
   className?: string;
+  fit?: "cover" | "contain" | "stretch";
+  videoControls?: boolean;
+  videoMuted?: boolean;
+  videoAutoPlay?: boolean;
+  videoLoop?: boolean;
 };
 
-export function MediaPreview({ media, url, type, alt, className }: MediaPreviewProps) {
+const resolveObjectFit = (fit: MediaPreviewProps["fit"]) => {
+  if (fit === "contain" || fit === "cover") return fit;
+  if (fit === "stretch") return "fill";
+  return "cover";
+};
+
+export function MediaPreview({
+  media,
+  url,
+  type,
+  alt,
+  className,
+  fit,
+  videoControls = true,
+  videoMuted = true,
+  videoAutoPlay = false,
+  videoLoop = false,
+}: MediaPreviewProps) {
   const sourceUrl = url ?? media?.media_url ?? media?.thumbnail_object_id;
   const [pdfLoaded, setPdfLoaded] = useState(false);
   const normalizedType = (
@@ -53,9 +76,13 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
       <video
         src={sourceUrl}
         className={cn("rounded-md bg-muted object-cover", className)}
-        controls
+        controls={videoControls}
         preload="metadata"
-        muted
+        muted={videoMuted}
+        autoPlay={videoAutoPlay}
+        loop={videoLoop}
+        playsInline
+        style={{ objectFit: resolveObjectFit(fit) }}
       />
     );
   }
@@ -80,6 +107,7 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
         src={sourceUrl}
         alt={alt ?? resolveMediaDisplayName(media) ?? "Media preview"}
         className={cn("rounded-md object-cover bg-muted", className)}
+        style={{ objectFit: resolveObjectFit(fit) }}
       />
     );
   }
@@ -87,11 +115,14 @@ export function MediaPreview({ media, url, type, alt, className }: MediaPreviewP
   return (
     <div
       className={cn(
-        "rounded-md bg-muted flex items-center justify-center text-muted-foreground text-xs text-center px-2 py-3",
+        "rounded-md bg-muted flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs text-center px-2 py-3",
         className,
       )}
     >
-      No preview available
+      {showVideo ? <VideoIcon className="h-5 w-5" /> : showImage ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+      <span className="line-clamp-2 max-w-full">
+        {alt ?? resolveMediaDisplayName(media) ?? "No preview available"}
+      </span>
     </div>
   );
 }

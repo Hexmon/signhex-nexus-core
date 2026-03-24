@@ -40,10 +40,13 @@ export interface SlotMedia {
   mediaName: string;
   mediaType: "IMAGE" | "VIDEO" | "DOCUMENT";
   mediaThumbnail?: string;
+  mediaUrl?: string | null;
+  mediaContentType?: string | null;
   order: number;
   durationSeconds: number;
   fitMode: "cover" | "contain";
   audioEnabled: boolean;
+  loopEnabled: boolean;
 }
 
 export interface ScheduleWizardState {
@@ -385,7 +388,7 @@ export default function ScheduleCreator() {
       })
       .map(
         (item) =>
-          `${item.slotId}|${item.mediaId}|${item.order}|${item.durationSeconds}|${item.fitMode}|${item.audioEnabled}`
+          `${item.slotId}|${item.mediaId}|${item.order}|${item.durationSeconds}|${item.fitMode}|${item.audioEnabled}|${item.loopEnabled}`
       )
       .join(";");
   };
@@ -485,6 +488,7 @@ export default function ScheduleCreator() {
         duration_seconds: item.durationSeconds,
         fit_mode: item.fitMode,
         audio_enabled: item.audioEnabled,
+        loop_enabled: item.loopEnabled,
       }));
 
       try {

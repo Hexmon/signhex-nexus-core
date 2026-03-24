@@ -23,6 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SearchBar } from "@/components/common/SearchBar";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +77,7 @@ export function EmergencyTakeoverModal({
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [mediaId, setMediaId] = useState<string>("none");
+  const [mediaSearch, setMediaSearch] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [auditNote, setAuditNote] = useState("");
   const [confirmedGlobal, setConfirmedGlobal] = useState(false);
@@ -111,9 +114,15 @@ export function EmergencyTakeoverModal({
   });
 
   const activeEmergencies = emergencyStatusQuery.data?.active_emergencies ?? [];
-  const mediaItems = mediaQuery.data?.items ?? [];
+  const mediaItems = Array.isArray(mediaQuery.data?.items) ? mediaQuery.data.items : [];
   const screens = screensQuery.data?.items ?? [];
   const groups = groupsQuery.data?.items ?? [];
+  const selectedMedia = mediaId !== "none" ? mediaItems.find((media) => media.id === mediaId) ?? null : null;
+  const filteredMediaItems = useMemo(() => {
+    const query = mediaSearch.trim().toLowerCase();
+    if (!query) return mediaItems;
+    return mediaItems.filter((media) => resolveMediaDisplayName(media).toLowerCase().includes(query));
+  }, [mediaItems, mediaSearch]);
 
   const groupedScreenIds = useMemo(() => {
     const screenMap = new Map(screens.map((screen) => [screen.id, screen.name || screen.id]));
@@ -127,6 +136,7 @@ export function EmergencyTakeoverModal({
     setSelectedScreenIds([]);
     setSelectedGroupIds([]);
     setMediaId("none");
+    setMediaSearch("");
     setExpiresAt("");
     setAuditNote("");
     setConfirmedGlobal(false);
@@ -313,23 +323,6 @@ export function EmergencyTakeoverModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Emergency media</Label>
-                  <Select value={mediaId} onValueChange={setMediaId}>
-                    <SelectTrigger aria-label="Emergency media">
-                      <SelectValue placeholder="Optional emergency media" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No media override</SelectItem>
-                      {mediaItems.map((media) => (
-                        <SelectItem key={media.id} value={media.id}>
-                          {resolveMediaDisplayName(media)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
                   <Label>Target scope</Label>
                   <Select
                     value={scope}
@@ -370,6 +363,87 @@ export function EmergencyTakeoverModal({
                     rows={3}
                     placeholder="Explain why this override is required and who authorized it."
                   />
+                </div>
+
+                <div className="space-y-3 md:col-span-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Emergency media</Label>
+                    {selectedMedia ? (
+                      <Button variant="ghost" size="sm" onClick={() => setMediaId("none")}>
+                        Clear selection
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    {selectedMedia ? (
+                      <div className="flex items-center gap-3">
+                        <MediaPreview
+                          media={selectedMedia}
+                          className="h-20 w-28 flex-shrink-0"
+                          videoControls={false}
+                          videoMuted
+                          videoAutoPlay={selectedMedia.type === "VIDEO"}
+                        />
+                        <div className="min-w-0">
+                          <p className="font-medium">{resolveMediaDisplayName(selectedMedia)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedMedia.source_content_type ?? selectedMedia.content_type ?? selectedMedia.type ?? "Media"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No media override selected. The emergency can still run with just the message.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border p-3">
+                    <SearchBar placeholder="Search emergency media..." onSearch={setMediaSearch} initialValue={mediaSearch} />
+                    <ScrollArea className="mt-3 h-56">
+                      <div className="grid grid-cols-1 gap-3 pr-4 md:grid-cols-2">
+                        <button
+                          type="button"
+                          className={`rounded-lg border p-3 text-left transition-colors ${
+                            mediaId === "none" ? "border-primary bg-primary/5" : "hover:border-primary/40"
+                          }`}
+                          onClick={() => setMediaId("none")}
+                        >
+                          <p className="font-medium">No media override</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Use only the emergency message for this takeover.
+                          </p>
+                        </button>
+                        {filteredMediaItems.map((media) => (
+                          <button
+                            key={media.id}
+                            type="button"
+                            className={`rounded-lg border p-3 text-left transition-colors ${
+                              media.id === mediaId ? "border-primary bg-primary/5" : "hover:border-primary/40"
+                            }`}
+                            onClick={() => setMediaId(media.id)}
+                          >
+                            <div className="space-y-3">
+                              <MediaPreview
+                                media={media}
+                                className="h-28 w-full"
+                                videoControls={false}
+                                videoMuted
+                                videoAutoPlay={media.type === "VIDEO"}
+                              />
+                              <div>
+                                <p className="truncate font-medium">{resolveMediaDisplayName(media)}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {media.source_content_type ?? media.content_type ?? media.type ?? "Media"}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </div>
               </div>
 

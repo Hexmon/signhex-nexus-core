@@ -21,7 +21,7 @@ import { SearchBar } from "@/components/common/SearchBar";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useToast } from "@/hooks/use-toast";
-import type { ScreenSnapshot } from "@/api/types";
+import type { ScreenSnapshot, ScreenSnapshotScheduleItem } from "@/api/types";
 import { ScheduleTimelineGraph } from "@/components/screens/ScheduleTimelineGraph";
 
 interface StepScreenSelectProps {
@@ -34,6 +34,7 @@ const SCREEN_PAGE_SIZE = 100;
 
 type TimelineState = {
   entityId: string | null;
+  label: string | null;
   entityType: "screen" | "group";
   snapshot: ScreenSnapshot | null;
   isLoading: boolean;
@@ -41,6 +42,94 @@ type TimelineState = {
 };
 
 type AvailabilityStatus = "busy" | "available" | "unknown";
+
+const formatWindow = (startAt?: string, endAt?: string) => {
+  if (!startAt || !endAt) return "scheduled window";
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${startAt} to ${endAt}`;
+  }
+  return `${start.toLocaleString()} to ${end.toLocaleString()}`;
+};
+
+const getScheduleItemLabel = (item: ScreenSnapshotScheduleItem) =>
+  item?.presentation?.name || item?.presentation_id || item?.id || "Scheduled item";
+
+const getSnapshotInsight = (snapshot: ScreenSnapshot) => {
+  const items = [...(snapshot.snapshot?.schedule?.items ?? [])]
+    .filter((item) => item?.start_at && item?.end_at)
+    .sort(
+      (left, right) =>
+        Date.parse(left.start_at || "") - Date.parse(right.start_at || "") ||
+        Date.parse(left.end_at || "") - Date.parse(right.end_at || ""),
+    );
+  const now = Date.now();
+
+  if (snapshot.emergency) {
+    return {
+      status: "busy" as AvailabilityStatus,
+      title: "Emergency takeover active",
+      description: "This target is currently overridden by emergency playback.",
+      items,
+      activeItems: [],
+      nextItem: items.find((item) => Date.parse(item.start_at || "") > now) ?? null,
+    };
+  }
+
+  const activeItems = items.filter((item) => {
+    const start = Date.parse(item.start_at || "");
+    const end = Date.parse(item.end_at || "");
+    return !Number.isNaN(start) && !Number.isNaN(end) && start <= now && now <= end;
+  });
+  const nextItem = items.find((item) => {
+    const start = Date.parse(item.start_at || "");
+    return !Number.isNaN(start) && start > now;
+  }) ?? null;
+
+  if (activeItems.length > 0) {
+    const current = activeItems[0];
+    return {
+      status: "busy" as AvailabilityStatus,
+      title: "Currently busy",
+      description: `${getScheduleItemLabel(current)} is active for ${formatWindow(current.start_at, current.end_at)}.`,
+      items,
+      activeItems,
+      nextItem,
+    };
+  }
+
+  if (nextItem) {
+    return {
+      status: "available" as AvailabilityStatus,
+      title: "Available right now",
+      description: `Next scheduled item is ${getScheduleItemLabel(nextItem)} at ${formatWindow(nextItem.start_at, nextItem.end_at)}.`,
+      items,
+      activeItems,
+      nextItem,
+    };
+  }
+
+  if (items.length > 0) {
+    return {
+      status: "available" as AvailabilityStatus,
+      title: "No active schedule right now",
+      description: "This target has schedule history, but nothing is active or upcoming right now.",
+      items,
+      activeItems,
+      nextItem,
+    };
+  }
+
+  return {
+    status: "available" as AvailabilityStatus,
+    title: "No schedule found",
+    description: "This target has no scheduled content right now.",
+    items,
+    activeItems,
+    nextItem,
+  };
+};
 
 export function StepScreenSelect({
   selectedScreenIds,
@@ -53,6 +142,7 @@ export function StepScreenSelect({
   const [availabilityMap, setAvailabilityMap] = useState<Record<string, AvailabilityStatus>>({});
   const [timelineState, setTimelineState] = useState<TimelineState>({
     entityId: null,
+    label: null,
     entityType: "screen",
     snapshot: null,
     isLoading: false,
@@ -120,17 +210,7 @@ export function StepScreenSelect({
   };
 
   const determineAvailability = (snapshot: ScreenSnapshot): AvailabilityStatus => {
-    if (snapshot.emergency) return "busy";
-    const items = snapshot.snapshot?.schedule?.items ?? [];
-    if (!items.length) return "unknown";
-    const now = Date.now();
-    const busy = items.some((item) => {
-      const start = item.start_at ? Date.parse(item.start_at) : NaN;
-      const end = item.end_at ? Date.parse(item.end_at) : NaN;
-      if (Number.isNaN(start) || Number.isNaN(end)) return false;
-      return start <= now && now <= end;
-    });
-    return busy ? "busy" : "available";
+    return getSnapshotInsight(snapshot).status;
   };
 
   const handleCheckAvailability = async (type: "screen" | "group", id: string) => {
@@ -138,21 +218,12 @@ export function StepScreenSelect({
     setCheckingAvailabilityFor(key);
     try {
       const snapshot = await fetchTimelineSnapshot(type, id);
-      const status = determineAvailability(snapshot);
+      const insight = getSnapshotInsight(snapshot);
+      const status = insight.status;
       setAvailabilityMap((prev) => ({ ...prev, [key]: status }));
       toast({
-        title:
-          status === "busy"
-            ? "Currently busy"
-            : status === "available"
-            ? "Currently available"
-            : "Status unknown",
-        description:
-          status === "busy"
-            ? "This target has an active schedule right now."
-            : status === "available"
-            ? "This target appears available right now."
-            : "Unable to determine availability from the snapshot.",
+        title: insight.title,
+        description: insight.description,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to fetch schedule snapshot.";
@@ -162,15 +233,16 @@ export function StepScreenSelect({
     }
   };
 
-  const handleViewTimeline = async (type: "screen" | "group", id: string) => {
-    setTimelineState({ entityId: id, entityType: type, snapshot: null, isLoading: true });
+  const handleViewTimeline = async (type: "screen" | "group", id: string, label: string) => {
+    setTimelineState({ entityId: id, label, entityType: type, snapshot: null, isLoading: true });
     setIsTimelineOpen(true);
     try {
       const snapshot = await fetchTimelineSnapshot(type, id);
-      setTimelineState({ entityId: id, entityType: type, snapshot, isLoading: false });
+      setTimelineState({ entityId: id, label, entityType: type, snapshot, isLoading: false });
     } catch (error) {
       setTimelineState({
         entityId: id,
+        label,
         entityType: type,
         snapshot: null,
         isLoading: false,
@@ -206,6 +278,10 @@ export function StepScreenSelect({
 
   const timelineItems = useMemo(
     () => timelineState.snapshot?.snapshot?.schedule?.items ?? [],
+    [timelineState.snapshot],
+  );
+  const timelineInsight = useMemo(
+    () => (timelineState.snapshot ? getSnapshotInsight(timelineState.snapshot) : null),
     [timelineState.snapshot],
   );
   const timelineBounds = useMemo(() => {
@@ -394,7 +470,7 @@ export function StepScreenSelect({
                             variant="ghost"
                             onClick={(event) => {
                               event.stopPropagation();
-                              handleViewTimeline("screen", screen.id);
+                              handleViewTimeline("screen", screen.id, screen.name || screen.id);
                             }}
                           >
                             <Eye className="h-3 w-3 mr-1" />
@@ -501,7 +577,7 @@ export function StepScreenSelect({
                             variant="ghost"
                             onClick={(event) => {
                               event.stopPropagation();
-                              handleViewTimeline("group", group.id);
+                              handleViewTimeline("group", group.id, group.name || group.id);
                             }}
                           >
                             <Eye className="h-3 w-3 mr-1" />
@@ -523,17 +599,17 @@ export function StepScreenSelect({
         onOpenChange={(open) => {
           if (!open) {
             setIsTimelineOpen(false);
-            setTimelineState({ entityId: null, entityType: "screen", snapshot: null, isLoading: false });
+            setTimelineState({ entityId: null, label: null, entityType: "screen", snapshot: null, isLoading: false });
           }
         }}
       >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              Timeline for {timelineState.entityType} {timelineState.entityId || "selection"}
+              Schedule timeline for {timelineState.label || timelineState.entityId || "selection"}
             </DialogTitle>
             <DialogDescription>
-              Visual timeline shows scheduled items fetched from the most recent snapshot.
+              Visual timeline uses the same graph format as the dashboard and is based on the latest snapshot.
             </DialogDescription>
           </DialogHeader>
           {timelineState.isLoading ? (
@@ -544,10 +620,29 @@ export function StepScreenSelect({
             <p className="text-sm text-destructive">{timelineState.error}</p>
           ) : timelineBounds && timelineItems.length ? (
             <div className="space-y-5">
+              {timelineInsight ? (
+                <Card className="p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={getAvailabilityBadgeVariant(timelineInsight.status)}>
+                      {timelineInsight.status === "busy" ? "Busy now" : "Available now"}
+                    </Badge>
+                    {timelineState.snapshot?.emergency ? (
+                      <Badge variant="destructive">Emergency override</Badge>
+                    ) : null}
+                    <Badge variant="outline">
+                      {timelineInsight.items.length} scheduled item{timelineInsight.items.length === 1 ? "" : "s"}
+                    </Badge>
+                    <Badge variant="outline">
+                      {timelineInsight.activeItems.length} active
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{timelineInsight.description}</p>
+                </Card>
+              ) : null}
               <ScheduleTimelineGraph
                 items={timelineItems.map((item) => ({
                   id: item.id,
-                  label: item.presentation_id ?? item.id,
+                  label: getScheduleItemLabel(item),
                   start_at: item.start_at,
                   end_at: item.end_at,
                   priority: item.priority,

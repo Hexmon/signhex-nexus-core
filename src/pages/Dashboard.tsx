@@ -169,13 +169,13 @@ export default function Dashboard() {
       const items: MediaAsset[] = [];
 
       do {
-        const response = await mediaApi.list({ page, limit });
+        const response = await mediaApi.list({ page, limit, status: "READY" });
         total = response.total ?? 0;
         items.push(...(response.items ?? []));
         page += 1;
       } while (items.length < total && total > 0);
 
-      return items;
+      return items.filter((item) => item.status === "READY");
     },
   });
 
@@ -463,13 +463,15 @@ export default function Dashboard() {
     return items;
   }, [offlineScreens, quotaPercent, navigate]);
 
+  const readyMedia = useMemo(() => (allMedia ?? []).filter((item) => item.status === "READY"), [allMedia]);
+
   const totalMediaSizeBytes = useMemo(
     () =>
-      (allMedia ?? []).reduce((sum, item) => {
+      readyMedia.reduce((sum, item) => {
         const nextSize = item.source_size ?? item.size ?? 0;
         return sum + (Number.isFinite(nextSize) ? nextSize : 0);
       }, 0),
-    [allMedia],
+    [readyMedia],
   );
 
   return (
@@ -710,7 +712,7 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-semibold">
-                      {isMediaLoading ? "Loading..." : String(allMedia?.length ?? 0)}
+                      {isMediaLoading ? "Loading..." : String(readyMedia.length)}
                     </div>
                   </CardContent>
                 </Card>
@@ -748,14 +750,14 @@ export default function Dashboard() {
                             Loading media...
                           </TableCell>
                         </TableRow>
-                      ) : (allMedia?.length ?? 0) === 0 ? (
+                      ) : readyMedia.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={8} className="h-10 text-center text-xs text-muted-foreground">
                             No media found.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        allMedia?.map((item) => (
+                        readyMedia.map((item) => (
                           <TableRow key={item.id}>
                             <TableCell className="max-w-[280px] py-2 text-xs">
                               <div className="truncate text-xs font-medium">{resolveMediaDisplayName(item)}</div>

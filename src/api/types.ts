@@ -439,6 +439,7 @@ export interface PresentationSlotPayload {
   duration_seconds: number;
   fit_mode: PresentationFitMode;
   audio_enabled: boolean;
+  loop_enabled: boolean;
 }
 
 export interface PresentationSlot {
@@ -450,6 +451,7 @@ export interface PresentationSlot {
   duration_seconds: number;
   fit_mode: PresentationFitMode;
   audio_enabled: boolean;
+  loop_enabled: boolean;
   created_at?: string;
   media?: MediaAsset;
 }
@@ -624,7 +626,16 @@ export interface ScreenAvailability {
 export interface ScreenSnapshotScheduleItem extends ScheduleItem {
   presentation?: Presentation & {
     items?: Array<{ id: string; media_id: string; duration_seconds?: number }>;
-    slots?: unknown[];
+    slots?: Array<{
+      id: string;
+      slot_id: string;
+      media_id: string;
+      duration_seconds?: number;
+      fit_mode?: PresentationFitMode;
+      audio_enabled?: boolean;
+      loop_enabled?: boolean;
+      media?: MediaAsset | null;
+    }>;
   };
 }
 
@@ -954,6 +965,9 @@ export interface ScheduleRequest {
   notes?: string | null;
   status?: ScheduleRequestStatus;
   reservation_summary?: ReservationSummary | null;
+  taken_down_at?: string | null;
+  taken_down_by?: string | null;
+  takedown_reason?: string | null;
   created_at?: string;
 }
 
@@ -963,6 +977,7 @@ export type ScheduleRequestStatus =
   | "REJECTED"
   | "CANCELLED"
   | "PUBLISHED"
+  | "TAKEN_DOWN"
   | "EXPIRED"
   | string;
 
@@ -1001,6 +1016,9 @@ export interface ScheduleRequestListItem {
   screens?: Screen[];
   screen_groups?: ScreenGroup[];
   reservation_summary?: ReservationSummary | null;
+  taken_down_at?: string | null;
+  taken_down_by?: string | null;
+  takedown_reason?: string | null;
 }
 
 export interface ScheduleRequestPagination {
@@ -1025,6 +1043,7 @@ export interface ScheduleRequestStatusSummary {
     approved: number;
     rejected: number;
     published: number;
+    taken_down: number;
     expired: number;
   };
 }
@@ -1038,6 +1057,7 @@ export interface DeviceScheduleItem {
   media_url?: string;
   sha256?: string;
   muted?: boolean;
+  loop?: boolean;
   [key: string]: unknown;
 }
 
@@ -1068,6 +1088,11 @@ export interface ScheduleRequestReviewResponse {
   reviewed_at?: string;
   review_notes?: string | null;
   reservation_summary?: ReservationSummary | null;
+  taken_down_at?: string | null;
+  taken_down_by?: string | null;
+  takedown_reason?: string | null;
+  resolved_screen_ids?: string[];
+  message?: string;
 }
 
 export interface ScheduleRequestPublishResponse {

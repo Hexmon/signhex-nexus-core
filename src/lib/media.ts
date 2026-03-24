@@ -3,6 +3,10 @@ type MediaLike = {
   name?: string | null;
   filename?: string | null;
   display_name?: string | null;
+  type?: string | null;
+  content_type?: string | null;
+  source_content_type?: string | null;
+  media_url?: string | null;
 };
 
 const trimToUndefined = (value?: string | null) => {
@@ -32,3 +36,25 @@ export const resolveMediaDisplayName = (media?: MediaLike | null) =>
 
 export const resolveMediaFilename = (media?: MediaLike | null) =>
   trimToUndefined(media?.filename) ?? trimToUndefined(media?.name) ?? trimToUndefined(media?.id) ?? "file";
+
+export const resolveMediaMimeType = (media?: MediaLike | null) =>
+  trimToUndefined(media?.source_content_type) ?? trimToUndefined(media?.content_type);
+
+export const resolveMediaPreviewType = (media?: MediaLike | null) => {
+  const explicitType = trimToUndefined(media?.type)?.toUpperCase();
+  if (explicitType === "IMAGE" || explicitType === "VIDEO" || explicitType === "DOCUMENT") {
+    return explicitType;
+  }
+
+  const mimeType = resolveMediaMimeType(media)?.toLowerCase();
+  if (mimeType?.startsWith("image/")) return "IMAGE";
+  if (mimeType?.startsWith("video/")) return "VIDEO";
+  return "DOCUMENT";
+};
+
+export const isPdfLikeMedia = (media?: MediaLike | null) => {
+  const mimeType = resolveMediaMimeType(media)?.toLowerCase();
+  if (mimeType?.includes("pdf")) return true;
+  const mediaUrl = trimToUndefined(media?.media_url)?.toLowerCase();
+  return Boolean(mediaUrl && /\.pdf(\?|#|$)/.test(mediaUrl));
+};

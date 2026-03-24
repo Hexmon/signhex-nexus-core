@@ -30,6 +30,7 @@ const STATUS_TABS = [
   { key: "approved", label: "Approved", apiStatus: "APPROVED" },
   { key: "rejected", label: "Rejected", apiStatus: "REJECTED" },
   { key: "published", label: "Published", apiStatus: "PUBLISHED" },
+  { key: "taken_down", label: "Taken Down", apiStatus: "TAKEN_DOWN" },
   { key: "expired", label: "Expired", apiStatus: "EXPIRED" },
 ] as const;
 
@@ -86,6 +87,7 @@ export default function ScheduleQueue() {
     approved: 1,
     rejected: 1,
     published: 1,
+    taken_down: 1,
     expired: 1,
   });
   const [tabTotals, setTabTotals] = useState<Partial<Record<TabKey, number>>>({});
@@ -229,7 +231,7 @@ export default function ScheduleQueue() {
 
         {/* Status Tabs */}
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabKey)} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             {STATUS_TABS.map((tab) => (
               <TabsTrigger key={tab.key} value={tab.key}>
                 {tab.label}

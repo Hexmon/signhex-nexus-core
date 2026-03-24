@@ -12,6 +12,7 @@ import {
   Upload,
   Copy,
   Eye,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -36,7 +37,7 @@ interface RequestDetailDrawerProps {
   onClose: () => void;
 }
 
-type ActionType = "approve" | "reject" | "approve_publish";
+type ActionType = "approve" | "reject" | "approve_publish" | "take_down";
 
 type LayoutSlot = {
   id: string;
@@ -104,7 +105,7 @@ const normalizeLayoutSlots = (spec?: unknown): LayoutSlot[] => {
 };
 
 export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerProps) {
-  const { can, isLoading: isAuthzLoading } = useAuthorization();
+  const { can, isAdminOrSuperAdmin, isLoading: isAuthzLoading } = useAuthorization();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentRequest, setCurrentRequest] = useState(request);
@@ -120,6 +121,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
   const canPublish = can("publish", "Schedule") || can("manage", "Schedule");
   const allowApprove = !isAuthzLoading && canApprove;
   const allowPublish = !isAuthzLoading && canPublish;
+  const allowTakeDown = !isAuthzLoading && isAdminOrSuperAdmin;
 
   const mediaItems = useMemo(() => currentRequest.media ?? [], [currentRequest.media]);
   const presentations = useMemo(() => currentRequest.presentations ?? [], [currentRequest.presentations]);
@@ -243,18 +245,43 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
     },
   });
 
+  const takeDownMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      scheduleRequestsApi.takeDown(id, reason ? { reason } : undefined),
+    onSuccess: (data) => {
+      setCurrentRequest((prev) => ({
+        ...prev,
+        status: data.status ?? "TAKEN_DOWN",
+        taken_down_at: data.taken_down_at ?? prev.taken_down_at ?? new Date().toISOString(),
+        taken_down_by: data.taken_down_by ?? prev.taken_down_by ?? null,
+        takedown_reason: data.takedown_reason ?? prev.takedown_reason ?? null,
+        reservation_summary: data.reservation_summary ?? prev.reservation_summary ?? null,
+      }));
+      void invalidateList();
+      toast({
+        title: "Schedule taken down",
+        description: data.message ?? "Published schedule removed from targeted screens.",
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Unable to take down schedule.";
+      toast({ title: "Take down failed", description: message, variant: "destructive" });
+    },
+  });
+
   const statusUpper = (currentRequest.status || "").toUpperCase();
   const isExpiredRequest =
     statusUpper === "EXPIRED" || Boolean(currentRequest.schedule_time_status?.is_expired);
   const showPublishOnly = !isExpiredRequest && statusUpper === "APPROVED";
-  const showActions =
-    !isExpiredRequest && statusUpper !== "PUBLISHED" && statusUpper !== "REJECTED";
+  const showActions = !isExpiredRequest && (statusUpper === "PENDING" || statusUpper === "APPROVED");
+  const showTakeDownAction = statusUpper === "PUBLISHED";
 
   const isMutating =
     approveMutation.isPending ||
     rejectMutation.isPending ||
     publishMutation.isPending ||
-    approvePublishMutation.isPending;
+    approvePublishMutation.isPending ||
+    takeDownMutation.isPending;
 
   const handleActionConfirm = () => {
     if (!actionDialog) return;
@@ -267,6 +294,9 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
     }
     if (actionDialog === "approve_publish") {
       approvePublishMutation.mutate({ id: currentRequest.id, comment });
+    }
+    if (actionDialog === "take_down") {
+      takeDownMutation.mutate({ id: currentRequest.id, reason: comment });
     }
     setActionDialog(null);
     setActionComment("");
@@ -354,6 +384,19 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
             )}
           </div>
         )}
+        {showTakeDownAction && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setActionDialog("take_down")}
+              disabled={!allowTakeDown || isMutating}
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Take Down Schedule
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -438,6 +481,18 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
                       <p className="text-sm text-muted-foreground mb-2">Review Notes</p>
                       <div className="rounded-md border bg-muted/40 p-3 text-sm">
                         {currentRequest.review_notes}
+                      </div>
+                    </div>
+                  )}
+
+                  {currentRequest.taken_down_at && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Take Down</p>
+                      <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+                        <p>Taken down at: {formatDateTime(currentRequest.taken_down_at)}</p>
+                        {currentRequest.takedown_reason ? (
+                          <p>Reason: {currentRequest.takedown_reason}</p>
+                        ) : null}
                       </div>
                     </div>
                   )}
@@ -774,14 +829,26 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
               {actionDialog === "approve" && "Approve request"}
               {actionDialog === "reject" && "Reject request"}
               {actionDialog === "approve_publish" && "Approve & publish"}
+              {actionDialog === "take_down" && "Take down published schedule"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <label className="text-sm text-muted-foreground">Comment (optional)</label>
+            <p className="text-sm text-muted-foreground">
+              {actionDialog === "take_down"
+                ? "This published schedule will be removed from all targeted screens. If another published schedule still applies, it will become active automatically; otherwise the screen falls back to default media."
+                : "Add an optional note for this action."}
+            </p>
+            <label className="text-sm text-muted-foreground">
+              {actionDialog === "take_down" ? "Reason (optional)" : "Comment (optional)"}
+            </label>
             <Textarea
               value={actionComment}
               onChange={(event) => setActionComment(event.target.value)}
-              placeholder="Add a note for this action"
+              placeholder={
+                actionDialog === "take_down"
+                  ? "Add an optional takedown note"
+                  : "Add a note for this action"
+              }
               rows={4}
             />
           </div>
