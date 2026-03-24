@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Activity, Clock3, ExternalLink, ImageOff, Monitor, RadioTower } from "lucide-react";
+import { Activity, Clock3, ExternalLink, Monitor, RadioTower } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
-import type { ScreenOverviewItem } from "@/api/types";
+import type { ScreenOverviewItem, ScreenSnapshot, ScreenStateUpdateEvent, ScreenRefreshRequiredEvent } from "@/api/types";
 import { useScreensRealtime } from "@/hooks/screens/useScreensRealtime";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
+import { LiveScreenMirror } from "@/components/dashboard/LiveScreenMirror";
 
 interface OnlineScreensDetailsModalProps {
   open: boolean;
@@ -46,29 +47,43 @@ const sourceLabel = (source?: string | null) => {
   }
 };
 
-function PreviewCard({ screen, onOpenDetails }: { screen: ScreenOverviewItem; onOpenDetails: (screenId: string) => void }) {
+function PreviewCard({
+  screen,
+  onOpenDetails,
+  enabled,
+  clockTick,
+}: {
+  screen: ScreenOverviewItem;
+  onOpenDetails: (screenId: string) => void;
+  enabled: boolean;
+  clockTick: number;
+}) {
   const preview = screen.preview;
   const currentMediaName =
     screen.playback?.current_media?.name ||
     screen.playback?.current_media?.filename ||
     (screen.playback?.current_media_id ? `Media ${screen.playback.current_media_id}` : null);
+  const snapshotQuery = useQuery({
+    queryKey: queryKeys.screenSnapshot(screen.id),
+    queryFn: () => screensApi.getSnapshot(screen.id, true),
+    enabled,
+    staleTime: 30_000,
+  });
+  const snapshotErrorMessage =
+    snapshotQuery.error instanceof Error ? snapshotQuery.error.message : snapshotQuery.error ? "Unable to load live snapshot." : null;
 
   return (
     <Card data-testid="online-screen-card" className="overflow-hidden">
-      <div className="relative flex aspect-video items-center justify-center bg-muted/40">
-        {preview?.screenshot_url ? (
-          <img
-            src={preview.screenshot_url}
-            alt={`${screen.name} live preview`}
-            className="h-full w-full object-contain"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <ImageOff className="h-8 w-8" />
-            <span className="text-sm">No screenshot yet</span>
-          </div>
-        )}
+      <div className="relative bg-muted/40">
+        <LiveScreenMirror
+          snapshot={snapshotQuery.data}
+          fallbackAspectRatio={screen.aspect_ratio}
+          fallbackPreviewUrl={preview?.screenshot_url}
+          isLoading={snapshotQuery.isLoading}
+          errorMessage={snapshotErrorMessage}
+          clockTick={clockTick}
+          className="w-full"
+        />
 
         <div className="absolute left-3 top-3 flex gap-2">
           <Badge variant="secondary">{sourceLabel(screen.playback?.source)}</Badge>
@@ -114,6 +129,20 @@ function PreviewCard({ screen, onOpenDetails }: { screen: ScreenOverviewItem; on
 
 export function OnlineScreensDetailsModal({ open, onOpenChange }: OnlineScreensDetailsModalProps) {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [clockTick, setClockTick] = useState(0);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setClockTick((current) => current + 1);
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, [open]);
 
   const overviewQuery = useQuery({
     queryKey: queryKeys.screensOverview({ includeMedia: true, includePreview: true, onlineOnly: true }),
@@ -143,11 +172,47 @@ export function OnlineScreensDetailsModal({ open, onOpenChange }: OnlineScreensD
     [overviewQuery.data?.screens],
   );
 
+  const handleRealtimeRefresh = useCallback(
+    (payload: ScreenRefreshRequiredEvent) => {
+      for (const screenId of payload.screen_ids ?? []) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.screenSnapshot(screenId) });
+      }
+    },
+    [queryClient],
+  );
+
+  const handleRealtimeStateUpdate = useCallback(
+    (payload: ScreenStateUpdateEvent) => {
+      const cacheKey = queryKeys.screenSnapshot(payload.screen.id);
+      let shouldRefetch = false;
+
+      queryClient.setQueryData(cacheKey, (current: ScreenSnapshot | undefined) => {
+        if (!current) return current;
+
+        const nextSnapshotId = payload.screen.publish?.snapshot_id ?? null;
+        const currentSnapshotId = current.publish?.snapshot_id ?? null;
+        shouldRefetch = Boolean(nextSnapshotId && nextSnapshotId !== currentSnapshotId);
+
+        return {
+          ...current,
+          server_time: payload.server_time ?? current.server_time,
+        };
+      });
+
+      if (shouldRefetch) {
+        void queryClient.invalidateQueries({ queryKey: cacheKey });
+      }
+    },
+    [queryClient],
+  );
+
   const { isConnected, rejectedScreenIds, pendingEmergencyScreenIds } = useScreensRealtime({
     enabled: open,
     activeScreenId: selectedScreenId,
     includePreview: true,
     onlineOnly: true,
+    onRefreshRequired: handleRealtimeRefresh,
+    onStateUpdate: handleRealtimeStateUpdate,
   });
 
   return (
@@ -157,7 +222,7 @@ export function OnlineScreensDetailsModal({ open, onOpenChange }: OnlineScreensD
           <DialogHeader>
             <DialogTitle>Online Screens Details</DialogTitle>
             <DialogDescription>
-              Live operational view of online screens with actual playback and latest captured preview.
+              Live operational view of online screens with mirrored playback and latest captured preview metadata.
             </DialogDescription>
           </DialogHeader>
 
@@ -203,7 +268,13 @@ export function OnlineScreensDetailsModal({ open, onOpenChange }: OnlineScreensD
               className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
             >
               {onlineScreens.map((screen) => (
-                <PreviewCard key={screen.id} screen={screen} onOpenDetails={setSelectedScreenId} />
+                <PreviewCard
+                  key={screen.id}
+                  screen={screen}
+                  onOpenDetails={setSelectedScreenId}
+                  enabled={open}
+                  clockTick={clockTick}
+                />
               ))}
             </div>
           )}

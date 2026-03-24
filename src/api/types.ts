@@ -640,6 +640,7 @@ export interface ScreenSnapshotScheduleItem extends ScheduleItem {
 }
 
 export interface ScreenSnapshot {
+  server_time?: string;
   screen_id?: string;
   group_id?: string;
   name?: string;
