@@ -62,6 +62,13 @@ export const schedulesApi = {
       method: "GET",
     }),
 
+  takeDownPublish: (publishId: string, payload?: { reason?: string }) =>
+    apiClient.request<Publish & { resolved_screen_ids?: string[]; message?: string }>({
+      path: endpoints.schedules.takeDownPublish(publishId),
+      method: "POST",
+      body: payload,
+    }),
+
   listPublishes: (scheduleId: string) =>
     apiClient.request<Publish[]>({
       path: endpoints.schedules.publishesForSchedule(scheduleId),

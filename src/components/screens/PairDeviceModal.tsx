@@ -97,7 +97,7 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
           location: recoveryScreen?.location || current.location,
         }));
       }
-      toast.success("Recovery code generated.");
+      toast.success("Recovery code generated. Older recovery codes are now invalid.");
     },
   }, "Unable to generate recovery code.");
 
@@ -251,6 +251,9 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
                     Recovery pending until {formatDateTime(activeRecovery.expires_at)}
                   </Badge>
                 ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Only the most recently generated recovery code remains valid for this screen.
+                </p>
               </Card>
 
               {generatedCode ? (

@@ -544,6 +544,7 @@ export interface ScreenOverviewItem extends Screen {
   } | null;
   active_pairing?: {
     id?: string;
+    pairing_code?: string | null;
     created_at?: string | null;
     expires_at?: string | null;
     confirmed?: boolean;
@@ -1111,6 +1112,11 @@ export interface Publish {
   id: string;
   schedule_id: string;
   snapshot_id?: string;
+  status?: "ACTIVE" | "TAKEN_DOWN";
+  published_at?: string;
+  taken_down_at?: string | null;
+  taken_down_by?: string | null;
+  takedown_reason?: string | null;
   targets?: Array<{ id: string; status: string; error?: string | null }>;
 }
 

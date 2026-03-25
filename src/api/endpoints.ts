@@ -128,6 +128,7 @@ export const endpoints = {
     publish: (scheduleId: string) => `/schedules/${scheduleId}/publish`,
     items: (scheduleId: string) => `/schedules/${scheduleId}/items`,
     publishById: (publishId: string) => `/publishes/${publishId}`,
+    takeDownPublish: (publishId: string) => `/publishes/${publishId}/take-down`,
     publishesForSchedule: (scheduleId: string) => `/schedules/${scheduleId}/publishes`,
     publishTarget: (publishId: string, targetId: string) => `/publishes/${publishId}/targets/${targetId}`,
   },

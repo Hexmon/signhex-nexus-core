@@ -196,7 +196,7 @@ export function LiveScreenMirror({
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
           <ImageOff className="h-8 w-8" />
-          <span className="text-sm">No live playback content</span>
+          <span className="text-sm">Screen is online, but no schedule or default media is assigned yet.</span>
         </div>
       )}
     </div>
