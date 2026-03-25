@@ -1,12 +1,12 @@
 import { Mail, Calendar, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { Role } from "@/api/types";
+import { getRoleBadgeClass } from "@/lib/roleBadges";
 
 interface Invitation {
     id: string;
     email?: string;
-    role?: Role;
+    role?: string;
     invited_at?: string;
     expires_at?: string;
     status?: string;
@@ -15,15 +15,6 @@ interface Invitation {
 interface InvitationCardProps {
     invitation: Invitation;
 }
-
-const getRoleBadgeColor = (role: Role): string => {
-    const colors: Record<Role, string> = {
-        ADMIN: "bg-purple-500/10 text-purple-700",
-        OPERATOR: "bg-blue-500/10 text-blue-700",
-        DEPARTMENT: "bg-green-500/10 text-green-700",
-    };
-    return colors[role] || "bg-gray-500/10 text-gray-700";
-};
 
 const formatDate = (dateString?: string): string => {
     if (!dateString) return "N/A";
@@ -49,7 +40,7 @@ export function InvitationCard({ invitation }: InvitationCardProps) {
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         {email || "No email"}
                     </CardTitle>
-                    {role && <Badge className={getRoleBadgeColor(role)}>{role}</Badge>}
+                    {role && <Badge className={getRoleBadgeClass(role)}>{role}</Badge>}
                 </div>
             </CardHeader>
             <CardContent className="space-y-3">

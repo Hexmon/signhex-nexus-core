@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Mail, Clock, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { UserForm } from "@/components/users/UserForm";
 import { InviteUserForm } from "@/components/users/InviteUserForm";
 import { InvitationCard } from "@/components/users/InvitationCard";
@@ -14,44 +15,100 @@ import type { UserFormData, InviteFormData } from "@/types/user";
 import { useUsersApi } from "@/hooks/useUsersApi";
 import { UserCard } from "@/components/users/UserCard";
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
+import { PageNavigation } from "@/components/common/PageNavigation";
+import { useAppSelector } from "@/store/hooks";
+import { canManageUserTarget } from "@/lib/access";
+
+const PAGE_SIZE = 9;
 
 export default function Users() {
+    const currentUser = useAppSelector((state) => state.auth.user);
+    const canManageUsers = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN" || currentUser?.role === "DEPARTMENT";
     const [searchQuery, setSearchQuery] = useState("");
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isInviteOpen, setIsInviteOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState("users");
+    const [usersPage, setUsersPage] = useState(1);
+    const [invitationsPage, setInvitationsPage] = useState(1);
 
-    const { listUsers, createUser, updateUser, deleteUser, listInvitations, inviteUser } = useUsersApi();
-    const { data, isLoading } = listUsers;
-    const { data: invitationsData, isLoading: isLoadingInvitations } = listInvitations;
-    const users = data?.items || [];
-    const invitations = invitationsData?.items || [];
-
-    const filteredUsers = users.filter((user) => {
-        const query = searchQuery.toLowerCase();
-        const { email, first_name, last_name, role } = user;
-
-        return (
-            query === "" ||
-            email.toLowerCase().includes(query) ||
-            (first_name || "").toLowerCase().includes(query) ||
-            (last_name || "").toLowerCase().includes(query) ||
-            role.toLowerCase().includes(query)
-        );
+    const { listUsers, createUser, updateUser, deleteUser, listInvitations, inviteUser } = useUsersApi({
+        usersPage,
+        usersLimit: PAGE_SIZE,
+        invitationsPage,
+        invitationsLimit: PAGE_SIZE,
+        enableInvitations: canManageUsers,
     });
+    const { data, isLoading, error: usersError } = listUsers;
+    const { data: invitationsData, isLoading: isLoadingInvitations, error: invitationsError } = listInvitations;
+    const users = useMemo(() => data?.items ?? [], [data?.items]);
+    const invitations = useMemo(() => invitationsData?.items ?? [], [invitationsData?.items]);
+    const usersErrorMessage = usersError ? mapUsersErrorToUx(usersError, "Failed to load users") : null;
+    const invitationsErrorMessage = invitationsError
+        ? mapUsersErrorToUx(invitationsError, "Failed to load invitations")
+        : null;
 
-    const filteredInvitations = invitations.filter((invitation) => {
-        const query = searchQuery.toLowerCase();
-        const { email, role } = invitation;
+    const filteredUsers = useMemo(
+        () =>
+            users.filter((user) => {
+                const query = searchQuery.toLowerCase();
+                const { email, first_name, last_name, role } = user;
 
-        return (
-            query === "" ||
-            (email || "").toLowerCase().includes(query) ||
-            (role || "").toLowerCase().includes(query)
-        );
-    });
+                return (
+                    query === "" ||
+                    email.toLowerCase().includes(query) ||
+                    (first_name || "").toLowerCase().includes(query) ||
+                    (last_name || "").toLowerCase().includes(query) ||
+                        (role || "").toLowerCase().includes(query)
+                );
+            }),
+        [users, searchQuery],
+    );
+
+    const filteredInvitations = useMemo(
+        () =>
+            invitations.filter((invitation) => {
+                const query = searchQuery.toLowerCase();
+                const { email, role } = invitation;
+
+                return (
+                    query === "" ||
+                    (email || "").toLowerCase().includes(query) ||
+                    (role || "").toLowerCase().includes(query)
+                );
+            }),
+        [invitations, searchQuery],
+    );
+    const visibleUsers = useMemo(
+        () =>
+            filteredUsers.map((user) => ({
+                user,
+                canManageTarget: canManageUserTarget(currentUser, user.role, user.department_id),
+            })),
+        [currentUser, filteredUsers],
+    );
+
+    const usersTotalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+    const invitationsTotalPages = Math.max(1, Math.ceil((invitationsData?.total ?? 0) / PAGE_SIZE));
+
+    useEffect(() => {
+        setUsersPage(1);
+        setInvitationsPage(1);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (usersPage > usersTotalPages) {
+            setUsersPage(usersTotalPages);
+        }
+    }, [usersPage, usersTotalPages]);
+
+    useEffect(() => {
+        if (invitationsPage > invitationsTotalPages) {
+            setInvitationsPage(invitationsTotalPages);
+        }
+    }, [invitationsPage, invitationsTotalPages]);
 
     const handleCreateUser = (formData: UserFormData) => {
         createUser.mutate(
@@ -60,7 +117,7 @@ export default function Users() {
                 password: formData.password || "",
                 first_name: formData.first_name,
                 last_name: formData.last_name,
-                role: formData.role,
+                role_id: formData.role_id,
                 department_id: formData.department_id || undefined,
             },
             {
@@ -75,7 +132,7 @@ export default function Users() {
         inviteUser.mutate(
             {
                 email: formData.email,
-                role: formData.role,
+                role_id: formData.role_id,
                 department_id: formData.department_id || undefined,
             },
             {
@@ -95,7 +152,7 @@ export default function Users() {
                 payload: {
                     first_name: formData.first_name,
                     last_name: formData.last_name,
-                    role: formData.role,
+                    role_id: formData.role_id,
                     department_id: formData.department_id || undefined,
                     is_active: formData.is_active,
                 },
@@ -127,24 +184,26 @@ export default function Users() {
                         Manage user accounts, roles, and permissions
                     </p>
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add User
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setIsCreateOpen(true)}>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Create User Directly
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setIsInviteOpen(true)}>
-                            <Mail className="mr-2 h-4 w-4" />
-                            Send Invitation
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                {canManageUsers ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add User
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setIsCreateOpen(true)}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Create User Directly
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setIsInviteOpen(true)}>
+                                <Mail className="mr-2 h-4 w-4" />
+                                Send Invitation
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : null}
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -152,10 +211,12 @@ export default function Users() {
                     <TabsTrigger value="users">
                         Active Users ({users.length})
                     </TabsTrigger>
-                    <TabsTrigger value="invitations">
-                        <Mail className="mr-2 h-4 w-4" />
-                        Pending Invitations ({invitations.length})
-                    </TabsTrigger>
+                    {canManageUsers ? (
+                        <TabsTrigger value="invitations">
+                            <Mail className="mr-2 h-4 w-4" />
+                            Pending Invitations ({invitations.length})
+                        </TabsTrigger>
+                    ) : null}
                 </TabsList>
 
                 <div className="mt-6 flex items-center gap-4">
@@ -169,15 +230,21 @@ export default function Users() {
                         />
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {activeTab === "users"
-                            ? `${filteredUsers.length} ${filteredUsers.length === 1 ? "user" : "users"}`
-                            : `${filteredInvitations.length} ${filteredInvitations.length === 1 ? "invitation" : "invitations"}`
+                        {activeTab === "users" || !canManageUsers
+                            ? `${data?.total ?? filteredUsers.length} ${(data?.total ?? filteredUsers.length) === 1 ? "user" : "users"}`
+                            : `${invitationsData?.total ?? filteredInvitations.length} ${(invitationsData?.total ?? filteredInvitations.length) === 1 ? "invitation" : "invitations"}`
                         }
                     </div>
                 </div>
 
                 <TabsContent value="users" className="mt-6">
-                    {isLoading ? (
+                    {usersErrorMessage ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                {usersErrorMessage.message}
+                            </AlertDescription>
+                        </Alert>
+                    ) : isLoading ? (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {Array.from({ length: 6 }).map((_, idx) => (
                                 <Skeleton key={idx} className="h-40" />
@@ -188,21 +255,37 @@ export default function Users() {
                             <p className="text-muted-foreground">No users found</p>
                         </div>
                     ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {filteredUsers.map((user) => (
-                                <UserCard
-                                    key={user.id}
-                                    user={user}
-                                    onEdit={() => setEditingUser(user)}
-                                    onDelete={() => setDeletingUser(user)}
-                                />
-                            ))}
+                        <div className="space-y-6">
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {visibleUsers.map(({ user, canManageTarget }) => (
+                                    <UserCard
+                                        key={user.id}
+                                        user={user}
+                                        onEdit={() => setEditingUser(user)}
+                                        onDelete={() => setDeletingUser(user)}
+                                        canEdit={canManageTarget}
+                                        canDelete={canManageTarget}
+                                    />
+                                ))}
+                            </div>
+                            <PageNavigation
+                                currentPage={usersPage}
+                                totalPages={usersTotalPages}
+                                onPageChange={setUsersPage}
+                            />
                         </div>
                     )}
                 </TabsContent>
 
+                {canManageUsers ? (
                 <TabsContent value="invitations" className="mt-6">
-                    {isLoadingInvitations ? (
+                    {invitationsErrorMessage ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                {invitationsErrorMessage.message}
+                            </AlertDescription>
+                        </Alert>
+                    ) : isLoadingInvitations ? (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {Array.from({ length: 3 }).map((_, idx) => (
                                 <Skeleton key={idx} className="h-32" />
@@ -218,20 +301,28 @@ export default function Users() {
                             </Button>
                         </div>
                     ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {filteredInvitations.map((invitation) => (
-                                <InvitationCard
-                                    key={invitation.id}
-                                    invitation={invitation}
-                                />
-                            ))}
+                        <div className="space-y-6">
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {filteredInvitations.map((invitation) => (
+                                    <InvitationCard
+                                        key={invitation.id}
+                                        invitation={invitation}
+                                    />
+                                ))}
+                            </div>
+                            <PageNavigation
+                                currentPage={invitationsPage}
+                                totalPages={invitationsTotalPages}
+                                onPageChange={setInvitationsPage}
+                            />
                         </div>
                     )}
                 </TabsContent>
+                ) : null}
             </Tabs>
 
             {/* Create User Dialog */}
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <Dialog open={canManageUsers && isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Create New User</DialogTitle>
@@ -248,7 +339,7 @@ export default function Users() {
             </Dialog>
 
             {/* Invite User Dialog */}
-            <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+            <Dialog open={canManageUsers && isInviteOpen} onOpenChange={setIsInviteOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Invite User</DialogTitle>

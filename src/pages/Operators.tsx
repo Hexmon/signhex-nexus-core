@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus, EyeOff, Eye } from "lucide-react";
+import { Mail, Shield, User, MoreVertical, Edit, Trash2, RefreshCw, CheckCircle, Plus, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usersApi } from "@/api/domains/users";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { User as ApiUser } from "@/api/types";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/api/apiClient";
@@ -26,17 +25,20 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { queryKeys } from "@/api/queryKeys";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
+import { useRolesList } from "@/hooks/useRolesApi";
+import { getRoleBadgeClass } from "@/lib/roleBadges";
+import { PageNavigation } from "@/components/common/PageNavigation";
+import { useAppSelector } from "@/store/hooks";
+import { departmentsApi } from "@/api/domains/departments";
+import { canManageOperatorsModule, isAdminLike } from "@/lib/access";
 
-const roleColor: Record<string, string> = {
-  ADMIN: "bg-purple-500/10 text-purple-700",
-  OPERATOR: "bg-blue-500/10 text-blue-700",
-  DEPARTMENT: "bg-emerald-500/10 text-emerald-700",
-};
+const PAGE_SIZE = 9;
 
 export default function Operators() {
-  const [showPassword, setShowPassword] = useState(false);
+  const currentUser = useAppSelector((state) => state.auth.user);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null);
@@ -44,19 +46,36 @@ export default function Operators() {
     email: "",
     first_name: "",
     last_name: "",
-    role: "OPERATOR",
+    role_id: "",
     department_id: "",
     password: "",
+    confirm_password: "",
   });
   const [pendingActionUser, setPendingActionUser] = useState<ApiUser | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isActivateConfirmOpen, setIsActivateConfirmOpen] = useState(false);
+  const operatorsQueryKey = ["users", "operators", page, PAGE_SIZE] as const;
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: () => usersApi.list({ page: 1, limit: 100 }),
+    queryKey: operatorsQueryKey,
+    queryFn: () => usersApi.list({ page, limit: PAGE_SIZE, role: "OPERATOR" }),
+    placeholderData: (previousData) => previousData,
   });
+
+  const { data: rolesData, isLoading: isRolesLoading } = useRolesList();
+  const roles = useMemo(() => rolesData?.items ?? [], [rolesData?.items]);
+  const operatorRole = useMemo(() => roles.find((role) => role.name === "OPERATOR") ?? null, [roles]);
+  const canManageOperators = canManageOperatorsModule(currentUser);
+  const canPickDepartment = isAdminLike(currentUser?.role);
+  const { data: departmentsData, isLoading: isDepartmentsLoading } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
+    enabled: canPickDepartment,
+  });
+  const departments = departmentsData?.items ?? [];
+  const departmentMap = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
+  const passwordMismatch = !selectedUser && Boolean(formData.confirm_password) && formData.password !== formData.confirm_password;
 
   useEffect(() => {
     if (isError) {
@@ -80,6 +99,17 @@ export default function Operators() {
       }),
     [users, searchQuery]
   );
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   useEffect(() => {
     if (selectedUser) {
@@ -87,31 +117,44 @@ export default function Operators() {
         email: selectedUser.email,
         first_name: selectedUser.first_name ?? "",
         last_name: selectedUser.last_name ?? "",
-        role: selectedUser.role,
-        department_id: selectedUser.department_id ?? "",
+        role_id: operatorRole?.id ?? selectedUser.role_id,
+        department_id:
+          currentUser?.role === "DEPARTMENT" ? currentUser.department_id ?? "" : selectedUser.department_id ?? "",
         password: "",
+        confirm_password: "",
       });
     } else {
       setFormData({
         email: "",
         first_name: "",
         last_name: "",
-        role: "OPERATOR",
-        department_id: "",
+        role_id: operatorRole?.id ?? "",
+        department_id: currentUser?.role === "DEPARTMENT" ? currentUser.department_id ?? "" : "",
         password: "",
+        confirm_password: "",
       });
     }
-  }, [selectedUser, isFormOpen]);
+  }, [currentUser?.department_id, currentUser?.role, isFormOpen, operatorRole?.id, selectedUser]);
+
+  useEffect(() => {
+    if (operatorRole && formData.role_id !== operatorRole.id) {
+      setFormData((prev) => ({ ...prev, role_id: operatorRole.id }));
+    }
+  }, [formData.role_id, operatorRole]);
 
   const createOrUpdate = useSafeMutation({
     mutationFn: async () => {
+      if (!selectedUser && formData.password !== formData.confirm_password) {
+        throw new Error("Password and confirm password must match.");
+      }
+
       if (selectedUser) {
         // Update existing user
         const payload = {
           email: formData.email.trim(),
           first_name: formData.first_name.trim() || undefined,
           last_name: formData.last_name.trim() || undefined,
-          role: formData.role as ApiUser["role"],
+          role_id: formData.role_id,
           department_id: formData.department_id.trim() || undefined,
         };
         return usersApi.update(selectedUser.id, payload);
@@ -122,7 +165,7 @@ export default function Operators() {
         email: formData.email.trim(),
         first_name: formData.first_name.trim() || undefined,
         last_name: formData.last_name.trim() || undefined,
-        role: formData.role as ApiUser["role"],
+        role_id: formData.role_id,
         department_id: formData.department_id.trim() || undefined,
         password: formData.password,
       };
@@ -130,6 +173,7 @@ export default function Operators() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setIsFormOpen(false);
       setSelectedUser(null);
     },
@@ -139,6 +183,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setPendingActionUser(null);
       setIsDeleteConfirmOpen(false);
     },
@@ -161,6 +206,7 @@ export default function Operators() {
     mutationFn: (id: string) => usersApi.update(id, { is_active: true } as Partial<ApiUser>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      queryClient.invalidateQueries({ queryKey: ["users", "operators"] });
       setPendingActionUser(null);
       setIsActivateConfirmOpen(false);
     },
@@ -171,12 +217,16 @@ export default function Operators() {
       <PageHeader
         title="Operators"
         description="Manage system operators and their permissions."
-        actionLabel="Add Operator"
-        actionIcon={<Plus className="h-4 w-4" />}
-        onAction={() => {
-          setSelectedUser(null);
-          setIsFormOpen(true);
-        }}
+        actionLabel={canManageOperators ? "Add Operator" : undefined}
+        actionIcon={canManageOperators ? <Plus className="h-4 w-4" /> : undefined}
+        onAction={
+          canManageOperators
+            ? () => {
+                setSelectedUser(null);
+                setIsFormOpen(true);
+              }
+            : undefined
+        }
       />
 
       <div className="flex items-center gap-4 flex-wrap">
@@ -184,7 +234,7 @@ export default function Operators() {
           <SearchBar placeholder="Search operators..." onSearch={setSearchQuery} initialValue={searchQuery} />
         </div>
         <div className="text-sm text-muted-foreground">
-          {isFetching ? "Refreshing..." : `${filtered.length} operators`}
+          {isFetching ? "Refreshing..." : `${data?.total ?? filtered.length} operators`}
         </div>
       </div>
 
@@ -193,9 +243,10 @@ export default function Operators() {
       ) : filtered.length === 0 ? (
         <EmptyState title="No operators found" description="Try adjusting your search or add a new operator." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((operator: ApiUser) => (
-            <Card key={operator.id} className="hover:shadow-md transition-shadow">
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((operator: ApiUser) => (
+              <Card key={operator.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-full bg-primary/10">
@@ -210,6 +261,7 @@ export default function Operators() {
                     <div className="text-xs text-muted-foreground">{operator.id}</div>
                   </div>
                 </div>
+                {canManageOperators ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -261,10 +313,11 @@ export default function Operators() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                ) : null}
               </CardHeader>
               <CardContent className="pt-0 space-y-3">
                 <div className="flex items-center justify-between">
-                  <Badge className={roleColor[operator.role] ?? "bg-secondary"}>
+                  <Badge className={getRoleBadgeClass(operator.role)}>
                     <Shield className="h-3 w-3 mr-1" />
                     {operator.role}
                   </Badge>
@@ -280,15 +333,17 @@ export default function Operators() {
                 </div>
                 {operator.department_id && (
                   <Badge variant="outline" className="text-xs">
-                    Department: {operator.department_id}
+                    Department: {departmentMap.get(operator.department_id) ?? operator.department_id}
                   </Badge>
                 )}
               </CardContent>
-            </Card>
-          ))}
+              </Card>
+            ))}
+          </div>
+          <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       )}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={canManageOperators && isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>{selectedUser ? "Edit Operator" : "Add Operator"}</DialogTitle>
@@ -328,63 +383,85 @@ export default function Operators() {
               </div>
             </div>
             {!selectedUser && (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     value={formData.password}
                     onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
                     placeholder="Enter initial password"
                     disabled={createOrUpdate.isPending}
-                    className="pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    disabled={createOrUpdate.isPending}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={formData.confirm_password}
+                    onChange={(e) => setFormData((p) => ({ ...p, confirm_password: e.target.value }))}
+                    placeholder="Confirm password"
+                    disabled={createOrUpdate.isPending}
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
                   Set an initial password for the new operator with atleast 8 characters with special character, number, and uppercase letter.
                 </p>
+                {passwordMismatch ? (
+                  <p className="col-span-2 text-xs text-destructive">Password and confirm password must match.</p>
+                ) : null}
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(val) => setFormData((p) => ({ ...p, role: val }))}
-                  disabled={createOrUpdate.isPending}
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="OPERATOR">Operator</SelectItem>
-                    <SelectItem value="DEPARTMENT">Department</SelectItem>
-                  </SelectContent>
-                </Select>
+                {isRolesLoading ? (
+                  <div className="flex items-center gap-2 p-2 border rounded-md">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Loading roles...</span>
+                  </div>
+                ) : !operatorRole ? (
+                  <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                    Operator role is not available
+                  </div>
+                ) : (
+                  <Input id="role" value="Operator" disabled />
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="department">Department ID</Label>
-                <Input
-                  id="department"
-                  value={formData.department_id}
-                  onChange={(e) => setFormData((p) => ({ ...p, department_id: e.target.value }))}
-                  placeholder="optional"
-                  disabled={createOrUpdate.isPending}
-                />
+                <Label htmlFor="department">Department</Label>
+                {!canPickDepartment ? (
+                  <Input id="department" value={currentUser?.department_id ? "Assigned to your department" : "No department assigned"} disabled />
+                ) : isDepartmentsLoading ? (
+                  <div className="flex items-center gap-2 p-2 border rounded-md">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Loading departments...</span>
+                  </div>
+                ) : departments.length === 0 ? (
+                  <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                    No departments available
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.department_id || "none"}
+                    onValueChange={(val) => setFormData((p) => ({ ...p, department_id: val === "none" ? "" : val }))}
+                    disabled={createOrUpdate.isPending}
+                  >
+                    <SelectTrigger id="department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {departments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </div>
@@ -397,7 +474,9 @@ export default function Operators() {
               disabled={
                 createOrUpdate.isPending ||
                 !formData.email.trim() ||
-                (!selectedUser && !formData.password.trim())
+                (!selectedUser && (!formData.password.trim() || !formData.confirm_password.trim() || passwordMismatch)) ||
+                !formData.role_id ||
+                !canManageOperators
               }
             >
               {createOrUpdate.isPending ? "Saving..." : selectedUser ? "Update" : "Create"}

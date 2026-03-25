@@ -10,36 +10,60 @@ export interface ApiRequestOptions<TBody = unknown> {
   body?: TBody;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  timeoutMs?: number;
   useApiKey?: boolean;
   rawBody?: BodyInit; // if you need FormData/Blob; skips JSON stringify
 }
 
 export interface ApiErrorShape {
   status: number;
+  code?: string;
   message: string;
   details?: unknown;
+  traceId?: string;
 }
 
 export class ApiError extends Error {
   status: number;
   details?: unknown;
+  code?: string;
+  traceId?: string;
   constructor(payload: ApiErrorShape) {
     super(payload.message);
     this.name = "ApiError";
     this.status = payload.status;
     this.details = payload.details;
+    this.code = payload.code;
+    this.traceId = payload.traceId;
   }
 }
 
 type TokenProvider = () => string | undefined | null;
+type RefreshedAuthHandler = (payload: { token: string; expiresAt?: string }) => void;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const inferredOrigin = typeof window !== "undefined" && window.location.origin;
-const baseURL = `${"http://localhost:3000"}${API_BASE_PATH}`;
+const inferredOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+const envBaseUrl = import.meta.env.VITE_API_BASE_URL;
+const baseURL = `${envBaseUrl ?? inferredOrigin}${API_BASE_PATH}`;
 const POST_LOGIN_REDIRECT_KEY = "postLoginRedirect";
 
 const sanitizeMessage = (message: unknown) =>
   typeof message === "string" ? message : "Request failed. Please try again.";
+
+type ErrorEnvelope = {
+  success?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+    traceId?: string;
+  };
+};
+
+const parseErrorEnvelope = (payload: unknown): ErrorEnvelope | undefined => {
+  if (!payload || typeof payload !== "object") return undefined;
+  return payload as ErrorEnvelope;
+};
 
 const fillPathParams = (path: string, params?: Record<string, string | number>) =>
   !params
@@ -53,6 +77,7 @@ export class ApiClient {
   private authTokenProvider: TokenProvider = () => undefined;
   private apiKeyProvider: TokenProvider = () => undefined;
   private csrfTokenProvider: TokenProvider = () => undefined;
+  private refreshedAuthHandler?: RefreshedAuthHandler;
   private inflightGetRequests = new Map<string, Promise<unknown>>();
 
   setAuthTokenProvider(getToken: TokenProvider) {
@@ -64,10 +89,13 @@ export class ApiClient {
   setCsrfTokenProvider(getToken: TokenProvider) {
     this.csrfTokenProvider = getToken;
   }
+  setRefreshedAuthHandler(handler: RefreshedAuthHandler) {
+    this.refreshedAuthHandler = handler;
+  }
 
   async request<TResponse, TBody = unknown>(options: ApiRequestOptions<TBody>): Promise<TResponse> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     const pathWithParams = fillPathParams(options.path, options.pathParams);
     const queryString = this.buildQuery(options.query);
@@ -116,14 +144,22 @@ export class ApiClient {
         const contentType = response.headers.get("content-type");
         const isJson = contentType?.includes("application/json");
         const payload = isJson ? await response.json() : await response.text();
+        const refreshedToken = response.headers.get("x-access-token");
+        const refreshedExpiresAt = response.headers.get("x-access-token-expires-at") ?? undefined;
+
+        if (refreshedToken && this.refreshedAuthHandler) {
+          this.refreshedAuthHandler({ token: refreshedToken, expiresAt: refreshedExpiresAt });
+        }
 
         if (!response.ok) {
+          const envelope = isJson ? parseErrorEnvelope(payload) : undefined;
+          const envelopeMessage = envelope?.error?.message;
           throw new ApiError({
             status: response.status,
-            message:
-              (isJson && typeof (payload as any)?.error === "string" && (payload as any).error) ||
-              sanitizeMessage(payload),
-            details: isJson ? payload : undefined,
+            code: envelope?.error?.code,
+            traceId: envelope?.error?.traceId,
+            message: envelopeMessage || sanitizeMessage(payload),
+            details: envelope?.error?.details ?? (isJson ? payload : undefined),
           });
         }
 
@@ -131,15 +167,19 @@ export class ApiClient {
       } catch (error) {
         if (error instanceof ApiError) {
           if (typeof window !== "undefined" && error.status === 401 && !options.path.includes("/auth/login")) {
-            try {
-              sessionStorage.setItem(
-                POST_LOGIN_REDIRECT_KEY,
-                window.location.pathname + window.location.search,
-              );
-            } catch {
-              /* ignore */
+            const isAlreadyOnLogin = window.location.pathname === "/login";
+
+            if (!isAlreadyOnLogin) {
+              try {
+                sessionStorage.setItem(
+                  POST_LOGIN_REDIRECT_KEY,
+                  window.location.pathname + window.location.search,
+                );
+              } catch {
+                /* ignore */
+              }
+              window.location.replace("/login");
             }
-            window.location.replace("/login");
           }
           throw error;
         }

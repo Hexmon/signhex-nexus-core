@@ -12,7 +12,7 @@ import { ApiError } from "@/api/apiClient";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { getCookie } from "@/lib/cookies";
-import { isValidEmail, isSecurePassword } from "@/lib/validation";
+import { isValidEmail } from "@/lib/validation";
 import { STORAGE_KEYS } from "@/lib/constants";
 
 const Auth = () => {
@@ -42,7 +42,7 @@ const Auth = () => {
       return;
     }
 
-    if (!isSecurePassword(password)) {
+    if (password.length < 8) {
       toast({
         title: "Weak password",
         description: "Password must be at least 8 characters.",

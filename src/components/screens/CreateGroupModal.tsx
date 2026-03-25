@@ -75,6 +75,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.screenGroups });
             queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+            queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
             toast.success("Group created successfully");
             handleClose();
         },

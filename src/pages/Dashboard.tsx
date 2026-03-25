@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Calendar, HardDrive, Monitor, Plus } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, Eye, HardDrive, Monitor, Plus, Trash2 } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,18 +17,27 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useQuery } from "@tanstack/react-query";
+import { ToastAction } from "@/components/ui/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { metricsApi } from "@/api/domains/metrics";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAppSelector } from "@/store/hooks";
 import { reportsApi } from "@/api/domains/reports";
 import { healthApi } from "@/api/domains/health";
+import { mediaApi } from "@/api/domains/media";
+import type { MediaAsset } from "@/api/types";
+import { MediaPreview } from "@/components/common/MediaPreview";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
+import { OnlineScreensDetailsModal } from "@/components/dashboard/OnlineScreensDetailsModal";
+import { ActiveScheduledTimelineModal } from "@/components/dashboard/ActiveScheduledTimelineModal";
+import { resolveMediaDisplayName } from "@/lib/media";
 
 const formatBytes = (bytes?: number | null) => {
   if (bytes === undefined || bytes === null) return "—";
@@ -42,6 +51,11 @@ const formatBytes = (bytes?: number | null) => {
 const formatPercent = (value?: number | null) => {
   if (value === undefined || value === null || Number.isNaN(value)) return "—";
   return `${Math.round(value)}%`;
+};
+
+const formatMegabytes = (bytes?: number | null) => {
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return "—";
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 };
 
 const formatRelativeTime = (value?: string | null) => {
@@ -58,8 +72,12 @@ const getErrorMessage = (error: unknown, fallback: string) =>
 
 export default function Dashboard() {
   const [selectedKPI, setSelectedKPI] = useState<string | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
+  const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MediaAsset | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const authToken = useAppSelector((state) => state.auth.token);
   const user = useAppSelector((state) => state.auth.user);
   const isAuthenticated = Boolean(authToken || user);
@@ -135,6 +153,102 @@ export default function Dashboard() {
     staleTime: 30_000,
   });
 
+  const {
+    data: allMedia,
+    isLoading: isMediaLoading,
+    isError: isMediaError,
+    error: mediaError,
+  } = useQuery({
+    queryKey: ["dashboard", "media-storage-modal"],
+    enabled: isAuthenticated && selectedKPI === "storage",
+    staleTime: 60_000,
+    queryFn: async () => {
+      const limit = 100;
+      let page = 1;
+      let total = 0;
+      const items: MediaAsset[] = [];
+
+      do {
+        const response = await mediaApi.list({ page, limit, status: "READY" });
+        total = response.total ?? 0;
+        items.push(...(response.items ?? []));
+        page += 1;
+      } while (items.length < total && total > 0);
+
+      return items.filter((item) => item.status === "READY");
+    },
+  });
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: async (mediaId: string) => {
+      const response = await mediaApi.remove(mediaId, { hard: true });
+      return response as { message?: string } | void;
+    },
+    onSuccess: (response) => {
+      toast({
+        title: "Media deleted",
+        description: (response as { message?: string } | undefined)?.message ?? "Media permanently deleted.",
+      });
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "media-storage-modal"] });
+      void queryClient.invalidateQueries({ queryKey: ["media"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports-storage"] });
+      void queryClient.invalidateQueries({ queryKey: ["metrics-overview"] });
+    },
+    onError: (error) => {
+      const mapped = mapMediaDeleteError(error);
+      if (mapped.dismissDeleteDialog) {
+        setDeleteTarget(null);
+      }
+      if (error instanceof ApiError && error.code === "NOT_FOUND") {
+        void queryClient.invalidateQueries({ queryKey: ["dashboard", "media-storage-modal"] });
+        void queryClient.invalidateQueries({ queryKey: ["media"] });
+      }
+      toast({
+        title: mapped.title,
+        description: mapped.description,
+        variant: mapped.variant,
+        action:
+          mapped.helpRoute && mapped.helpLabel ? (
+            <ToastAction altText={mapped.helpLabel} onClick={() => navigate(mapped.helpRoute!)}>
+              {mapped.helpLabel}
+            </ToastAction>
+          ) : undefined,
+      });
+    },
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: async (media: MediaAsset) => {
+      if (media.media_url) {
+        return media;
+      }
+
+      return mediaApi.getById(media.id);
+    },
+    onMutate: (media) => {
+      setPreviewMediaId(media.id);
+    },
+    onSuccess: (media) => {
+      setPreviewMedia(media);
+    },
+    onError: (error) => {
+      toast({
+        title: "Preview unavailable",
+        description: getErrorMessage(error, "Unable to load media preview."),
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setPreviewMediaId(null);
+    },
+  });
+
+  const handlePreview = (media: MediaAsset) => {
+    if (previewMutation.isPending && previewMediaId === media.id) return;
+    previewMutation.mutate(media);
+  };
+
   useEffect(() => {
     if (isMetricsError) {
       const message =
@@ -199,6 +313,16 @@ export default function Dashboard() {
     }
   }, [isHealthError, healthError, toast]);
 
+  useEffect(() => {
+    if (isMediaError) {
+      toast({
+        title: "Media load failed",
+        description: getErrorMessage(mediaError, "We couldn't load media details."),
+        variant: "destructive",
+      });
+    }
+  }, [isMediaError, mediaError, toast]);
+
   const totalsMetrics = useMemo(() => overview?.totals ?? {}, [overview]);
   const screensMetrics = useMemo(() => overview?.screens ?? {}, [overview]);
   const storageBytes = overview?.storage?.media_bytes ?? storageReport?.storage?.media_bytes;
@@ -259,12 +383,23 @@ export default function Dashboard() {
       {
         id: "active-scheduled",
         title: "Active Scheduled",
-        value: isMetricsLoading ? "…" : String(overview?.schedules?.active ?? 0),
+        value: isMetricsLoading
+          ? "…"
+          : String(overview?.schedules?.active_screens_now ?? overview?.schedules?.active ?? 0),
         subtitle: "Screens running playlists",
         icon: Calendar,
       },
     ];
-  }, [isMetricsLoading, quotaPercent, quotaBytes, storageBytes, screensMetrics, totalsMetrics, overview?.schedules?.active]);
+  }, [
+    isMetricsLoading,
+    overview?.schedules?.active,
+    overview?.schedules?.active_screens_now,
+    quotaPercent,
+    quotaBytes,
+    screensMetrics,
+    storageBytes,
+    totalsMetrics,
+  ]);
 
   const departmentRequests = useMemo(() => {
     if (Array.isArray(requestsByDept)) return requestsByDept;
@@ -328,6 +463,17 @@ export default function Dashboard() {
     return items;
   }, [offlineScreens, quotaPercent, navigate]);
 
+  const readyMedia = useMemo(() => (allMedia ?? []).filter((item) => item.status === "READY"), [allMedia]);
+
+  const totalMediaSizeBytes = useMemo(
+    () =>
+      readyMedia.reduce((sum, item) => {
+        const nextSize = item.source_size ?? item.size ?? 0;
+        return sum + (Number.isFinite(nextSize) ? nextSize : 0);
+      }, 0),
+    [readyMedia],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -342,7 +488,7 @@ export default function Dashboard() {
             <Calendar className="mr-2 h-4 w-4" />
             Schedule Report
           </Button>
-          <Button>
+          <Button variant="default" onClick={() => navigate("/schedule/new")}>
             <Plus className="mr-2 h-4 w-4" />
             New Request
           </Button>
@@ -523,9 +669,32 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <OnlineScreensDetailsModal
+        open={selectedKPI === "online-screens"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedKPI(null);
+          }
+        }}
+      />
+
+      {selectedKPI === "active-scheduled" ? (
+        <ActiveScheduledTimelineModal
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedKPI(null);
+            }
+          }}
+        />
+      ) : null}
+
       {/* KPI Detail Dialog */}
-      <Dialog open={!!selectedKPI} onOpenChange={() => setSelectedKPI(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog
+        open={!!selectedKPI && selectedKPI !== "online-screens" && selectedKPI !== "active-scheduled"}
+        onOpenChange={() => setSelectedKPI(null)}
+      >
+        <DialogContent className={selectedKPI === "storage" ? "max-w-5xl" : "max-w-2xl"}>
           <DialogHeader>
             <DialogTitle>
               {kpiData.find(k => k.id === selectedKPI)?.title} Details
@@ -534,13 +703,178 @@ export default function Dashboard() {
               Detailed breakdown and metrics
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Detailed view for {selectedKPI} would be displayed here with tables, charts, and drill-down data.
-            </p>
-          </div>
+          {selectedKPI === "storage" ? (
+            <div className="space-y-4 py-2">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Total media</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold">
+                      {isMediaLoading ? "Loading..." : String(readyMedia.length)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Total size</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold">
+                      {isMediaLoading ? "Loading..." : formatMegabytes(totalMediaSizeBytes)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="rounded-md border">
+                <div className="max-h-[60vh] overflow-y-auto">
+                  <Table className="text-xs">
+                    <TableHeader className="sticky top-0 bg-background">
+                      <TableRow>
+                        <TableHead className="h-9 text-[11px]">Name</TableHead>
+                        <TableHead className="h-9 text-[11px]">Type</TableHead>
+                        <TableHead className="h-9 text-[11px]">Status</TableHead>
+                        <TableHead className="h-9 text-[11px]">MIME</TableHead>
+                        <TableHead className="h-9 text-[11px]">Resolution</TableHead>
+                        <TableHead className="h-9 text-[11px]">Duration</TableHead>
+                        <TableHead className="h-9 text-right text-[11px]">Size</TableHead>
+                        <TableHead className="h-9 text-right text-[11px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isMediaLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="h-10 text-center text-xs text-muted-foreground">
+                            Loading media...
+                          </TableCell>
+                        </TableRow>
+                      ) : readyMedia.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="h-10 text-center text-xs text-muted-foreground">
+                            No media found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        readyMedia.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="max-w-[280px] py-2 text-xs">
+                              <div className="truncate text-xs font-medium">{resolveMediaDisplayName(item)}</div>
+                              <div className="truncate text-xs text-muted-foreground">{item.id}</div>
+                            </TableCell>
+                            <TableCell className="py-2 text-xs">{item.type ?? "—"}</TableCell>
+                            <TableCell className="py-2 text-xs">{item.status ?? "—"}</TableCell>
+                            <TableCell className="py-2 text-xs">{item.source_content_type ?? item.content_type ?? "—"}</TableCell>
+                            <TableCell className="py-2 text-xs">
+                              {item.width && item.height ? `${item.width} x ${item.height}` : "—"}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs">
+                              {typeof item.duration_seconds === "number" ? `${item.duration_seconds}s` : "—"}
+                            </TableCell>
+                            <TableCell className="py-2 text-right text-xs">
+                              {formatMegabytes(item.source_size ?? item.size)}
+                            </TableCell>
+                            <TableCell className="py-2 text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  aria-label={`Preview ${resolveMediaDisplayName(item)}`}
+                                  title="Preview media"
+                                  onClick={() => handlePreview(item)}
+                                  disabled={previewMutation.isPending && previewMediaId === item.id}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="destructive"
+                                  aria-label={`Delete ${resolveMediaDisplayName(item)}`}
+                                  title="Delete media"
+                                  onClick={() => setDeleteTarget(item)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-4">
+              <p className="text-sm text-muted-foreground">
+                Detailed view for {selectedKPI} would be displayed here with tables, charts, and drill-down data.
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      {previewMedia && (
+        <Dialog open={!!previewMedia} onOpenChange={(open) => !open && setPreviewMedia(null)}>
+          <DialogContent className="h-[90vh] w-[95vw] max-w-6xl p-4">
+            <DialogHeader>
+              <DialogTitle>{resolveMediaDisplayName(previewMedia)}</DialogTitle>
+              <DialogDescription>
+                {previewMedia.source_content_type ?? previewMedia.content_type ?? previewMedia.type ?? "Media preview"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <MediaPreview
+                media={previewMedia}
+                url={previewMedia.media_url}
+                type={previewMedia.source_content_type ?? previewMedia.content_type}
+                alt={resolveMediaDisplayName(previewMedia)}
+                className="h-full max-h-[75vh] w-full"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {deleteTarget && (
+        <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Hard delete media</DialogTitle>
+              <DialogDescription>
+                This permanently removes the media and sends `?hard=true` to the existing delete API.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="font-medium">{resolveMediaDisplayName(deleteTarget)}</div>
+              <div className="mt-1 text-muted-foreground">
+                {deleteTarget.source_content_type ?? deleteTarget.content_type ?? deleteTarget.type ?? "Unknown type"}
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                Size: {formatMegabytes(deleteTarget.source_size ?? deleteTarget.size)}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteTarget(null)}
+                disabled={hardDeleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => deleteTarget && hardDeleteMutation.mutate(deleteTarget.id)}
+                disabled={hardDeleteMutation.isPending}
+              >
+                {hardDeleteMutation.isPending ? "Deleting..." : "Hard Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

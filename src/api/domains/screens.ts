@@ -7,11 +7,14 @@ import type {
   ScreenGroup,
   ScreenStatus,
   NowPlaying,
+  ScreenNowPlayingResponse,
+  ScreenScheduleTimelineResponse,
   ScreenAvailability,
   ScreenSnapshot,
   ScreenGroupAvailability,
   ScreenGroupNowPlaying,
   ScreensOverview,
+  ScreenAspectRatioListResponse,
 } from "../types";
 
 export const screensApi = {
@@ -49,33 +52,64 @@ export const screensApi = {
       method: "DELETE",
     }),
 
-  getOverview: () =>
+  getOverview: (
+    query?: { include_media?: boolean; include_preview?: boolean; online_only?: boolean },
+    options?: { timeoutMs?: number },
+  ) =>
     apiClient.request<ScreensOverview>({
-      path: "/screens/overview",
+      path: endpoints.screens.overview,
       method: "GET",
+      query,
+      timeoutMs: options?.timeoutMs,
+    }),
+
+  getScheduleTimeline: (
+    query: {
+      window_start: string;
+      window_hours?: number;
+      only_active_now?: boolean;
+    },
+    options?: { timeoutMs?: number },
+  ) =>
+    apiClient.request<ScreenScheduleTimelineResponse>({
+      path: endpoints.screens.scheduleTimeline,
+      method: "GET",
+      query,
+      timeoutMs: options?.timeoutMs,
     }),
 
   getStatus: (screenId: string) =>
     apiClient.request<ScreenStatus>({
-      path: `/screens/${screenId}/status`,
+      path: endpoints.screens.status(screenId),
       method: "GET",
     }),
 
-  getNowPlaying: (screenId: string) =>
-    apiClient.request<NowPlaying>({
-      path: `/screens/${screenId}/now-playing`,
+  getNowPlaying: (
+    screenId: string,
+    query?: { include_media?: boolean; include_urls?: boolean; include_preview?: boolean },
+  ) =>
+    apiClient.request<ScreenNowPlayingResponse>({
+      path: endpoints.screens.nowPlaying(screenId),
       method: "GET",
+      query,
     }),
 
   getAvailability: (screenId: string) =>
     apiClient.request<ScreenAvailability>({
-      path: `/screens/${screenId}/availability`,
+      path: endpoints.screens.availability(screenId),
       method: "GET",
     }),
 
   getSnapshot: (screenId: string, includeUrls = true) =>
     apiClient.request<ScreenSnapshot>({
-      path: `/screens/${screenId}/snapshot`,
+      path: endpoints.screens.snapshot(screenId),
+      method: "GET",
+      query: { include_urls: includeUrls },
+    }),
+
+  getGroupSnapshot: (groupId: string, includeUrls = true) =>
+    apiClient.request<ScreenSnapshot>({
+      path: endpoints.screenGroups.snapshot(groupId),
       method: "GET",
       query: { include_urls: includeUrls },
     }),
@@ -88,10 +122,11 @@ export const screensApi = {
       body: payload,
     }),
 
-  listGroups: () =>
-    apiClient.request<ScreenGroup[]>({
+  listGroups: (params?: PaginationParams) =>
+    apiClient.request<PaginatedResponse<ScreenGroup>>({
       path: endpoints.screens.groups,
       method: "GET",
+      query: params,
     }),
 
   updateGroup: (groupId: string, payload: Partial<{ name?: string; description?: string; screen_ids?: string[] }>) =>
@@ -117,6 +152,13 @@ export const screensApi = {
     apiClient.request<ScreenGroupNowPlaying>({
       path: `/screen-groups/${groupId}/now-playing`,
       method: "GET",
+    }),
+
+  listAspectRatios: (params?: { search?: string; configured_only?: boolean }) =>
+    apiClient.request<ScreenAspectRatioListResponse>({
+      path: endpoints.screens.aspectRatios,
+      method: "GET",
+      query: params,
     }),
 
   listAvailableScreens: (params?: PaginationParams) =>

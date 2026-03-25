@@ -1,10 +1,18 @@
 import { apiClient } from "../apiClient";
 import { endpoints } from "../endpoints";
-import type { PaginatedResponse, PaginationParams, Publish, Schedule } from "../types";
+import type {
+  PaginatedResponse,
+  PaginationParams,
+  Publish,
+  Schedule,
+  ScheduleItem,
+  ScheduleItemPayload,
+} from "../types";
 
 export interface SchedulePayload {
   name: string;
   description?: string;
+  timezone?: string;
   start_at: string;
   end_at: string;
   is_active?: boolean;
@@ -31,7 +39,7 @@ export const schedulesApi = {
       body: payload,
     }),
 
-  list: (params?: PaginationParams & { is_active?: boolean }) =>
+  list: (params?: PaginationParams & { page: number; limit: number; is_active?: boolean }) =>
     apiClient.request<PaginatedResponse<Schedule>>({
       path: endpoints.schedules.base,
       method: "GET",
@@ -52,6 +60,13 @@ export const schedulesApi = {
     apiClient.request<Publish>({
       path: endpoints.schedules.publishById(publishId),
       method: "GET",
+    }),
+
+  takeDownPublish: (publishId: string, payload?: { reason?: string }) =>
+    apiClient.request<Publish & { resolved_screen_ids?: string[]; message?: string }>({
+      path: endpoints.schedules.takeDownPublish(publishId),
+      method: "POST",
+      body: payload,
     }),
 
   listPublishes: (scheduleId: string) =>
@@ -75,5 +90,12 @@ export const schedulesApi = {
     apiClient.request<void>({
       path: endpoints.schedules.byId(scheduleId),
       method: "DELETE",
+    }),
+
+  createItem: (scheduleId: string, payload: ScheduleItemPayload) =>
+    apiClient.request<ScheduleItem>({
+      path: endpoints.schedules.items(scheduleId),
+      method: "POST",
+      body: payload,
     }),
 };

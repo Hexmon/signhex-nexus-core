@@ -1,6 +1,11 @@
 import { apiClient } from "../apiClient";
 import { endpoints } from "../endpoints";
-import type { Notification, PaginatedResponse, PaginationParams } from "../types";
+import type {
+  Notification,
+  NotificationUnreadCountResponse,
+  PaginatedResponse,
+  PaginationParams,
+} from "../types";
 
 export const notificationsApi = {
   list: (params?: PaginationParams & { read?: boolean }) =>
@@ -26,6 +31,12 @@ export const notificationsApi = {
     apiClient.request<void>({
       path: endpoints.notifications.markAllRead,
       method: "POST",
+    }),
+
+  getUnreadCount: () =>
+    apiClient.request<NotificationUnreadCountResponse>({
+      path: endpoints.notifications.unreadCount,
+      method: "GET",
     }),
 
   remove: (notificationId: string) =>

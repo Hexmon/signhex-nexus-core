@@ -95,6 +95,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.screenGroups });
             queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+            queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
             queryClient.invalidateQueries({ queryKey: ["screen-group", groupId] });
             toast.success("Group updated successfully");
             handleClose();
@@ -106,6 +107,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.screenGroups });
             queryClient.invalidateQueries({ queryKey: queryKeys.screens });
+            queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
             toast.success("Group deleted successfully");
             handleClose();
         },

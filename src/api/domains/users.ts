@@ -4,21 +4,50 @@ import type { PaginatedResponse, PaginationParams, User } from "../types";
 
 export interface InviteUserPayload {
   email: string;
-  role: User["role"];
+  role_id: User["role_id"];
   department_id?: string;
 }
 
 export interface UserInvitation {
   id: string;
   email?: string;
+  role_id?: User["role_id"];
   role?: User["role"];
   invited_at?: string;
   expires_at?: string;
   status?: string;
 }
 
+export interface CreateUserPayload {
+  email: string;
+  role_id: User["role_id"];
+  department_id?: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export type UpdateUserPayload = Partial<Omit<User, "role">> & { role_id?: User["role_id"] };
+
+const normalizePaginatedResponse = <T>(
+  payload: PaginatedResponse<T> | { items?: T[]; pagination?: { page?: number; limit?: number; total?: number } },
+  fallbackPage = 1,
+  fallbackLimit = 10,
+): PaginatedResponse<T> => {
+  if ("page" in payload && "limit" in payload && "total" in payload) {
+    return payload;
+  }
+
+  return {
+    items: payload.items ?? [],
+    page: payload.pagination?.page ?? fallbackPage,
+    limit: payload.pagination?.limit ?? fallbackLimit,
+    total: payload.pagination?.total ?? (payload.items?.length ?? 0),
+  };
+};
+
 export const usersApi = {
-  create: (payload: { email: string; role: User["role"]; department_id?: string; password?: string }) =>
+  create: (payload: CreateUserPayload) =>
     apiClient.request<User>({
       path: endpoints.users.base,
       method: "POST",
@@ -32,14 +61,20 @@ export const usersApi = {
       body: payload,
     }),
 
-  listInvitations: (params?: PaginationParams & { status?: string; email?: string; invited_after?: string }) =>
-    apiClient.request<PaginatedResponse<UserInvitation>>({
-      path: "/users/invite",
-      method: "GET",
-      query: params,
-    }),
+  listInvitations: (
+    params?: PaginationParams & { status?: string; email?: string; invited_after?: string; role_id?: string },
+  ) =>
+    apiClient
+      .request<
+        PaginatedResponse<UserInvitation> | { items?: UserInvitation[]; pagination?: { page?: number; limit?: number; total?: number } }
+      >({
+        path: endpoints.users.invite,
+        method: "GET",
+        query: params,
+      })
+      .then((response) => normalizePaginatedResponse(response, params?.page ?? 1, params?.limit ?? 10)),
 
-  activate: (payload: { token: string; password: string }) =>
+  activate: (payload: { token: string; password: string; role_id?: User["role_id"] }) =>
     apiClient.request<void>({
       path: endpoints.users.activate,
       method: "POST",
@@ -52,12 +87,21 @@ export const usersApi = {
       method: "POST",
     }),
 
-  list: (params?: PaginationParams & { role?: string; department_id?: string; is_active?: boolean }) =>
-    apiClient.request<PaginatedResponse<User>>({
-      path: endpoints.users.base,
-      method: "GET",
-      query: params,
-    }),
+  list: (
+    params?: PaginationParams & {
+      role_id?: string;
+      role?: string;
+      department_id?: string;
+      is_active?: boolean;
+    },
+  ) =>
+    apiClient
+      .request<PaginatedResponse<User> | { items?: User[]; pagination?: { page?: number; limit?: number; total?: number } }>({
+        path: endpoints.users.base,
+        method: "GET",
+        query: params,
+      })
+      .then((response) => normalizePaginatedResponse(response, params?.page ?? 1, params?.limit ?? 10)),
 
   getById: (userId: string) =>
     apiClient.request<User>({
@@ -65,7 +109,7 @@ export const usersApi = {
       method: "GET",
     }),
 
-  update: (userId: string, payload: Partial<User>) =>
+  update: (userId: string, payload: UpdateUserPayload) =>
     apiClient.request<User>({
       path: endpoints.users.byId(userId),
       method: "PATCH",

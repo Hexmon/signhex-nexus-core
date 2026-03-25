@@ -10,10 +10,14 @@ export type Status =
   | "published"
   | "live" 
   | "expired" 
+  | "rejected"
   | "failed"
   | "online"
   | "offline"
-  | "maintenance";
+  | "maintenance"
+  | "stale"
+  | "error"
+  | "recovery_required";
 
 interface StatusBadgeProps {
   status?: Status | string;
@@ -29,10 +33,18 @@ const statusConfig: Record<Status, { label: string; variant: "default" | "second
   published: { label: "Published", variant: "default", className: "bg-primary text-primary-foreground" },
   live: { label: "Live", variant: "default", className: "bg-success text-success-foreground" },
   expired: { label: "Expired", variant: "secondary" },
+  rejected: { label: "Rejected", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
   online: { label: "Online", variant: "default", className: "bg-success text-success-foreground" },
   offline: { label: "Offline", variant: "secondary" },
   maintenance: { label: "Maintenance", variant: "outline", className: "border-warning text-warning" },
+  stale: { label: "Stale", variant: "outline", className: "border-warning text-warning" },
+  error: { label: "Error", variant: "destructive" },
+  recovery_required: {
+    label: "Recovery Required",
+    variant: "outline",
+    className: "border-red-500 text-red-700",
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

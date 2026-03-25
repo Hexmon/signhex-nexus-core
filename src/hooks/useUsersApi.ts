@@ -1,10 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { usersApi } from "@/api/domains/users";
+import { usersApi, type UpdateUserPayload } from "@/api/domains/users";
 import { ApiError } from "@/api/apiClient";
-import type { User, Role } from "@/api/types";
+import type { RoleId } from "@/api/types";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
 
-export const useUsersApi = () => {
+type UseUsersApiOptions = {
+    usersPage?: number;
+    usersLimit?: number;
+    invitationsPage?: number;
+    invitationsLimit?: number;
+    enableInvitations?: boolean;
+};
+
+export const useUsersApi = ({
+    usersPage = 1,
+    usersLimit = 100,
+    invitationsPage = 1,
+    invitationsLimit = 100,
+    enableInvitations = true,
+}: UseUsersApiOptions = {}) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
 
@@ -13,24 +28,27 @@ export const useUsersApi = () => {
     ============================ */
 
     const listUsers = useQuery({
-        queryKey: ["users"],
-        queryFn: () => usersApi.list({ page: 1, limit: 100 }),
+        queryKey: ["users", usersPage, usersLimit],
+        queryFn: () => usersApi.list({ page: usersPage, limit: usersLimit }),
         retry: false,
         refetchOnWindowFocus: false,
         staleTime: 0, // always refetch when invalidated
+        placeholderData: (previousData) => previousData,
     });
 
     const listInvitations = useQuery({
-        queryKey: ["invitations"],
+        queryKey: ["invitations", invitationsPage, invitationsLimit],
         queryFn: () =>
             usersApi.listInvitations({
                 status: "pending",
-                page: 1,
-                limit: 100,
+                page: invitationsPage,
+                limit: invitationsLimit,
             }),
+        enabled: enableInvitations,
         retry: false,
         refetchOnWindowFocus: false,
         staleTime: 0,
+        placeholderData: (previousData) => previousData,
     });
 
     /* ============================
@@ -43,7 +61,7 @@ export const useUsersApi = () => {
             password: string;
             first_name: string;
             last_name: string;
-            role: Role;
+            role_id: RoleId;
             department_id?: string;
         }) => usersApi.create(payload),
         retry: false,
@@ -56,9 +74,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to create user");
             toast({
-                title: "Failed to create user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -67,7 +86,7 @@ export const useUsersApi = () => {
     const inviteUser = useMutation({
         mutationFn: (payload: {
             email: string;
-            role: Role;
+            role_id: RoleId;
             department_id?: string;
         }) => usersApi.invite(payload),
         retry: false,
@@ -80,9 +99,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to send invitation");
             toast({
-                title: "Failed to send invitation",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -94,7 +114,7 @@ export const useUsersApi = () => {
             payload,
         }: {
             userId: string;
-            payload: Partial<User>;
+            payload: UpdateUserPayload;
         }) => usersApi.update(userId, payload),
         retry: false,
         onSuccess: async () => {
@@ -106,9 +126,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to update user");
             toast({
-                title: "Failed to update user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },
@@ -127,9 +148,10 @@ export const useUsersApi = () => {
             });
         },
         onError: (error: Error | ApiError) => {
+            const ux = mapUsersErrorToUx(error, "Failed to delete user");
             toast({
-                title: "Failed to delete user",
-                description: error.message,
+                title: ux.title,
+                description: ux.message,
                 variant: "destructive",
             });
         },

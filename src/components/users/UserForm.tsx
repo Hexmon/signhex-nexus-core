@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,12 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { departmentsApi } from "@/api/domains/departments";
-import type { User, Role } from "@/api/types";
+import type { User } from "@/api/types";
 import type { UserFormData } from "@/types/user";
+import { useRolesList } from "@/hooks/useRolesApi";
+import { mapUsersErrorToUx } from "@/lib/usersErrors";
+import { useAppSelector } from "@/store/hooks";
+import { canManageUserTarget, isAdminLike } from "@/lib/access";
 
 interface UserFormProps {
     user?: User | null;
@@ -19,23 +23,55 @@ interface UserFormProps {
 }
 
 export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps) {
+    const currentUser = useAppSelector((state) => state.auth.user);
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState<UserFormData>({
         email: user?.email || "",
         password: "",
         first_name: user?.first_name || "",
         last_name: user?.last_name || "",
-        role: user?.role || "OPERATOR",
+        role_id: user?.role_id || "",
         department_id: user?.department_id || "",
         is_active: user?.is_active ?? true,
     });
 
+    const canPickDepartment = isAdminLike(currentUser?.role);
     const { data: departmentsData, isLoading: isDepartmentsLoading } = useQuery({
         queryKey: ["departments"],
         queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
+        enabled: canPickDepartment,
     });
 
+    const { data: rolesData, isLoading: isRolesLoading, error: rolesError } = useRolesList();
+    const roles = useMemo(
+        () =>
+            (rolesData?.items ?? []).filter((role) =>
+                canManageUserTarget(currentUser, role.name, currentUser?.department_id),
+            ),
+        [currentUser, rolesData?.items],
+    );
+    const rolesErrorMessage = rolesError ? mapUsersErrorToUx(rolesError, "Failed to load roles") : null;
+
+    useEffect(() => {
+        setFormData({
+            email: user?.email || "",
+            password: "",
+            first_name: user?.first_name || "",
+            last_name: user?.last_name || "",
+            role_id: user?.role_id || "",
+            department_id: currentUser?.role === "DEPARTMENT" ? currentUser.department_id || "" : user?.department_id || "",
+            is_active: user?.is_active ?? true,
+        });
+    }, [currentUser?.department_id, currentUser?.role, user]);
+
+    useEffect(() => {
+        if (!formData.role_id && roles.length > 0) {
+            setFormData((prev) => ({ ...prev, role_id: roles[0].id }));
+        }
+    }, [formData.role_id, roles]);
+
     const departments = departmentsData?.items || [];
+    const currentDepartmentLabel = currentUser?.department_id ? "Assigned to your department" : "No department assigned";
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -45,7 +81,11 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const isValid = formData.email.trim() && formData.first_name.trim() && formData.last_name.trim();
+    const isValid =
+        formData.email.trim() &&
+        formData.first_name.trim() &&
+        formData.last_name.trim() &&
+        Boolean(formData.role_id);
     const requiresPassword = !user && !formData.password;
 
     // Password validation
@@ -148,24 +188,44 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
 
             <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select
-                    value={formData.role}
-                    onValueChange={(value: Role) => updateField("role", value)}
-                >
-                    <SelectTrigger id="role">
-                        <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ADMIN">Admin</SelectItem>
-                        <SelectItem value="OPERATOR">Operator</SelectItem>
-                        <SelectItem value="DEPARTMENT">Department</SelectItem>
-                    </SelectContent>
-                </Select>
+                {isRolesLoading ? (
+                    <div className="flex items-center gap-2 p-2 border rounded-md">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Loading roles...</span>
+                    </div>
+                ) : rolesErrorMessage ? (
+                    <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">{rolesErrorMessage.message}</AlertDescription>
+                    </Alert>
+                ) : roles.length === 0 ? (
+                    <div className="p-2 border rounded-md text-sm text-muted-foreground">
+                        No roles available
+                    </div>
+                ) : (
+                    <Select
+                        value={formData.role_id}
+                        onValueChange={(value: string) => updateField("role_id", value)}
+                    >
+                        <SelectTrigger id="role">
+                            <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {roles.map((role) => (
+                                <SelectItem key={role.id} value={role.id}>
+                                    {role.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
 
             <div className="space-y-2">
                 <Label htmlFor="department_id">Department (Optional)</Label>
-                {isDepartmentsLoading ? (
+                {!canPickDepartment ? (
+                    <Input id="department_id" value={currentDepartmentLabel} disabled />
+                ) : isDepartmentsLoading ? (
                     <div className="flex items-center gap-2 p-2 border rounded-md">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Loading departments...</span>
@@ -178,6 +238,7 @@ export function UserForm({ user, onSubmit, onCancel, isLoading }: UserFormProps)
                     <Select
                         value={formData.department_id || "none"}
                         onValueChange={(value: string) => updateField("department_id", value === "none" ? "" : value)}
+                        disabled={!canPickDepartment}
                     >
                         <SelectTrigger id="department_id">
                             <SelectValue placeholder="Select department" />

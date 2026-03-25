@@ -7,7 +7,9 @@ export const ROUTES = {
   departments: "/departments",
   operators: "/operators",
   users: "/users",
+  chat: "/chat",
   conversations: "/conversations",
+  notifications: "/notifications",
   screens: "/screens",
   media: "/media",
   reports: "/reports",
@@ -16,12 +18,6 @@ export const ROUTES = {
   webhooks: "/webhooks",
   ssoConfig: "/sso-config",
   proofOfPlay: "/proof-of-play",
-} as const;
-
-export const ROLES = {
-  admin: "ADMIN",
-  operator: "OPERATOR",
-  department: "DEPARTMENT",
 } as const;
 
 export const STORAGE_KEYS = {
