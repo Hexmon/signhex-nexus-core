@@ -38,7 +38,7 @@ export interface SlotMedia {
   slotId: string;
   mediaId: string;
   mediaName: string;
-  mediaType: "IMAGE" | "VIDEO" | "DOCUMENT";
+  mediaType: "IMAGE" | "VIDEO" | "DOCUMENT" | "WEBPAGE";
   mediaThumbnail?: string;
   mediaUrl?: string | null;
   mediaContentType?: string | null;

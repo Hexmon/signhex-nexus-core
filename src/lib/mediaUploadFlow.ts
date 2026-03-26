@@ -16,6 +16,8 @@ export const allowedMimeTypes = new Set([
   "text/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
 export const allowedExtensions = new Set([
@@ -31,6 +33,8 @@ export const allowedExtensions = new Set([
   ".csv",
   ".doc",
   ".docx",
+  ".xls",
+  ".xlsx",
 ]);
 
 export interface UploadMediaResult extends CompressionResult {
@@ -59,7 +63,7 @@ export const validateUploadFile = (file: File): string | null => {
   const ext = extFromName(file.name);
   const allowed = allowedMimeTypes.has(file.type) || (ext && allowedExtensions.has(ext));
   if (!allowed) {
-    return "Unsupported file type. Allowed: JPEG, PNG, WEBP, MP4, MOV, PDF, PPT/PPTX, CSV, DOC/DOCX.";
+    return "Unsupported file type. Allowed: JPEG, PNG, WEBP, MP4, MOV, PDF, PPT/PPTX, CSV, DOC/DOCX, XLS/XLSX.";
   }
   return null;
 };
@@ -204,6 +208,29 @@ export const getFriendlyUploadError = (error: unknown): string => {
   return "Upload failed. Please try again.";
 };
 
+const getFriendlyProcessingFailure = (media: MediaAsset): string => {
+  switch (media.status_reason) {
+    case "WEBPAGE_HTTP_400":
+    case "WEBPAGE_HTTP_401":
+    case "WEBPAGE_HTTP_403":
+    case "WEBPAGE_HTTP_404":
+    case "WEBPAGE_HTTP_500":
+      return `The webpage URL returned ${media.status_reason.replace("WEBPAGE_HTTP_", "HTTP ")} during server verification.`;
+    case "WEBPAGE_NON_HTML_CONTENT":
+      return "The URL did not return an HTML webpage. Use a normal webpage URL, not an API or file endpoint.";
+    case "WEBPAGE_REQUEST_TIMEOUT":
+      return "The webpage took too long to respond during server verification.";
+    case "WEBPAGE_UNREACHABLE":
+      return "The server could not reach this webpage URL during verification.";
+    case "WEBPAGE_CAPTURE_FAILED":
+      return "The server could not verify this webpage or generate its fallback preview.";
+    case "DOCUMENT_CONVERSION_FAILED":
+      return "The server could not convert this document into a displayable PDF.";
+    default:
+      return "Server verification failed for this upload.";
+  }
+};
+
 export const waitForMediaReady = async (
   mediaId: string,
   options?: { timeoutMs?: number; intervalMs?: number },
@@ -218,7 +245,7 @@ export const waitForMediaReady = async (
       return media;
     }
     if (media.status === "FAILED") {
-      throw new Error("Server verification failed for this upload.");
+      throw new Error(getFriendlyProcessingFailure(media));
     }
 
     await sleep(intervalMs);

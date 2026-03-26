@@ -102,7 +102,7 @@ function BrandingAssetField({
     enabled: pickerOpen,
   });
 
-  const mediaItems = mediaQuery.data?.items ?? [];
+  const mediaItems = (mediaQuery.data?.items ?? []).filter((media) => (media.type || "").toUpperCase() !== "WEBPAGE");
 
   const handleUpload = async (fileList: FileList | null) => {
     const file = fileList?.[0];

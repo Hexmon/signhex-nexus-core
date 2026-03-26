@@ -7,6 +7,8 @@ type MediaLike = {
   content_type?: string | null;
   source_content_type?: string | null;
   media_url?: string | null;
+  fallback_media_url?: string | null;
+  source_url?: string | null;
 };
 
 const trimToUndefined = (value?: string | null) => {
@@ -42,7 +44,7 @@ export const resolveMediaMimeType = (media?: MediaLike | null) =>
 
 export const resolveMediaPreviewType = (media?: MediaLike | null) => {
   const explicitType = trimToUndefined(media?.type)?.toUpperCase();
-  if (explicitType === "IMAGE" || explicitType === "VIDEO" || explicitType === "DOCUMENT") {
+  if (explicitType === "IMAGE" || explicitType === "VIDEO" || explicitType === "DOCUMENT" || explicitType === "WEBPAGE") {
     return explicitType;
   }
 

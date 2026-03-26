@@ -6,6 +6,7 @@ import {
   GripVertical,
   Volume2,
   VolumeX,
+  Globe,
   Image as ImageIcon,
   Video,
   FileText,
@@ -58,8 +59,8 @@ const FIT_MODE_HELP = "Cover fills the slot and may crop. Contain keeps the full
 const resolveMediaType = (media: MediaAsset): SlotMedia["mediaType"] => {
   if (media.type) {
     const type = media.type.toUpperCase();
-    if (type === "IMAGE" || type === "VIDEO" || type === "DOCUMENT") {
-      return type;
+    if (type === "IMAGE" || type === "VIDEO" || type === "DOCUMENT" || type === "WEBPAGE") {
+      return type as SlotMedia["mediaType"];
     }
   }
 
@@ -81,6 +82,8 @@ const getMediaIcon = (type: SlotMedia["mediaType"]) => {
       return <ImageIcon className="h-4 w-4" />;
     case "VIDEO":
       return <Video className="h-4 w-4" />;
+    case "WEBPAGE":
+      return <Globe className="h-4 w-4" />;
     default:
       return <FileText className="h-4 w-4" />;
   }
@@ -498,6 +501,7 @@ export function StepMediaAssign({ layout, slotMedia, onUpdateSlotMedia }: StepMe
                   <TabsTrigger value="image">Images</TabsTrigger>
                   <TabsTrigger value="video">Videos</TabsTrigger>
                   <TabsTrigger value="document">Documents</TabsTrigger>
+                  <TabsTrigger value="webpage">Webpages</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>

@@ -28,6 +28,7 @@ export interface MediaCompletionPayload {
 export interface MediaMetadataPayload {
   name: string;
   type: MediaType;
+  source_url?: string;
 }
 
 const normalizePaginatedResponse = <T>(

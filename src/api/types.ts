@@ -858,7 +858,7 @@ export interface EmergencyRecord {
   is_active?: boolean;
 }
 
-export type MediaType = "IMAGE" | "VIDEO" | "DOCUMENT";
+export type MediaType = "IMAGE" | "VIDEO" | "DOCUMENT" | "WEBPAGE";
 
 export interface MediaListParams extends PaginationParams {
   type?: MediaType;
@@ -875,6 +875,7 @@ export interface MediaAsset {
   source_content_type?: string;
   source_size?: number;
   size?: number;
+  source_url?: string | null;
   status?: string;
   status_reason?: string | null;
   duration_seconds?: number;
@@ -885,6 +886,7 @@ export interface MediaAsset {
   source_bucket?: string;
   source_key?: string;
   media_url?: string | null;
+  fallback_media_url?: string | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string;

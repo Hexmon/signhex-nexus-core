@@ -94,7 +94,7 @@ export function AttachmentPicker({
 
   const mediaItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const items = mediaQuery.data?.items ?? [];
+    const items = (mediaQuery.data?.items ?? []).filter((item) => resolveType(item) !== "WEBPAGE");
     if (!query) return items;
     return items.filter((item) => {
       const name = (item.filename || item.name || "").toLowerCase();

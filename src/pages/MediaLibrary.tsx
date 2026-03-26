@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload, Image as ImageIcon, Video, FileText, Copy, Trash2 } from "lucide-react";
+import { Upload, Image as ImageIcon, Video, FileText, Copy, Trash2, Globe, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,9 +36,33 @@ type MediaLibraryLocationState = {
   openUpload?: boolean;
 };
 
-type MediaTab = "all" | "image" | "video" | "document";
+type MediaTab = "all" | "image" | "video" | "document" | "webpage";
 
 const MEDIA_PAGE_SIZE = 6;
+
+const resolveLibraryMediaType = (media: MediaAsset): MediaType => {
+  const explicitType = (media.type || "").toUpperCase();
+  if (explicitType === "IMAGE" || explicitType === "VIDEO" || explicitType === "DOCUMENT" || explicitType === "WEBPAGE") {
+    return explicitType;
+  }
+
+  const contentType = media.content_type || media.source_content_type || "";
+  if (contentType.startsWith("image/")) return "IMAGE";
+  if (contentType.startsWith("video/")) return "VIDEO";
+  return "DOCUMENT";
+};
+
+const resolvePrimaryMediaUrl = (media: MediaAsset) =>
+  resolveLibraryMediaType(media) === "WEBPAGE"
+    ? media.fallback_media_url ?? media.media_url ?? null
+    : media.media_url ?? null;
+
+const resolveCopyTargetUrl = (media: MediaAsset) =>
+  resolveLibraryMediaType(media) === "WEBPAGE"
+    ? media.source_url ?? media.fallback_media_url ?? media.media_url ?? null
+    : media.media_url ?? null;
+
+const resolveStatusLabel = (media: MediaAsset) => media.status ?? "PENDING";
 
 const formatRelativeMediaTime = (value?: string | null) => {
   if (!value) return null;
@@ -72,10 +96,14 @@ export default function MediaLibrary() {
     image: 1,
     video: 1,
     document: 1,
+    webpage: 1,
   });
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isWebpageOpen, setIsWebpageOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [webpageName, setWebpageName] = useState("");
+  const [webpageUrl, setWebpageUrl] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadMediaResult | null>(null);
   const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
@@ -186,6 +214,51 @@ export default function MediaLibrary() {
     },
   });
 
+  const webpageMutation = useMutation({
+    mutationFn: async () => {
+      return await mediaApi.createMetadata({
+        name: webpageName.trim(),
+        type: "WEBPAGE",
+        source_url: webpageUrl.trim(),
+      });
+    },
+    onSuccess: (media) => {
+      toast({
+        title: "Webpage added",
+        description:
+          media.status === "READY"
+            ? "The webpage asset is ready to use."
+            : "The server is verifying the webpage and generating a fallback preview.",
+      });
+      setIsWebpageOpen(false);
+      setWebpageName("");
+      setWebpageUrl("");
+      void queryClient.invalidateQueries({ queryKey: ["media"] });
+
+      if (media.status === "PROCESSING") {
+        void waitForMediaReady(media.id)
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ["media"] });
+            toast({
+              title: "Webpage ready",
+              description: `${resolveMediaDisplayName(media)} is now ready to use.`,
+            });
+          })
+          .catch((error) => {
+            toast({
+              title: "Webpage verification failed",
+              description: getFriendlyUploadError(error),
+              variant: "destructive",
+            });
+          });
+      }
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Unable to add webpage.";
+      toast({ title: "Create failed", description: message, variant: "destructive" });
+    },
+  });
+
   const activePage = pageByTab[activeTab];
   const typeFilter = (activeTab === "all" ? undefined : activeTab.toUpperCase()) as MediaType | undefined;
 
@@ -195,7 +268,6 @@ export default function MediaLibrary() {
       mediaApi.list({
         limit: MEDIA_PAGE_SIZE,
         page: activePage,
-        status: "READY",
         type: typeFilter,
       }),
     placeholderData: (previousData) => previousData,
@@ -205,19 +277,23 @@ export default function MediaLibrary() {
     queries: [
       {
         queryKey: ["media", "stats", "all"],
-        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY" }),
+        queryFn: () => mediaApi.list({ page: 1, limit: 1 }),
       },
       {
         queryKey: ["media", "stats", "image"],
-        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "IMAGE" }),
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, type: "IMAGE" }),
       },
       {
         queryKey: ["media", "stats", "video"],
-        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "VIDEO" }),
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, type: "VIDEO" }),
       },
       {
         queryKey: ["media", "stats", "document"],
-        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "DOCUMENT" }),
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, type: "DOCUMENT" }),
+      },
+      {
+        queryKey: ["media", "stats", "webpage"],
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, type: "WEBPAGE" }),
       },
     ],
   });
@@ -275,7 +351,9 @@ export default function MediaLibrary() {
   };
 
   const handlePreview = (item: MediaAsset) => {
-    if (item.media_url) setPreviewMedia(item);
+    if (resolvePrimaryMediaUrl(item) || item.source_url) {
+      setPreviewMedia(item);
+    }
   };
 
   const closePreview = () => setPreviewMedia(null);
@@ -293,6 +371,13 @@ export default function MediaLibrary() {
   useEffect(() => {
     if (!isUploadOpen) setSelectedFile(null);
   }, [isUploadOpen]);
+
+  useEffect(() => {
+    if (!isWebpageOpen) {
+      setWebpageName("");
+      setWebpageUrl("");
+    }
+  }, [isWebpageOpen]);
 
   useEffect(() => {
     if (locationState?.openUpload) {
@@ -314,13 +399,13 @@ export default function MediaLibrary() {
   const filteredMedia = useMemo(
     () =>
       media.filter((item) => {
-        if (item.status && item.status !== "READY") return false;
-        const typeKey = (item.type || "").toUpperCase();
+        const typeKey = resolveLibraryMediaType(item);
         const matchesTab =
           activeTab === "all" ||
           (activeTab === "image" && typeKey === "IMAGE") ||
           (activeTab === "video" && typeKey === "VIDEO") ||
-          (activeTab === "document" && typeKey === "DOCUMENT");
+          (activeTab === "document" && typeKey === "DOCUMENT") ||
+          (activeTab === "webpage" && typeKey === "WEBPAGE");
         return matchesTab;
       }),
     [media, activeTab]
@@ -331,7 +416,8 @@ export default function MediaLibrary() {
     const images = statsQueries[1]?.data?.total ?? 0;
     const videos = statsQueries[2]?.data?.total ?? 0;
     const documents = statsQueries[3]?.data?.total ?? 0;
-    return { total, images, videos, documents };
+    const webpages = statsQueries[4]?.data?.total ?? 0;
+    return { total, images, videos, documents, webpages };
   }, [statsQueries]);
 
   useEffect(() => {
@@ -353,20 +439,27 @@ export default function MediaLibrary() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Media Library</h1>
           <p className="text-muted-foreground mt-1">
-            Browse uploaded assets that are ready for scheduling.
+            Browse uploaded assets, conversion jobs, and webpage playback items.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Upload Media
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setIsWebpageOpen(true)}>
+            <Globe className="h-4 w-4 mr-2" />
+            Add Webpage
+          </Button>
+          <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Media
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard title="Total Files" value={stats.total} icon={<FileText className="h-5 w-5 text-primary" />} />
         <StatCard title="Images" value={stats.images} icon={<ImageIcon className="h-5 w-5 text-blue-600" />} />
         <StatCard title="Videos" value={stats.videos} icon={<Video className="h-5 w-5 text-purple-600" />} />
         <StatCard title="Documents" value={stats.documents} icon={<FileText className="h-5 w-5 text-orange-600" />} />
+        <StatCard title="Webpages" value={stats.webpages} icon={<Globe className="h-5 w-5 text-emerald-600" />} />
       </div>
 
       <Card className="p-4">
@@ -377,6 +470,7 @@ export default function MediaLibrary() {
               <TabsTrigger value="image">Images</TabsTrigger>
               <TabsTrigger value="video">Videos</TabsTrigger>
               <TabsTrigger value="document">Documents</TabsTrigger>
+              <TabsTrigger value="webpage">Webpages</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="text-sm text-muted-foreground">
@@ -402,45 +496,62 @@ export default function MediaLibrary() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center justify-between">
                   <span className="truncate">{resolveMediaLabel(item)}</span>
-                  <Badge variant="outline">{item.type || "unknown"}</Badge>
+                  <Badge variant="outline">{resolveLibraryMediaType(item)}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                {item.media_url && (
+                {resolvePrimaryMediaUrl(item) ? (
                   <div className="overflow-hidden rounded-md border bg-muted/30">
-                    {item.type === "IMAGE" || (item.content_type || "").startsWith("image/") ? (
+                    {resolveLibraryMediaType(item) === "IMAGE" || (item.content_type || "").startsWith("image/") ? (
                       <img
-                        src={item.media_url}
+                        src={resolvePrimaryMediaUrl(item) ?? undefined}
                         alt={resolveMediaLabel(item)}
                         className="h-40 w-full object-cover"
                         loading="lazy"
                       />
-                    ) : item.type === "VIDEO" || (item.content_type || "").startsWith("video/") ? (
+                    ) : resolveLibraryMediaType(item) === "VIDEO" || (item.content_type || "").startsWith("video/") ? (
                       <video
-                        src={item.media_url}
+                        src={resolvePrimaryMediaUrl(item) ?? undefined}
                         className="h-40 w-full object-cover"
                         controls
                         preload="metadata"
                         onClick={(e) => e.stopPropagation()}
                       />
+                    ) : resolveLibraryMediaType(item) === "WEBPAGE" ? (
+                      <div className="relative h-40 w-full overflow-hidden bg-slate-950">
+                        <img
+                          src={resolvePrimaryMediaUrl(item) ?? undefined}
+                          alt={resolveMediaLabel(item)}
+                          className="h-full w-full object-cover opacity-80"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/60 px-3 py-2 text-white">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium">{item.source_url ?? "Webpage"}</p>
+                          </div>
+                          <Globe className="h-4 w-4 shrink-0" />
+                        </div>
+                      </div>
                     ) : (
                       <div className="h-40 w-full flex flex-col items-center justify-center gap-2 text-center px-3">
                         <FileText className="h-8 w-8 text-primary" />
-                        <p className="text-xs text-muted-foreground">Document preview</p>
+                        <p className="text-xs text-muted-foreground">
+                          {resolveLibraryMediaType(item) === "DOCUMENT" ? "Document preview" : "Media preview"}
+                        </p>
                         <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleCopyUrl(item.media_url);
+                              handleCopyUrl(resolveCopyTargetUrl(item));
                             }}
                           >
                             <Copy className="h-4 w-4 mr-2" />
                             Copy URL
                           </Button>
                           <Button variant="ghost" size="sm" asChild onClick={(e) => e.stopPropagation()}>
-                            <a href={item.media_url} target="_blank" rel="noreferrer">
+                            <a href={resolveCopyTargetUrl(item) ?? undefined} target="_blank" rel="noreferrer">
                               Open
                             </a>
                           </Button>
@@ -448,20 +559,33 @@ export default function MediaLibrary() {
                       </div>
                     )}
                   </div>
+                ) : (
+                  <div className="h-40 w-full flex flex-col items-center justify-center gap-2 rounded-md border bg-muted/30 px-4 text-center">
+                    {resolveLibraryMediaType(item) === "WEBPAGE" ? <Globe className="h-8 w-8 text-primary" /> : <FileText className="h-8 w-8 text-primary" />}
+                    <p className="text-xs text-muted-foreground">
+                      {item.status === "PROCESSING"
+                        ? "Processing on the server"
+                        : item.status === "FAILED"
+                        ? "Processing failed"
+                        : "No preview available"}
+                    </p>
+                  </div>
                 )}
-                {item.media_url && (
+                {(resolveCopyTargetUrl(item) || canDeleteMediaRecord(currentUser, item)) && (
                   <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopyUrl(item.media_url);
-                      }}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy URL
-                    </Button>
+                    {resolveCopyTargetUrl(item) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyUrl(resolveCopyTargetUrl(item));
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy URL
+                      </Button>
+                    ) : null}
                     <Button
                       variant="destructive"
                       size="sm"
@@ -479,17 +603,24 @@ export default function MediaLibrary() {
                 {item.size && <div>Size: {(item.size / 1024 / 1024).toFixed(2)} MB</div>}
                 {item.status && (
                   <Badge variant="secondary" className="text-xs">
-                    {item.status}
+                    {resolveStatusLabel(item)}
                   </Badge>
                 )}
+                {item.status_reason ? (
+                  <div className="text-xs text-amber-700">
+                    Reason: {item.status_reason}
+                  </div>
+                ) : null}
+                {resolveLibraryMediaType(item) === "WEBPAGE" && item.source_url ? (
+                  <div className="text-xs break-all">URL: {item.source_url}</div>
+                ) : null}
                 {resolveMediaUpdatedLabel(item) && (
                   <div className="text-xs">
                     Updated: {resolveMediaUpdatedLabel(item)}
                   </div>
                 )}
                 <div className="text-xs">
-                  {/* Status : {item.status ?? "PENDING"} · Thumbnail: {item.thumbnail_object_id ?? "pending"} */}
-                  Status : {item?.status ?? "PENDING"} 
+                  Status : {item?.status ?? "PENDING"}
                 </div>
               </CardContent>
             </Card>
@@ -532,7 +663,7 @@ export default function MediaLibrary() {
               <Input
                 id="media-file"
                 type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,.mov,.mp4,.pdf,.ppt,.pptx,.csv,.doc,.docx"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,.mov,.mp4,.pdf,.ppt,.pptx,.csv,.doc,.docx,.xls,.xlsx"
                 onChange={handleFileChange}
                 disabled={isUploading}
               />
@@ -585,6 +716,50 @@ export default function MediaLibrary() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isWebpageOpen} onOpenChange={setIsWebpageOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Add Webpage</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="webpage-name">Display name</Label>
+              <Input
+                id="webpage-name"
+                value={webpageName}
+                onChange={(event) => setWebpageName(event.target.value)}
+                placeholder="Marketing site homepage"
+                disabled={webpageMutation.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="webpage-url">Webpage URL</Label>
+              <Input
+                id="webpage-url"
+                value={webpageUrl}
+                onChange={(event) => setWebpageUrl(event.target.value)}
+                placeholder="https://example.com"
+                disabled={webpageMutation.isPending}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The server verifies the URL and generates a fallback preview before the webpage becomes ready for playback.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWebpageOpen(false)} disabled={webpageMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => webpageMutation.mutate()}
+              disabled={!webpageName.trim() || !webpageUrl.trim() || webpageMutation.isPending}
+            >
+              {webpageMutation.isPending ? "Saving..." : "Add Webpage"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {previewMedia && (
         <Dialog open={!!previewMedia} onOpenChange={(open) => (open ? null : closePreview())}>
           <DialogContent className="sm:max-w-[720px]">
@@ -595,26 +770,50 @@ export default function MediaLibrary() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              {previewMedia.media_url ? (
-                previewMedia.type === "IMAGE" || (previewMedia.content_type || "").startsWith("image/") ? (
+              {resolvePrimaryMediaUrl(previewMedia) || previewMedia.source_url ? (
+                resolveLibraryMediaType(previewMedia) === "IMAGE" || (previewMedia.content_type || "").startsWith("image/") ? (
                   <img
-                    src={previewMedia.media_url}
+                    src={resolvePrimaryMediaUrl(previewMedia) ?? undefined}
                     alt={resolveMediaLabel(previewMedia)}
                     className="w-full max-h-[480px] object-contain"
                   />
-                ) : previewMedia.type === "VIDEO" || (previewMedia.content_type || "").startsWith("video/") ? (
+                ) : resolveLibraryMediaType(previewMedia) === "VIDEO" || (previewMedia.content_type || "").startsWith("video/") ? (
                   <video
-                    src={previewMedia.media_url}
+                    src={resolvePrimaryMediaUrl(previewMedia) ?? undefined}
                     className="w-full max-h-[480px]"
                     controls
                     preload="metadata"
                   />
+                ) : resolveLibraryMediaType(previewMedia) === "WEBPAGE" ? (
+                  <div className="space-y-3">
+                    {resolvePrimaryMediaUrl(previewMedia) ? (
+                      <img
+                        src={resolvePrimaryMediaUrl(previewMedia) ?? undefined}
+                        alt={resolveMediaLabel(previewMedia)}
+                        className="w-full max-h-[420px] rounded-md border object-contain"
+                      />
+                    ) : null}
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Live URL</p>
+                        <p className="truncate text-sm">{previewMedia.source_url ?? "Unavailable"}</p>
+                      </div>
+                      {previewMedia.source_url ? (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={previewMedia.source_url} target="_blank" rel="noreferrer">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Open Live
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 rounded-md border bg-muted/40 p-6 text-center">
                     <FileText className="h-10 w-10 text-primary" />
                     <p className="text-sm text-muted-foreground">Document preview unavailable. Open in a new tab.</p>
                     <Button variant="outline" asChild>
-                      <a href={previewMedia.media_url} target="_blank" rel="noreferrer">
+                      <a href={resolveCopyTargetUrl(previewMedia) ?? undefined} target="_blank" rel="noreferrer">
                         Open document
                       </a>
                     </Button>

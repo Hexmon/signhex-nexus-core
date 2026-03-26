@@ -45,6 +45,7 @@ export function MediaPreview({
     ""
   ).toLowerCase();
   const mediaType = (media?.type ?? "").toLowerCase();
+  const isWebpage = mediaType === "webpage" || normalizedType === "webpage";
   const extension = sourceUrl
     ? sourceUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? ""
     : "";
@@ -62,7 +63,8 @@ export function MediaPreview({
 
   const showImage =
     Boolean(sourceUrl) &&
-    (normalizedType.startsWith("image/") ||
+    (isWebpage ||
+      normalizedType.startsWith("image/") ||
       normalizedType === "image" ||
       mediaType === "image" ||
       ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(extension));

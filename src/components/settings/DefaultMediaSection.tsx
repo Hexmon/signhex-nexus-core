@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Image as ImageIcon, MonitorPlay, Upload, Video } from "lucide-react";
+import { FileText, Globe, Image as ImageIcon, MonitorPlay, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +50,7 @@ type RemoveContext = {
 const resolveMediaType = (media: MediaAsset): MediaType => {
   if (media.type) {
     const type = media.type.toUpperCase();
-    if (type === "IMAGE" || type === "VIDEO" || type === "DOCUMENT") {
+    if (type === "IMAGE" || type === "VIDEO" || type === "DOCUMENT" || type === "WEBPAGE") {
       return type as MediaType;
     }
   }
@@ -64,7 +64,15 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
   if (!media.media_url) {
     return (
       <div className={`${sizeClass} rounded-md bg-muted flex items-center justify-center text-muted-foreground`}>
-        {mediaType === "IMAGE" ? <ImageIcon className="h-5 w-5" /> : mediaType === "VIDEO" ? <Video className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+        {mediaType === "IMAGE" ? (
+          <ImageIcon className="h-5 w-5" />
+        ) : mediaType === "VIDEO" ? (
+          <Video className="h-5 w-5" />
+        ) : mediaType === "WEBPAGE" ? (
+          <Globe className="h-5 w-5" />
+        ) : (
+          <FileText className="h-5 w-5" />
+        )}
       </div>
     );
   }
@@ -81,6 +89,14 @@ const MediaPreview = ({ media, mediaType, sizeClass }: { media: MediaAsset; medi
     return (
       <div className={`${sizeClass} rounded-md overflow-hidden bg-muted`}>
         <video src={media.media_url} className="h-full w-full object-cover" muted preload="metadata" />
+      </div>
+    );
+  }
+
+  if (mediaType === "WEBPAGE") {
+    return (
+      <div className={`${sizeClass} rounded-md overflow-hidden bg-muted`}>
+        <img src={media.media_url} alt={resolveMediaDisplayName(media)} className="h-full w-full object-cover" loading="lazy" />
       </div>
     );
   }
@@ -619,6 +635,7 @@ export function DefaultMediaSection() {
                   <TabsTrigger value="image">Images</TabsTrigger>
                   <TabsTrigger value="video">Videos</TabsTrigger>
                   <TabsTrigger value="document">Documents</TabsTrigger>
+                  <TabsTrigger value="webpage">Webpages</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -651,7 +668,15 @@ export function DefaultMediaSection() {
                             <MediaPreview media={media} mediaType={mediaType} sizeClass="h-24 w-full" />
                             <div className="flex items-start gap-3">
                               <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                                {mediaType === "IMAGE" ? <ImageIcon className="h-4 w-4" /> : mediaType === "VIDEO" ? <Video className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                                {mediaType === "IMAGE" ? (
+                                  <ImageIcon className="h-4 w-4" />
+                                ) : mediaType === "VIDEO" ? (
+                                  <Video className="h-4 w-4" />
+                                ) : mediaType === "WEBPAGE" ? (
+                                  <Globe className="h-4 w-4" />
+                                ) : (
+                                  <FileText className="h-4 w-4" />
+                                )}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">{resolveMediaDisplayName(media)}</p>
