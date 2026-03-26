@@ -107,6 +107,13 @@ export const screensApi = {
       query: { include_urls: includeUrls },
     }),
 
+  triggerScreenshot: (screenId: string, payload?: { reason?: string }) =>
+    apiClient.request<{ screen_id: string; command_id?: string | null }>({
+      path: endpoints.screens.screenshot(screenId),
+      method: "POST",
+      body: payload ?? {},
+    }),
+
   getGroupSnapshot: (groupId: string, includeUrls = true) =>
     apiClient.request<ScreenSnapshot>({
       path: endpoints.screenGroups.snapshot(groupId),

@@ -29,10 +29,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
+import type { ScreenPlaybackItemSummary } from "@/api/types";
 import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { toast } from "sonner";
 import { ApiError } from "@/api/apiClient";
 import { getPlaybackTimingLabel, getServerClockOffsetMs, getServerNowFromOffset, isHeartbeatStale } from "@/hooks/screens/screensRealtimeUtils";
+import { maskCertificateSerial } from "@/lib/screens";
 
 interface ScreenDetailsModalProps {
   screenId: string;
@@ -50,6 +52,16 @@ const formatDateTime = (value?: string | null) => {
   return new Date(timestamp).toLocaleString();
 };
 
+const getItemSummaryMediaLabel = (item: ScreenPlaybackItemSummary) => {
+  if (!item.media.length) return "No media attached";
+  return item.media
+    .map((media) => {
+      const name = media.name || media.id;
+      return media.type ? `${name} (${media.type})` : name;
+    })
+    .join(", ");
+};
+
 export function ScreenDetailsModal({
   screenId,
   screenName,
@@ -63,6 +75,10 @@ export function ScreenDetailsModal({
   const [editForm, setEditForm] = useState({ name: "", location: "" });
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
+  const [pendingSnapshotCapture, setPendingSnapshotCapture] = useState<{
+    startedAt: number;
+    previousCapturedAt: string | null;
+  } | null>(null);
 
   const screenQuery = useQuery({
     queryKey: ["screen", screenId],
@@ -71,8 +87,8 @@ export function ScreenDetailsModal({
   });
 
   const nowPlayingQuery = useQuery({
-    queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false, includePreview: false }),
-    queryFn: () => screensApi.getNowPlaying(screenId, { include_media: true, include_preview: false }),
+    queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false, includePreview: true }),
+    queryFn: () => screensApi.getNowPlaying(screenId, { include_media: true, include_preview: true }),
     enabled: open && !realtimeRejected,
   });
 
@@ -114,6 +130,22 @@ export function ScreenDetailsModal({
     },
   }, "Unable to update screen.");
 
+  const triggerScreenshot = useSafeMutation({
+    mutationFn: () => screensApi.triggerScreenshot(screenId, { reason: "screen-details-modal" }),
+    onSuccess: () => {
+      setPendingSnapshotCapture({
+        startedAt: Date.now(),
+        previousCapturedAt:
+          snapshotQuery.data?.preview?.captured_at ?? nowPlayingQuery.data?.preview?.captured_at ?? null,
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.screenSnapshot(screenId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false, includePreview: true }),
+      });
+      toast.success("Snapshot requested");
+    },
+  }, "Unable to trigger screenshot.");
+
   const screen = screenQuery.data;
   const nowPlaying = nowPlayingQuery.data;
   const screenStatus = nowPlaying?.status || screen?.status || "UNKNOWN";
@@ -127,6 +159,12 @@ export function ScreenDetailsModal({
   const currentMedia = playback?.current_media;
   const timingLabel = getPlaybackTimingLabel(playback?.started_at, playback?.ends_at, serverNowMs);
   const nowPlayingError = nowPlayingQuery.error instanceof ApiError ? nowPlayingQuery.error : null;
+  const availability = availabilityQuery.data;
+  const snapshot = snapshotQuery.data;
+  const latestPreview = snapshot?.preview ?? nowPlaying?.preview ?? null;
+  const activeItemSummaries = nowPlaying?.active_item_summaries ?? [];
+  const upcomingItemSummaries = nowPlaying?.upcoming_item_summaries ?? [];
+  const isTakingSnapshot = triggerScreenshot.isPending || Boolean(pendingSnapshotCapture);
 
   useEffect(() => {
     if (screen) {
@@ -136,6 +174,54 @@ export function ScreenDetailsModal({
       });
     }
   }, [screen]);
+
+  useEffect(() => {
+    if (!open && pendingSnapshotCapture) {
+      setPendingSnapshotCapture(null);
+    }
+  }, [open, pendingSnapshotCapture]);
+
+  useEffect(() => {
+    if (!open || !pendingSnapshotCapture) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      const snapshotResult = await snapshotQuery.refetch();
+      const currentCapturedAt =
+        snapshotResult.data?.preview?.captured_at ?? nowPlayingQuery.data?.preview?.captured_at ?? null;
+
+      if (currentCapturedAt && currentCapturedAt !== pendingSnapshotCapture.previousCapturedAt) {
+        if (!cancelled) {
+          setPendingSnapshotCapture(null);
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.screensOverview({ includeMedia: true, includePreview: true }),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.screenNowPlaying(screenId, { includeMedia: true, includeUrls: false, includePreview: true }),
+          });
+          toast.success("Snapshot updated");
+        }
+        return;
+      }
+
+      if (Date.now() - pendingSnapshotCapture.startedAt > 20_000 && !cancelled) {
+        setPendingSnapshotCapture(null);
+        toast.error("Snapshot capture is taking longer than expected.");
+      }
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    nowPlayingQuery.data?.preview?.captured_at,
+    open,
+    pendingSnapshotCapture,
+    queryClient,
+    screenId,
+    snapshotQuery.refetch,
+  ]);
 
   const handleSave = () => {
     updateScreen.mutate({
@@ -211,7 +297,7 @@ export function ScreenDetailsModal({
                   </>
                 )}
               </DialogTitle>
-              <DialogDescription className="font-mono">{screenId}</DialogDescription>
+              <DialogDescription className="font-mono">{maskCertificateSerial(screenId)}</DialogDescription>
             </div>
             <div className="flex gap-2">
               {isEditing ? (
@@ -359,7 +445,7 @@ export function ScreenDetailsModal({
                     </div>
                     <div className="space-y-2 text-sm">
                       <Label className="text-muted-foreground">Certificate</Label>
-                      <p>Serial: <span className="font-mono">{authDiagnostics.latest_certificate_serial || "N/A"}</span></p>
+                      <p>Serial: <span className="font-mono">{maskCertificateSerial(authDiagnostics.latest_certificate_serial)}</span></p>
                       <p>Expires: {formatDateTime(authDiagnostics.latest_certificate_expires_at)}</p>
                       <p>Revoked at: {formatDateTime(authDiagnostics.latest_certificate_revoked_at)}</p>
                     </div>
@@ -367,23 +453,47 @@ export function ScreenDetailsModal({
                 ) : null}
               </Card>
 
-              {availabilityQuery.data && (
+              {availability && (
                 <Card className="p-4">
                   <h3 className="font-semibold mb-2">Availability</h3>
-                  <div className="space-y-2">
-                    <p className="text-sm">
-                      {availabilityQuery.data.is_available ? "Available" : "Not available"}
-                    </p>
-                    {availabilityQuery.data.current_schedule_id && (
-                      <p className="text-sm text-muted-foreground">
-                        Current schedule: <span className="font-mono">{availabilityQuery.data.current_schedule_id}</span>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 text-sm">
+                    <div>
+                      <Label className="text-muted-foreground">Current state</Label>
+                      <p className="font-medium">
+                        {availability.is_available_now ? "Available now" : "Booked right now"}
                       </p>
-                    )}
-                    {availabilityQuery.data.next_available_at && (
-                      <p className="text-sm text-muted-foreground">
-                        Next available: {formatDateTime(availabilityQuery.data.next_available_at)}
-                      </p>
-                    )}
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Booked until</Label>
+                      <p>{formatDateTime(availability.booked_until)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Published schedule</Label>
+                      <p>{availability.publish?.schedule_name || "No active published schedule"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Current items</Label>
+                      <p>{availability.current_item_summaries?.length ?? availability.current_items?.length ?? 0}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-muted-foreground">Next item</Label>
+                      {availability.next_item_summary ? (
+                        <div className="mt-1 rounded border p-3">
+                          <p className="font-medium">
+                            {availability.next_item_summary.presentation_name || "Scheduled presentation"}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {formatDateTime(availability.next_item_summary.start_at)} to{" "}
+                            {formatDateTime(availability.next_item_summary.end_at)}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {getItemSummaryMediaLabel(availability.next_item_summary)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">No upcoming booking</p>
+                      )}
+                    </div>
                   </div>
                 </Card>
               )}
@@ -465,8 +575,8 @@ export function ScreenDetailsModal({
                         </div>
                         <div>
                           <Label className="text-muted-foreground">Current schedule</Label>
-                          <p className="text-sm font-mono">
-                            {playback?.current_schedule_id || nowPlaying.current_schedule_id || "N/A"}
+                          <p className="text-sm">
+                            {nowPlaying.current_schedule?.name || "No schedule currently active"}
                           </p>
                         </div>
                       </div>
@@ -508,14 +618,18 @@ export function ScreenDetailsModal({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <Card className="p-4">
                       <h3 className="font-semibold mb-2">Active items</h3>
-                      {nowPlaying.active_items?.length ? (
+                      {activeItemSummaries.length ? (
                         <div className="space-y-2">
-                          {nowPlaying.active_items.map((item) => (
-                            <div key={item.id} className="rounded border p-2 text-sm">
-                              <p className="font-medium font-mono">{item.id}</p>
+                          {activeItemSummaries.map((item) => (
+                            <div key={item.item_id} className="rounded border p-3 text-sm space-y-1">
+                              <p className="font-medium">{item.presentation_name || "Scheduled presentation"}</p>
+                              {item.layout_name ? (
+                                <p className="text-muted-foreground">Layout: {item.layout_name}</p>
+                              ) : null}
                               <p className="text-muted-foreground">
                                 {formatDateTime(item.start_at)} to {formatDateTime(item.end_at)}
                               </p>
+                              <p className="text-muted-foreground">{getItemSummaryMediaLabel(item)}</p>
                             </div>
                           ))}
                         </div>
@@ -526,14 +640,18 @@ export function ScreenDetailsModal({
 
                     <Card className="p-4">
                       <h3 className="font-semibold mb-2">Upcoming items</h3>
-                      {nowPlaying.upcoming_items?.length ? (
+                      {upcomingItemSummaries.length ? (
                         <div className="space-y-2">
-                          {nowPlaying.upcoming_items.map((item) => (
-                            <div key={item.id} className="rounded border p-2 text-sm">
-                              <p className="font-medium font-mono">{item.id}</p>
+                          {upcomingItemSummaries.map((item) => (
+                            <div key={item.item_id} className="rounded border p-3 text-sm space-y-1">
+                              <p className="font-medium">{item.presentation_name || "Scheduled presentation"}</p>
+                              {item.layout_name ? (
+                                <p className="text-muted-foreground">Layout: {item.layout_name}</p>
+                              ) : null}
                               <p className="text-muted-foreground">
                                 {formatDateTime(item.start_at)} to {formatDateTime(item.end_at)}
                               </p>
+                              <p className="text-muted-foreground">{getItemSummaryMediaLabel(item)}</p>
                             </div>
                           ))}
                         </div>
@@ -549,20 +667,79 @@ export function ScreenDetailsModal({
             </TabsContent>
 
             <TabsContent value="snapshot">
-              {snapshotQuery.data ? (
+              {snapshot ? (
                 <Card className="p-4 space-y-4">
-                  <div>
-                    <Label className="text-muted-foreground">Snapshot Time</Label>
-                    <p className="text-sm">{formatDateTime(snapshotQuery.data.snapshot_at)}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-muted-foreground">Latest preview</Label>
+                      <p className="text-sm">{formatDateTime(latestPreview?.captured_at)}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => triggerScreenshot.mutate()}
+                      disabled={isTakingSnapshot}
+                    >
+                      <RefreshCcw className={`h-3 w-3 mr-1 ${isTakingSnapshot ? "animate-spin" : ""}`} />
+                      {isTakingSnapshot ? "Capturing..." : "Take Snapshot"}
+                    </Button>
                   </div>
-                  {snapshotQuery.data.current_media && (
+
+                  {latestPreview?.screenshot_url ? (
+                    <div className="space-y-2">
+                      <img
+                        src={latestPreview.screenshot_url}
+                        alt="Latest captured screen preview"
+                        className="w-full rounded-md border bg-black object-contain max-h-[360px]"
+                      />
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>Captured: {formatDateTime(latestPreview.captured_at)}</span>
+                        <span>{latestPreview.stale ? "Preview is stale" : "Preview is fresh"}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No captured preview available yet.
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 text-sm">
+                    <div>
+                      <Label className="text-muted-foreground">Playback source</Label>
+                      <p>{playback?.source || "UNKNOWN"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Published at</Label>
+                      <p>{formatDateTime(snapshot.publish?.published_at)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Schedule</Label>
+                      <p>{snapshot.snapshot?.schedule?.name || nowPlaying?.current_schedule?.name || "None"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Snapshot items</Label>
+                      <p>{snapshot.snapshot?.schedule?.items?.length ?? 0}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Emergency</Label>
+                      <p>{snapshot.emergency ? "Active" : "Not active"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Default media</Label>
+                      <p>{snapshot.default_media ? "Configured" : "Not configured"}</p>
+                    </div>
+                  </div>
+
+                  {playback?.current_media && (
                     <div>
                       <Label className="text-muted-foreground">Current Media</Label>
-                      <p className="font-semibold">{snapshotQuery.data.current_media.name}</p>
-                      <p className="text-xs font-mono text-muted-foreground">{snapshotQuery.data.current_media.id}</p>
-                      {snapshotQuery.data.current_media.url && (
+                      <p className="font-semibold">
+                        {playback.current_media.name || playback.current_media.filename || "Unknown media"}
+                      </p>
+                      <p className="text-xs font-mono text-muted-foreground">{playback.current_media.id}</p>
+                      {playback.current_media.media_url && (
                         <a
-                          href={snapshotQuery.data.current_media.url}
+                          href={playback.current_media.media_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-primary hover:underline"
@@ -570,13 +747,6 @@ export function ScreenDetailsModal({
                           View Media
                         </a>
                       )}
-                    </div>
-                  )}
-                  {snapshotQuery.data.schedule && (
-                    <div>
-                      <Label className="text-muted-foreground">Schedule</Label>
-                      <p className="font-semibold">{snapshotQuery.data.schedule.name}</p>
-                      <p className="text-xs font-mono text-muted-foreground">{snapshotQuery.data.schedule.id}</p>
                     </div>
                   )}
                 </Card>

@@ -45,6 +45,7 @@ import {
 } from "@/hooks/screens/screensRealtimeUtils";
 import { useAppSelector } from "@/store/hooks";
 import { isAdminLike } from "@/lib/access";
+import { matchesScreenGroupSearch, matchesScreenSearch } from "@/lib/screens";
 
 const PAGE_SIZE = 9;
 
@@ -149,18 +150,16 @@ export default function Screens() {
   }, "Unable to delete group.");
 
   const filteredScreens = useMemo(
-    () =>
-      screens.filter((screen) => {
-        const q = search.toLowerCase();
-        const { name = "", location = "", id = "" } = screen;
-        return (
-          q === "" ||
-          name.toLowerCase().includes(q) ||
-          location.toLowerCase().includes(q) ||
-          id.toLowerCase().includes(q)
-        );
-      }),
+    () => screens.filter((screen) => matchesScreenSearch(screen, search)),
     [screens, search],
+  );
+  const screenNamesById = useMemo(
+    () => new Map(screens.map((screen) => [screen.id, screen.name ?? screen.id])),
+    [screens],
+  );
+  const filteredScreenGroups = useMemo(
+    () => screenGroups.filter((group) => matchesScreenGroupSearch(group, search, screenNamesById)),
+    [screenGroups, search, screenNamesById],
   );
   const totalPages = Math.max(1, Math.ceil(filteredScreens.length / PAGE_SIZE));
   const paginatedScreens = useMemo(
@@ -262,13 +261,15 @@ export default function Screens() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex-1 min-w-[260px]">
             <SearchBar
-              placeholder="Search screens by name, location, or ID..."
+              placeholder="Search screens and groups by name, location, description, or ID..."
               onSearch={setSearch}
               initialValue={search}
             />
           </div>
           <div className="text-sm text-muted-foreground">
-            {overviewQuery.isFetching ? "Refreshing live playback..." : `${filteredScreens.length} screens`}
+            {overviewQuery.isFetching
+              ? "Refreshing live playback..."
+              : `${filteredScreens.length} screens, ${filteredScreenGroups.length} groups`}
           </div>
         </div>
       </Card>
@@ -292,149 +293,171 @@ export default function Screens() {
             Retry
           </Button>
         </Card>
-      ) : filteredScreens.length === 0 ? (
-        <EmptyState
-          title="No screens found"
-          description="Try adjusting your search or pair a device from the player first."
-        />
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {paginatedScreens.map((screen) => {
-            const { id, name, location, status, last_heartbeat_at, playback, publish, active_items, upcoming_items, health_state, health_reason, auth_diagnostics, active_pairing } = screen;
-            const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
-            const isOffline = health_state === "OFFLINE" || status === "OFFLINE";
-            const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
-            const playbackLabel =
-              playback?.current_media?.name ||
-              playback?.current_media_id ||
-              getFallbackPlaybackLabel(screen);
-            const timingLabel = getPlaybackTimingLabel(
-              playback?.started_at,
-              playback?.ends_at,
-              serverNowMs,
-            );
-            const healthBadge = health_state || status || "offline";
-            const healthRank = HEALTH_PRIORITY[health_state || ""] ?? 99;
+          {filteredScreens.length === 0 ? (
+            <EmptyState
+              title="No screens found"
+              description={
+                search
+                  ? "No screen cards match the current search."
+                  : "Try pairing a device from the player first."
+              }
+            />
+          ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {paginatedScreens.map((screen) => {
+                  const {
+                    id,
+                    name,
+                    location,
+                    status,
+                    last_heartbeat_at,
+                    playback,
+                    publish,
+                    active_items,
+                    upcoming_items,
+                    health_state,
+                    health_reason,
+                    auth_diagnostics,
+                    active_pairing,
+                  } = screen;
+                  const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
+                  const isOffline = health_state === "OFFLINE" || status === "OFFLINE";
+                  const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
+                  const playbackLabel =
+                    playback?.current_media?.name ||
+                    playback?.current_media_id ||
+                    getFallbackPlaybackLabel(screen);
+                  const timingLabel = getPlaybackTimingLabel(
+                    playback?.started_at,
+                    playback?.ends_at,
+                    serverNowMs,
+                  );
+                  const healthBadge = health_state || status || "offline";
+                  const healthRank = HEALTH_PRIORITY[health_state || ""] ?? 99;
 
-            return (
-              <Card key={id} className="p-5 hover:shadow-lg transition-shadow space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`p-2 rounded-lg ${
-                        isEmergency
-                          ? "bg-red-500/10 text-red-600"
-                          : healthRank === 0 || healthRank === 1
-                            ? "bg-red-500/10 text-red-600"
-                            : isOffline
-                            ? "bg-red-500/10 text-red-600"
-                            : health_state === "ONLINE"
-                              ? "bg-green-500/10 text-green-600"
-                            : "bg-yellow-500/10 text-yellow-600"
-                      }`}
-                    >
-                      {isEmergency ? <Flame className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{name}</h3>
-                      <p className="text-xs text-muted-foreground font-mono truncate">{id}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={String(healthBadge).toLowerCase()} />
-                </div>
+                  return (
+                    <Card key={id} className="p-5 hover:shadow-lg transition-shadow space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              isEmergency
+                                ? "bg-red-500/10 text-red-600"
+                                : healthRank === 0 || healthRank === 1
+                                  ? "bg-red-500/10 text-red-600"
+                                  : isOffline
+                                    ? "bg-red-500/10 text-red-600"
+                                    : health_state === "ONLINE"
+                                      ? "bg-green-500/10 text-green-600"
+                                      : "bg-yellow-500/10 text-yellow-600"
+                            }`}
+                          >
+                            {isEmergency ? <Flame className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold truncate">{name}</h3>
+                            <p className="text-xs text-muted-foreground font-mono truncate">{id}</p>
+                          </div>
+                        </div>
+                        <StatusBadge status={String(healthBadge).toLowerCase()} />
+                      </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {isEmergency && <Badge variant="destructive">Emergency</Badge>}
-                  {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
-                  {active_pairing?.mode === "RECOVERY" && (
-                    <Badge variant="outline" className="border-amber-500 text-amber-700">
-                      Recovery pending
-                    </Badge>
-                  )}
-                  {hasStaleHeartbeat && !isOffline && (
-                    <Badge variant="outline" className="border-amber-500 text-amber-700">
-                      Delayed heartbeat
-                    </Badge>
-                  )}
-                  {!publish && playback?.source === "DEFAULT" && (
-                    <Badge variant="outline">Default fallback</Badge>
-                  )}
-                  {!publish && playback?.source === "UNKNOWN" && (
-                    <Badge variant="outline">Nothing scheduled</Badge>
-                  )}
-                </div>
+                      <div className="flex flex-wrap gap-2">
+                        {isEmergency && <Badge variant="destructive">Emergency</Badge>}
+                        {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                        {active_pairing?.mode === "RECOVERY" && (
+                          <Badge variant="outline" className="border-amber-500 text-amber-700">
+                            Recovery pending
+                          </Badge>
+                        )}
+                        {hasStaleHeartbeat && !isOffline && (
+                          <Badge variant="outline" className="border-amber-500 text-amber-700">
+                            Delayed heartbeat
+                          </Badge>
+                        )}
+                        {!publish && playback?.source === "DEFAULT" && (
+                          <Badge variant="outline">Default fallback</Badge>
+                        )}
+                        {!publish && playback?.source === "UNKNOWN" && (
+                          <Badge variant="outline">Nothing scheduled</Badge>
+                        )}
+                      </div>
 
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{location || "Unassigned"}</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <RadioTower className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground truncate">{playbackLabel}</p>
-                      <p className="text-xs">{timingLabel || "Waiting for next playback change"}</p>
-                    </div>
-                  </div>
-                  <div className="text-xs">
-                    Health: <span className="font-medium text-foreground">{health_state || status || "UNKNOWN"}</span>
-                  </div>
-                  {health_reason ? (
-                    <div className="text-xs text-muted-foreground">{health_reason}</div>
-                  ) : null}
-                  {auth_diagnostics?.reason ? (
-                    <div className="text-xs text-muted-foreground">Auth: {auth_diagnostics.reason}</div>
-                  ) : null}
-                  <div className="text-xs">
-                    Last heartbeat: {formatDateTime(last_heartbeat_at)}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs">
-                    <span>Active items: {active_items?.length ?? 0}</span>
-                    <span>Upcoming: {upcoming_items?.length ?? 0}</span>
-                  </div>
-                </div>
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{location || "Unassigned"}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <RadioTower className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground truncate">{playbackLabel}</p>
+                            <p className="text-xs">{timingLabel || "Waiting for next playback change"}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs">
+                          Health: <span className="font-medium text-foreground">{health_state || status || "UNKNOWN"}</span>
+                        </div>
+                        {health_reason ? (
+                          <div className="text-xs text-muted-foreground">{health_reason}</div>
+                        ) : null}
+                        {auth_diagnostics?.reason ? (
+                          <div className="text-xs text-muted-foreground">Auth: {auth_diagnostics.reason}</div>
+                        ) : null}
+                        <div className="text-xs">
+                          Last heartbeat: {formatDateTime(last_heartbeat_at)}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span>Active items: {active_items?.length ?? 0}</span>
+                          <span>Upcoming: {upcoming_items?.length ?? 0}</span>
+                        </div>
+                      </div>
 
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSelectedScreenId(id)}
-                    className="flex-1"
-                  >
-                    <Eye className="h-3 w-3 mr-1" />
-                    Details
-                  </Button>
-                  {canManageScreens ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setRecoveryScreenId(id);
-                          setIsPairModalOpen(true);
-                        }}
-                        aria-label={`Recover Screen ${name}`}
-                      >
-                        <QrCode className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteScreen(screen)}
-                        disabled={deleteScreen.isPending}
-                        aria-label={`Delete Screen ${name}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </>
-                  ) : null}
-                </div>
-              </Card>
-            );
-            })}
-          </div>
-          <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedScreenId(id)}
+                          className="flex-1"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          Details
+                        </Button>
+                        {canManageScreens ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setRecoveryScreenId(id);
+                                setIsPairModalOpen(true);
+                              }}
+                              aria-label={`Recover Screen ${name}`}
+                            >
+                              <QrCode className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeleteScreen(screen)}
+                              disabled={deleteScreen.isPending}
+                              aria-label={`Delete Screen ${name}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+              <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            </div>
+          )}
         </div>
       )}
 
@@ -458,13 +481,15 @@ export default function Screens() {
           </div>
 
           <div className="divide-y rounded-md border max-h-72 overflow-auto">
-            {screenGroups.length === 0 ? (
+            {filteredScreenGroups.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground text-center">
-                No groups yet. Create one to organize your screens.
+                {search
+                  ? "No screen groups match the current search."
+                  : "No groups yet. Create one to organize your screens."}
               </div>
             ) : (
               <>
-                {screenGroups.map((group: ScreenGroup) => {
+                {filteredScreenGroups.map((group: ScreenGroup) => {
                   const { id, name, description, screen_ids, booked_until, active_items, upcoming_items } = group;
 
                   return (

@@ -503,8 +503,34 @@ export interface ScreenPublishSummary {
   schedule_id?: string | null;
   snapshot_id?: string | null;
   published_at?: string | null;
+  schedule_name?: string | null;
+  reservation_version?: number | null;
+  selection_reason?: string | null;
   schedule_start_at?: string | null;
   schedule_end_at?: string | null;
+}
+
+export interface ScreenScheduleSummary {
+  id?: string | null;
+  name?: string | null;
+}
+
+export interface ScreenPlaybackItemMediaSummary {
+  id: string;
+  name?: string | null;
+  type?: string | null;
+  thumbnail_url?: string | null;
+}
+
+export interface ScreenPlaybackItemSummary {
+  item_id: string;
+  start_at?: string | null;
+  end_at?: string | null;
+  presentation_id?: string | null;
+  presentation_name?: string | null;
+  layout_id?: string | null;
+  layout_name?: string | null;
+  media: ScreenPlaybackItemMediaSummary[];
 }
 
 export interface ScreenPlaybackSummary {
@@ -580,9 +606,12 @@ export interface ScreenNowPlayingResponse {
   last_heartbeat_at?: string | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
+  current_schedule?: ScreenScheduleSummary | null;
   publish?: ScreenPublishSummary | null;
   active_items?: ScheduleItem[];
+  active_item_summaries?: ScreenPlaybackItemSummary[];
   upcoming_items?: ScheduleItem[];
+  upcoming_item_summaries?: ScreenPlaybackItemSummary[];
   booked_until?: string | null;
   playback?: ScreenPlaybackSummary | null;
   emergency?: ScreenEmergencySummary | null;
@@ -619,9 +648,15 @@ export interface ScreenScheduleTimelineResponse {
 
 export interface ScreenAvailability {
   screen_id: string;
-  is_available: boolean;
-  current_schedule_id?: string | null;
-  next_available_at?: string | null;
+  is_available_now?: boolean;
+  publish?: ScreenPublishSummary | null;
+  current_items?: ScheduleItem[];
+  current_item_summaries?: ScreenPlaybackItemSummary[];
+  next_item?: ScheduleItem | null;
+  next_item_summary?: ScreenPlaybackItemSummary | null;
+  upcoming_items?: ScheduleItem[];
+  upcoming_item_summaries?: ScreenPlaybackItemSummary[];
+  booked_until?: string | null;
 }
 
 export interface ScreenSnapshotScheduleItem extends ScheduleItem {
@@ -656,6 +691,8 @@ export interface ScreenSnapshot {
   snapshot?: {
     schedule?: {
       id?: string;
+      name?: string;
+      description?: string | null;
       start_at?: string;
       end_at?: string;
       items?: ScreenSnapshotScheduleItem[];
@@ -664,6 +701,7 @@ export interface ScreenSnapshot {
     layouts?: LayoutSummary[];
   } | null;
   media_urls?: Record<string, string>;
+  preview?: ScreenPreviewSummary | null;
   emergency?: unknown;
   default_media?: unknown;
   snapshot_at?: string;

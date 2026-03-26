@@ -153,6 +153,7 @@ export const endpoints = {
     status: (screenId: string) => `/screens/${screenId}/status`,
     availability: (screenId: string) => `/screens/${screenId}/availability`,
     snapshot: (screenId: string) => `/screens/${screenId}/snapshot`,
+    screenshot: (screenId: string) => `/screens/${screenId}/screenshot`,
     groups: "/screen-groups",
     groupById: (groupId: string) => `/screen-groups/${groupId}`,
     aspectRatios: "/screens/aspect-ratios",
