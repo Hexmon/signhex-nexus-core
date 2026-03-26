@@ -18,6 +18,7 @@ import {
   getFriendlyUploadError,
   uploadFileToMedia,
   validateUploadFile,
+  waitForMediaReady,
 } from "@/components/chat/mediaUpload";
 import type { UploadMediaResult } from "@/components/chat/mediaUpload";
 import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/chat/types";
@@ -37,6 +38,8 @@ const toPendingAttachment = (media: MediaAsset): ChatPendingAttachment => ({
   size: media.size,
   previewUrl: media.media_url,
 });
+
+const isMediaReady = (media: MediaAsset) => media.status === "READY";
 
 const resolveType = (media: MediaAsset): string => {
   const type = (media.type || "").toUpperCase();
@@ -159,18 +162,38 @@ export function AttachmentPicker({
       })
         .then((result: UploadMediaResult) => {
           const media = result.media;
-          const previewUrl = objectUrlsRef.current[localId];
-          if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-            delete objectUrlsRef.current[localId];
+          if (isMediaReady(media)) {
+            const previewUrl = objectUrlsRef.current[localId];
+            if (previewUrl) {
+              URL.revokeObjectURL(previewUrl);
+              delete objectUrlsRef.current[localId];
+            }
+
+            updateUploadItem(localId, (item) => ({
+              ...item,
+              mediaId: media.id,
+              previewUrl: media.media_url ?? undefined,
+              progress: 100,
+              status: "uploaded",
+              fileName: resolveMediaDisplayName(media),
+              contentType: media.content_type || item.contentType,
+              size: media.size ?? result.finalSize,
+              didCompress: result.didCompress,
+              originalSize: result.originalSize,
+              finalSize: result.finalSize,
+              error: undefined,
+            }));
+
+            onAddAttachments([toPendingAttachment(media)]);
+            toast({ title: "Upload complete", description: `${file.name} is ready to attach.` });
+            return;
           }
 
           updateUploadItem(localId, (item) => ({
             ...item,
             mediaId: media.id,
-            previewUrl: media.media_url ?? undefined,
             progress: 100,
-            status: "uploaded",
+            status: "processing",
             fileName: resolveMediaDisplayName(media),
             contentType: media.content_type || item.contentType,
             size: media.size ?? result.finalSize,
@@ -180,8 +203,50 @@ export function AttachmentPicker({
             error: undefined,
           }));
 
-          onAddAttachments([toPendingAttachment(media)]);
-          toast({ title: "Upload complete", description: `${file.name} is ready to attach.` });
+          toast({
+            title: "Upload complete",
+            description: `${file.name} uploaded successfully. Waiting for server verification before it can be attached.`,
+          });
+
+          void waitForMediaReady(media.id)
+            .then((readyMedia) => {
+              const previewUrl = objectUrlsRef.current[localId];
+              if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                delete objectUrlsRef.current[localId];
+              }
+
+              updateUploadItem(localId, (item) => ({
+                ...item,
+                mediaId: readyMedia.id,
+                previewUrl: readyMedia.media_url ?? undefined,
+                progress: 100,
+                status: "uploaded",
+                fileName: resolveMediaDisplayName(readyMedia),
+                contentType: readyMedia.content_type || item.contentType,
+                size: readyMedia.size ?? item.size,
+                error: undefined,
+              }));
+
+              onAddAttachments([toPendingAttachment(readyMedia)]);
+              toast({
+                title: "Attachment ready",
+                description: `${file.name} is now ready to attach.`,
+              });
+            })
+            .catch((error: unknown) => {
+              updateUploadItem(localId, (item) => ({
+                ...item,
+                status: "failed",
+                error: getFriendlyUploadError(error),
+              }));
+
+              toast({
+                title: "Verification failed",
+                description: getFriendlyUploadError(error),
+                variant: "destructive",
+              });
+            });
         })
         .catch((error: unknown) => {
           updateUploadItem(localId, (item) => ({
@@ -226,7 +291,9 @@ export function AttachmentPicker({
         URL.revokeObjectURL(item.previewUrl);
         delete objectUrlsRef.current[item.localId];
       });
-      return prev.filter((item) => item.status !== "uploaded" && item.status !== "failed");
+      return prev.filter(
+        (item) => item.status !== "uploaded" && item.status !== "failed",
+      );
     });
   };
 

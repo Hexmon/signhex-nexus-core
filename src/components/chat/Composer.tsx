@@ -13,6 +13,7 @@ import {
   getFriendlyUploadError,
   uploadFileToMedia,
   validateUploadFile,
+  waitForMediaReady,
 } from "@/components/chat/mediaUpload";
 import type { UploadMediaResult } from "@/components/chat/mediaUpload";
 import type { ChatPendingAttachment, ComposerUploadItem } from "@/components/chat/types";
@@ -35,6 +36,7 @@ interface ComposerProps {
 
 const buildLocalId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const formatUploadMb = (bytes?: number) => (typeof bytes === "number" ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : "—");
+const isMediaReady = (status?: string) => status === "READY";
 
 export function Composer({
   disabled = false,
@@ -237,28 +239,45 @@ export function Composer({
       })
         .then((result: UploadMediaResult) => {
           const media = result.media;
-          const objectUrl = objectUrlsRef.current[localId];
-          if (objectUrl) {
-            URL.revokeObjectURL(objectUrl);
-            delete objectUrlsRef.current[localId];
+          if (isMediaReady(media.status)) {
+            const objectUrl = objectUrlsRef.current[localId];
+            if (objectUrl) {
+              URL.revokeObjectURL(objectUrl);
+              delete objectUrlsRef.current[localId];
+            }
+
+            const nextAttachment: ChatPendingAttachment = {
+              mediaId: media.id,
+              fileName: resolveMediaDisplayName(media),
+              contentType: media.content_type,
+              size: media.size,
+              previewUrl: media.media_url,
+            };
+
+            addAttachments([nextAttachment]);
+
+            updateUploadItem(localId, (item) => ({
+              ...item,
+              progress: 100,
+              status: "uploaded",
+              mediaId: media.id,
+              previewUrl: media.media_url ?? undefined,
+              fileName: resolveMediaDisplayName(media),
+              contentType: media.content_type || item.contentType,
+              size: media.size ?? result.finalSize,
+              didCompress: result.didCompress,
+              originalSize: result.originalSize,
+              finalSize: result.finalSize,
+              error: undefined,
+            }));
+            return;
           }
-
-          const nextAttachment: ChatPendingAttachment = {
-            mediaId: media.id,
-            fileName: resolveMediaDisplayName(media),
-            contentType: media.content_type,
-            size: media.size,
-            previewUrl: media.media_url,
-          };
-
-          addAttachments([nextAttachment]);
 
           updateUploadItem(localId, (item) => ({
             ...item,
             progress: 100,
-            status: "uploaded",
+            status: "processing",
             mediaId: media.id,
-            previewUrl: media.media_url ?? undefined,
             fileName: resolveMediaDisplayName(media),
             contentType: media.content_type || item.contentType,
             size: media.size ?? result.finalSize,
@@ -267,6 +286,55 @@ export function Composer({
             finalSize: result.finalSize,
             error: undefined,
           }));
+
+          toast({
+            title: "Upload complete",
+            description: `${file.name} uploaded successfully. Waiting for server verification before it can be attached.`,
+          });
+
+          void waitForMediaReady(media.id)
+            .then((readyMedia) => {
+              const objectUrl = objectUrlsRef.current[localId];
+              if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+                delete objectUrlsRef.current[localId];
+              }
+
+              addAttachments([
+                {
+                  mediaId: readyMedia.id,
+                  fileName: resolveMediaDisplayName(readyMedia),
+                  contentType: readyMedia.content_type,
+                  size: readyMedia.size,
+                  previewUrl: readyMedia.media_url,
+                },
+              ]);
+
+              updateUploadItem(localId, (item) => ({
+                ...item,
+                progress: 100,
+                status: "uploaded",
+                mediaId: readyMedia.id,
+                previewUrl: readyMedia.media_url ?? undefined,
+                fileName: resolveMediaDisplayName(readyMedia),
+                contentType: readyMedia.content_type || item.contentType,
+                size: readyMedia.size ?? item.size,
+                error: undefined,
+              }));
+            })
+            .catch((error: unknown) => {
+              updateUploadItem(localId, (item) => ({
+                ...item,
+                status: "failed",
+                error: getFriendlyUploadError(error),
+              }));
+
+              toast({
+                title: "Verification failed",
+                description: getFriendlyUploadError(error),
+                variant: "destructive",
+              });
+            });
         })
         .catch((error: unknown) => {
           updateUploadItem(localId, (item) => ({
@@ -319,7 +387,12 @@ export function Composer({
         URL.revokeObjectURL(item.previewUrl);
         delete objectUrlsRef.current[item.localId];
       });
-      return prev.filter((item) => item.status === "uploading" || item.status === "queued");
+      return prev.filter(
+        (item) =>
+          item.status === "uploading" ||
+          item.status === "queued" ||
+          item.status === "processing",
+      );
     });
   };
 

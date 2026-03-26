@@ -37,6 +37,8 @@ export interface UploadMediaResult extends CompressionResult {
   media: MediaAsset;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+
 class UploadHttpError extends Error {
   status: number;
 
@@ -174,7 +176,6 @@ export const uploadMediaWithPresign = async (
       : await readMediaMetadata(finalFile);
 
   const media = await mediaApi.complete(presign.media_id, {
-    status: "READY",
     content_type: contentType,
     size: finalFile.size,
     ...metadata,
@@ -201,6 +202,29 @@ export const getFriendlyUploadError = (error: unknown): string => {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Upload failed. Please try again.";
+};
+
+export const waitForMediaReady = async (
+  mediaId: string,
+  options?: { timeoutMs?: number; intervalMs?: number },
+): Promise<MediaAsset> => {
+  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const intervalMs = options?.intervalMs ?? 2_000;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() <= deadline) {
+    const media = await mediaApi.getById(mediaId);
+    if (media.status === "READY") {
+      return media;
+    }
+    if (media.status === "FAILED") {
+      throw new Error("Server verification failed for this upload.");
+    }
+
+    await sleep(intervalMs);
+  }
+
+  throw new Error("Server verification is taking longer than expected. Please refresh and try again.");
 };
 
 export const createLocalPreviewUrl = (file: File) => {

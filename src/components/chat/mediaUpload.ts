@@ -4,6 +4,7 @@ export {
   createLocalPreviewUrl,
   getFriendlyUploadError,
   readMediaMetadata,
+  waitForMediaReady,
   uploadMediaWithPresign as uploadFileToMedia,
   validateUploadFile,
 } from "@/lib/mediaUploadFlow";

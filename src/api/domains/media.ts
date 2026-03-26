@@ -18,7 +18,6 @@ export interface PresignResponse {
 }
 
 export interface MediaCompletionPayload {
-  status?: string;
   content_type?: string;
   size?: number;
   width?: number;
@@ -30,6 +29,23 @@ export interface MediaMetadataPayload {
   name: string;
   type: MediaType;
 }
+
+const normalizePaginatedResponse = <T>(
+  payload: PaginatedResponse<T> | { items?: T[]; pagination?: { page?: number; limit?: number; total?: number } },
+  fallbackPage = 1,
+  fallbackLimit = 10,
+): PaginatedResponse<T> => {
+  if ("page" in payload && "limit" in payload && "total" in payload) {
+    return payload;
+  }
+
+  return {
+    items: payload.items ?? [],
+    page: payload.pagination?.page ?? fallbackPage,
+    limit: payload.pagination?.limit ?? fallbackLimit,
+    total: payload.pagination?.total ?? (payload.items?.length ?? 0),
+  };
+};
 
 export const mediaApi = {
   // Create a metadata-only media entry (no upload).
@@ -55,11 +71,13 @@ export const mediaApi = {
     }),
 
   list: (params?: MediaListParams) =>
-    apiClient.request<PaginatedResponse<MediaAsset>>({
-      path: endpoints.media.base,
-      method: "GET",
-      query: params,
-    }),
+    apiClient
+      .request<PaginatedResponse<MediaAsset> | { items?: MediaAsset[]; pagination?: { page?: number; limit?: number; total?: number } }>({
+        path: endpoints.media.base,
+        method: "GET",
+        query: params,
+      })
+      .then((response) => normalizePaginatedResponse(response, params?.page ?? 1, params?.limit ?? 10)),
 
   getById: (mediaId: string) =>
     apiClient.request<MediaAsset>({

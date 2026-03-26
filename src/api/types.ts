@@ -876,6 +876,7 @@ export interface MediaAsset {
   source_size?: number;
   size?: number;
   status?: string;
+  status_reason?: string | null;
   duration_seconds?: number;
   width?: number;
   height?: number;

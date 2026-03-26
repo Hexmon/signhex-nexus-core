@@ -101,7 +101,6 @@ describe("uploadMediaWithPresign", () => {
     });
     expect(MockXMLHttpRequest.instances[0].send).toHaveBeenCalledWith(compressedFile);
     expect(mockedMediaApi.complete).toHaveBeenCalledWith("media-1", {
-      status: "READY",
       content_type: "image/webp",
       size: 220_000,
       width: 1920,
@@ -153,7 +152,6 @@ describe("uploadMediaWithPresign", () => {
       size: 450_000,
     });
     expect(mockedMediaApi.complete).toHaveBeenCalledWith("media-2", {
-      status: "READY",
       content_type: "application/pdf",
       size: 450_000,
     });

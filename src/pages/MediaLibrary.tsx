@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Upload, Image as ImageIcon, Video, FileText, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAppSelector } from "@/store/hooks";
 import {
   getFriendlyUploadError,
+  waitForMediaReady,
   uploadMediaWithPresign,
   validateUploadFile,
   type UploadMediaResult,
@@ -26,6 +27,7 @@ import {
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
 import { deriveDisplayNameFromFilename, resolveMediaDisplayName } from "@/lib/media";
 import { canDeleteMediaRecord } from "@/lib/access";
+import { PageNavigation } from "@/components/common/PageNavigation";
 
 type MediaLibraryLocationState = {
   returnTo?: string;
@@ -33,6 +35,10 @@ type MediaLibraryLocationState = {
   restoreDraft?: boolean;
   openUpload?: boolean;
 };
+
+type MediaTab = "all" | "image" | "video" | "document";
+
+const MEDIA_PAGE_SIZE = 6;
 
 const formatRelativeMediaTime = (value?: string | null) => {
   if (!value) return null;
@@ -60,7 +66,13 @@ export default function MediaLibrary() {
   const navigate = useNavigate();
   const locationState = location.state as MediaLibraryLocationState | null;
   const currentUser = useAppSelector((state) => state.auth.user);
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState<MediaTab>("all");
+  const [pageByTab, setPageByTab] = useState<Record<MediaTab, number>>({
+    all: 1,
+    image: 1,
+    video: 1,
+    document: 1,
+  });
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -96,15 +108,36 @@ export default function MediaLibrary() {
       });
     },
     onSuccess: (result) => {
-      const description = result.didCompress
-        ? `Media uploaded. Compressed ${(result.originalSize / 1024 / 1024).toFixed(2)} MB -> ${(result.finalSize / 1024 / 1024).toFixed(2)} MB.`
-        : "Media uploaded and marked ready.";
+      const compressionNote = result.didCompress
+        ? ` Compressed ${(result.originalSize / 1024 / 1024).toFixed(2)} MB -> ${(result.finalSize / 1024 / 1024).toFixed(2)} MB.`
+        : "";
+      const isProcessing = result.media.status === "PROCESSING";
+      const description = isProcessing
+        ? `Media uploaded successfully.${compressionNote} Server verification is still running; the file will appear once it is marked ready.`
+        : `Media uploaded and verified.${compressionNote}`;
       toast({ title: "Upload complete", description });
       setIsUploadOpen(false);
       setSelectedFile(null);
       setDisplayName("");
       setUploadProgress(0);
       void queryClient.invalidateQueries({ queryKey: ["media"] });
+      if (isProcessing) {
+        void waitForMediaReady(result.media.id)
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ["media"] });
+            toast({
+              title: "Media ready",
+              description: `${resolveMediaDisplayName(result.media)} is now ready to use.`,
+            });
+          })
+          .catch((error) => {
+            toast({
+              title: "Verification delayed",
+              description: getFriendlyUploadError(error),
+              variant: "destructive",
+            });
+          });
+      }
       if (locationState?.returnTo) {
         navigate(locationState.returnTo, {
           state: {
@@ -153,17 +186,40 @@ export default function MediaLibrary() {
     },
   });
 
+  const activePage = pageByTab[activeTab];
   const typeFilter = (activeTab === "all" ? undefined : activeTab.toUpperCase()) as MediaType | undefined;
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ["media", typeFilter],
+    queryKey: ["media", "library", typeFilter, activePage, MEDIA_PAGE_SIZE],
     queryFn: () =>
       mediaApi.list({
-        limit: 100,
-        page: 1,
+        limit: MEDIA_PAGE_SIZE,
+        page: activePage,
         status: "READY",
         type: typeFilter,
       }),
+    placeholderData: (previousData) => previousData,
+  });
+
+  const statsQueries = useQueries({
+    queries: [
+      {
+        queryKey: ["media", "stats", "all"],
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY" }),
+      },
+      {
+        queryKey: ["media", "stats", "image"],
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "IMAGE" }),
+      },
+      {
+        queryKey: ["media", "stats", "video"],
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "VIDEO" }),
+      },
+      {
+        queryKey: ["media", "stats", "document"],
+        queryFn: () => mediaApi.list({ page: 1, limit: 1, status: "READY", type: "DOCUMENT" }),
+      },
+    ],
   });
 
   const isUploading = uploadMutation.isPending;
@@ -251,6 +307,8 @@ export default function MediaLibrary() {
     }
   }, [isError, error, toast]);
 
+  const pagination = data ?? { items: [], page: activePage, limit: MEDIA_PAGE_SIZE, total: 0 };
+  const totalPages = pagination.limit > 0 ? Math.max(1, Math.ceil(pagination.total / pagination.limit)) : 1;
   const media = useMemo(() => data?.items ?? [], [data]);
 
   const filteredMedia = useMemo(
@@ -269,12 +327,21 @@ export default function MediaLibrary() {
   );
 
   const stats = useMemo(() => {
-    const total = media.length;
-    const images = media.filter((m) => (m.type || "").toUpperCase() === "IMAGE").length;
-    const videos = media.filter((m) => (m.type || "").toUpperCase() === "VIDEO").length;
-    const documents = media.filter((m) => (m.type || "").toUpperCase() === "DOCUMENT").length;
+    const total = statsQueries[0]?.data?.total ?? 0;
+    const images = statsQueries[1]?.data?.total ?? 0;
+    const videos = statsQueries[2]?.data?.total ?? 0;
+    const documents = statsQueries[3]?.data?.total ?? 0;
     return { total, images, videos, documents };
-  }, [media]);
+  }, [statsQueries]);
+
+  useEffect(() => {
+    if (activePage > totalPages) {
+      setPageByTab((prev) => ({
+        ...prev,
+        [activeTab]: totalPages,
+      }));
+    }
+  }, [activePage, activeTab, totalPages]);
 
   const resolveMediaLabel = (media: MediaAsset) => resolveMediaDisplayName(media);
   const resolveMediaUpdatedLabel = (media: MediaAsset) =>
@@ -313,7 +380,7 @@ export default function MediaLibrary() {
             </TabsList>
           </Tabs>
           <div className="text-sm text-muted-foreground">
-            {isFetching ? "Refreshing..." : `${filteredMedia.length} items`}
+            {isFetching ? "Refreshing..." : `${pagination.total} items`}
           </div>
         </div>
       </Card>
@@ -430,6 +497,19 @@ export default function MediaLibrary() {
         </div>
       )}
 
+      <PageNavigation
+        currentPage={activePage}
+        totalPages={totalPages}
+        showPageNumbers
+        onPageChange={(nextPage) =>
+          setPageByTab((prev) => ({
+            ...prev,
+            [activeTab]: nextPage,
+          }))
+        }
+        className="flex justify-end"
+      />
+
       <Dialog
         open={isUploadOpen}
         onOpenChange={(open) => {
@@ -491,7 +571,7 @@ export default function MediaLibrary() {
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              We request a presigned upload URL, upload directly to storage, then mark the media READY.
+              We request a presigned upload URL, upload directly to storage, then the server verifies the object and marks it READY.
             </p>
           </div>
           <DialogFooter>

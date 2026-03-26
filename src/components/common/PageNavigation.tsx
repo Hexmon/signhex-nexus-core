@@ -1,7 +1,9 @@
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
+  PaginationLink,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -11,6 +13,23 @@ type PageNavigationProps = {
   totalPages: number;
   onPageChange: (page: number) => void;
   className?: string;
+  showPageNumbers?: boolean;
+};
+
+const buildPageItems = (currentPage: number, totalPages: number): Array<number | "ellipsis"> => {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [1, "ellipsis", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+
+  return [1, "ellipsis", currentPage - 1, currentPage, currentPage + 1, "ellipsis", totalPages];
 };
 
 export function PageNavigation({
@@ -18,9 +37,11 @@ export function PageNavigation({
   totalPages,
   onPageChange,
   className,
+  showPageNumbers = false,
 }: PageNavigationProps) {
   const canGoPrevious = currentPage > 1;
   const canGoNext = currentPage < totalPages;
+  const pageItems = showPageNumbers ? buildPageItems(currentPage, totalPages) : [];
 
   return (
     <div className={className}>
@@ -42,6 +63,25 @@ export function PageNavigation({
                 }}
               />
             </PaginationItem>
+            {pageItems.map((item, index) => (
+              <PaginationItem key={item === "ellipsis" ? `ellipsis-${index}` : item}>
+                {item === "ellipsis" ? (
+                  <PaginationEllipsis />
+                ) : (
+                  <PaginationLink
+                    href="#"
+                    isActive={item === currentPage}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (item === currentPage) return;
+                      onPageChange(item);
+                    }}
+                  >
+                    {item}
+                  </PaginationLink>
+                )}
+              </PaginationItem>
+            ))}
             <PaginationItem>
               <PaginationNext
                 href="#"

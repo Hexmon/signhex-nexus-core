@@ -1,4 +1,4 @@
-export type UploadStatus = "queued" | "uploading" | "uploaded" | "failed";
+export type UploadStatus = "queued" | "uploading" | "processing" | "uploaded" | "failed";
 
 export interface ChatPendingAttachment {
   mediaId: string;
