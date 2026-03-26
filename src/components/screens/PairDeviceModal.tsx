@@ -21,6 +21,7 @@ import { useSafeMutation } from "@/hooks/useSafeMutation";
 import type { PairingStatusResponse, ScreenOverviewItem } from "@/api/types";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { formatMaskedScreenId } from "@/lib/screens";
 
 interface PairDeviceModalProps {
   open: boolean;
@@ -220,7 +221,7 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold">{recoveryScreen.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{recoveryScreen.id}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{formatMaskedScreenId(recoveryScreen.id)}</p>
                   </div>
                   <StatusBadge status={recoveryScreen.health_state || recoveryScreen.status || "offline"} />
                 </div>

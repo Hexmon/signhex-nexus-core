@@ -23,6 +23,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
+import { formatMaskedScreenId } from "@/lib/screens";
 
 interface ScreenHealthDashboardProps {
   screenId: string;
@@ -80,7 +81,7 @@ export function ScreenHealthDashboard({ screenId, screenName }: ScreenHealthDash
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Health Monitor: {screenName}</h2>
-          <p className="text-sm text-muted-foreground">Screen ID: {screenId}</p>
+          <p className="text-sm text-muted-foreground">{formatMaskedScreenId(screenId)}</p>
         </div>
         <Badge variant="outline" className={`${healthStatus.color} border-current`}>
           <HealthIcon className="h-3 w-3 mr-1" />

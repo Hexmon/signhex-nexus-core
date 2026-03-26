@@ -5,11 +5,14 @@ import {
   Clock,
   Edit2,
   Flame,
+  HeartPulse,
   MapPin,
   Monitor,
   RadioTower,
   RefreshCcw,
   Save,
+  ShieldAlert,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import {
@@ -34,7 +37,14 @@ import { useSafeMutation } from "@/hooks/useSafeMutation";
 import { toast } from "sonner";
 import { ApiError } from "@/api/apiClient";
 import { getPlaybackTimingLabel, getServerClockOffsetMs, getServerNowFromOffset, isHeartbeatStale } from "@/hooks/screens/screensRealtimeUtils";
-import { maskCertificateSerial } from "@/lib/screens";
+import {
+  formatMaskedScreenId,
+  getScreenAuthIndicator,
+  getScreenHeartbeatIndicator,
+  getScreenIndicatorBadgeClassName,
+  getScreenPlaybackSourceLabel,
+  maskCertificateSerial,
+} from "@/lib/screens";
 
 interface ScreenDetailsModalProps {
   screenId: string;
@@ -155,6 +165,11 @@ export function ScreenDetailsModal({
   const activePairing = nowPlaying?.active_pairing || null;
   const isOffline = screenStatus === "OFFLINE";
   const hasStaleHeartbeat = isHeartbeatStale(nowPlaying?.last_heartbeat_at, nowPlaying?.server_time);
+  const authIndicator = getScreenAuthIndicator(authDiagnostics);
+  const heartbeatIndicator = getScreenHeartbeatIndicator(
+    { status: screenStatus, health_state: healthState },
+    hasStaleHeartbeat,
+  );
   const playback = nowPlaying?.playback;
   const currentMedia = playback?.current_media;
   const timingLabel = getPlaybackTimingLabel(playback?.started_at, playback?.ends_at, serverNowMs);
@@ -297,7 +312,7 @@ export function ScreenDetailsModal({
                   </>
                 )}
               </DialogTitle>
-              <DialogDescription className="font-mono">{maskCertificateSerial(screenId)}</DialogDescription>
+              <DialogDescription className="font-mono">{formatMaskedScreenId(screenId)}</DialogDescription>
             </div>
             <div className="flex gap-2">
               {isEditing ? (
@@ -400,17 +415,38 @@ export function ScreenDetailsModal({
                     <div className="flex flex-wrap gap-2">
                       <StatusBadge status={String(healthState).toLowerCase()} />
                       <Badge variant="outline">{screenStatus}</Badge>
-                      {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                      <Badge variant="outline">
+                        {getScreenPlaybackSourceLabel(playback?.source, {
+                          hasPublish: Boolean(nowPlaying?.publish),
+                        })}
+                      </Badge>
+                      {authIndicator ? (
+                        <Badge
+                          variant="outline"
+                          className={getScreenIndicatorBadgeClassName(authIndicator.tone)}
+                        >
+                          {authIndicator.tone === "ok" ? (
+                            <ShieldCheck className="mr-1 h-3 w-3" />
+                          ) : (
+                            <ShieldAlert className="mr-1 h-3 w-3" />
+                          )}
+                          {authIndicator.label}
+                        </Badge>
+                      ) : null}
+                      {heartbeatIndicator ? (
+                        <Badge
+                          variant="outline"
+                          className={getScreenIndicatorBadgeClassName(heartbeatIndicator.tone)}
+                        >
+                          <HeartPulse className="mr-1 h-3 w-3" />
+                          {heartbeatIndicator.label}
+                        </Badge>
+                      ) : null}
                       {activePairing?.mode === "RECOVERY" ? (
                         <Badge variant="outline" className="border-amber-500 text-amber-700">
                           Recovery pending
                         </Badge>
                       ) : null}
-                      {hasStaleHeartbeat && !isOffline && (
-                        <Badge variant="outline" className="border-amber-500 text-amber-700">
-                          Delayed heartbeat
-                        </Badge>
-                      )}
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -428,19 +464,17 @@ export function ScreenDetailsModal({
                     </div>
                   </div>
                 </div>
-                {healthReason ? (
-                  <div className="text-sm text-muted-foreground">
-                    <Label className="text-muted-foreground">Health reason</Label>
-                    <p className="mt-1">{healthReason}</p>
-                  </div>
-                ) : null}
                 {authDiagnostics ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Auth diagnostics</Label>
                       <div className="space-y-1 text-sm">
-                        <p className="font-medium">{authDiagnostics.state || "UNKNOWN"}</p>
-                        <p className="text-muted-foreground">{authDiagnostics.reason || "No authentication warnings."}</p>
+                        <p className="font-medium">{authIndicator?.label || authDiagnostics.state || "Unknown"}</p>
+                        {healthReason && healthState !== "ONLINE" ? (
+                          <p className="text-muted-foreground">{healthReason}</p>
+                        ) : authDiagnostics.reason && authDiagnostics.state !== "VALID" ? (
+                          <p className="text-muted-foreground">{authDiagnostics.reason}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="space-y-2 text-sm">
@@ -513,7 +547,11 @@ export function ScreenDetailsModal({
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Playback source</Label>
-                      <p className="text-lg font-semibold">{playback?.source || "UNKNOWN"}</p>
+                      <p className="text-lg font-semibold">
+                        {getScreenPlaybackSourceLabel(playback?.source, {
+                          hasPublish: Boolean(nowPlaying?.publish),
+                        })}
+                      </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Last heartbeat</Label>
@@ -706,7 +744,11 @@ export function ScreenDetailsModal({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 text-sm">
                     <div>
                       <Label className="text-muted-foreground">Playback source</Label>
-                      <p>{playback?.source || "UNKNOWN"}</p>
+                      <p>
+                        {getScreenPlaybackSourceLabel(playback?.source, {
+                          hasPublish: Boolean(snapshot.publish),
+                        })}
+                      </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Published at</Label>

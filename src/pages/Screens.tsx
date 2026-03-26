@@ -12,6 +12,8 @@ import {
   Power,
   QrCode,
   RadioTower,
+  ShieldAlert,
+  ShieldCheck,
   Trash2,
   Users,
 } from "lucide-react";
@@ -45,7 +47,16 @@ import {
 } from "@/hooks/screens/screensRealtimeUtils";
 import { useAppSelector } from "@/store/hooks";
 import { isAdminLike } from "@/lib/access";
-import { matchesScreenGroupSearch, matchesScreenSearch } from "@/lib/screens";
+import {
+  formatMaskedScreenId,
+  getScreenAuthIndicator,
+  getScreenHeartbeatIndicator,
+  getScreenIndicatorBadgeClassName,
+  getScreenPlaybackHeadline,
+  getScreenPlaybackSourceLabel,
+  matchesScreenGroupSearch,
+  matchesScreenSearch,
+} from "@/lib/screens";
 
 const PAGE_SIZE = 9;
 
@@ -55,14 +66,6 @@ const HEALTH_PRIORITY: Record<string, number> = {
   STALE: 2,
   OFFLINE: 3,
   ONLINE: 4,
-};
-
-const getFallbackPlaybackLabel = (screen: ScreenOverviewItem) => {
-  if (screen.playback?.source === "EMERGENCY") return "Emergency takeover is active";
-  if (screen.status === "OFFLINE") return "Screen is offline";
-  if (!screen.publish && screen.playback?.source === "DEFAULT") return "Default media fallback";
-  if (!screen.publish && screen.playback?.source === "UNKNOWN") return "Nothing currently scheduled";
-  return "Waiting for live playback";
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -326,15 +329,28 @@ export default function Screens() {
                   const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
                   const isOffline = health_state === "OFFLINE" || status === "OFFLINE";
                   const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
-                  const playbackLabel =
-                    playback?.current_media?.name ||
-                    playback?.current_media_id ||
-                    getFallbackPlaybackLabel(screen);
+                  const playbackLabel = getScreenPlaybackHeadline(screen);
+                  const playbackSourceLabel = getScreenPlaybackSourceLabel(playback?.source, {
+                    hasPublish: Boolean(publish),
+                  });
+                  const authIndicator = getScreenAuthIndicator(auth_diagnostics);
+                  const heartbeatIndicator = getScreenHeartbeatIndicator(screen, hasStaleHeartbeat);
                   const timingLabel = getPlaybackTimingLabel(
                     playback?.started_at,
                     playback?.ends_at,
                     serverNowMs,
                   );
+                  const playbackSubLabel =
+                    timingLabel ||
+                    (isEmergency
+                      ? "Emergency content is active"
+                      : playback?.source === "DEFAULT"
+                        ? "Default fallback is active"
+                        : isOffline
+                          ? "Screen offline"
+                          : !publish
+                            ? "No active playback right now"
+                            : "Awaiting scheduled playback");
                   const healthBadge = health_state || status || "offline";
                   const healthRank = HEALTH_PRIORITY[health_state || ""] ?? 99;
 
@@ -359,7 +375,7 @@ export default function Screens() {
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-semibold truncate">{name}</h3>
-                            <p className="text-xs text-muted-foreground font-mono truncate">{id}</p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">{formatMaskedScreenId(id)}</p>
                           </div>
                         </div>
                         <StatusBadge status={String(healthBadge).toLowerCase()} />
@@ -367,23 +383,36 @@ export default function Screens() {
 
                       <div className="flex flex-wrap gap-2">
                         {isEmergency && <Badge variant="destructive">Emergency</Badge>}
-                        {playback?.source && <Badge variant="outline">{playback.source}</Badge>}
+                        {!isEmergency && (
+                          <Badge variant="outline">{playbackSourceLabel}</Badge>
+                        )}
+                        {authIndicator ? (
+                          <Badge
+                            variant="outline"
+                            className={getScreenIndicatorBadgeClassName(authIndicator.tone)}
+                          >
+                            {authIndicator.tone === "ok" ? (
+                              <ShieldCheck className="mr-1 h-3 w-3" />
+                            ) : (
+                              <ShieldAlert className="mr-1 h-3 w-3" />
+                            )}
+                            {authIndicator.label}
+                          </Badge>
+                        ) : null}
                         {active_pairing?.mode === "RECOVERY" && (
                           <Badge variant="outline" className="border-amber-500 text-amber-700">
                             Recovery pending
                           </Badge>
                         )}
-                        {hasStaleHeartbeat && !isOffline && (
-                          <Badge variant="outline" className="border-amber-500 text-amber-700">
-                            Delayed heartbeat
+                        {heartbeatIndicator ? (
+                          <Badge
+                            variant="outline"
+                            className={getScreenIndicatorBadgeClassName(heartbeatIndicator.tone)}
+                          >
+                            <HeartPulse className="mr-1 h-3 w-3" />
+                            {heartbeatIndicator.label}
                           </Badge>
-                        )}
-                        {!publish && playback?.source === "DEFAULT" && (
-                          <Badge variant="outline">Default fallback</Badge>
-                        )}
-                        {!publish && playback?.source === "UNKNOWN" && (
-                          <Badge variant="outline">Nothing scheduled</Badge>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="space-y-2 text-sm text-muted-foreground">
@@ -395,18 +424,9 @@ export default function Screens() {
                           <RadioTower className="h-4 w-4 mt-0.5 flex-shrink-0" />
                           <div className="min-w-0">
                             <p className="font-medium text-foreground truncate">{playbackLabel}</p>
-                            <p className="text-xs">{timingLabel || "Waiting for next playback change"}</p>
+                            <p className="text-xs">{playbackSubLabel}</p>
                           </div>
                         </div>
-                        <div className="text-xs">
-                          Health: <span className="font-medium text-foreground">{health_state || status || "UNKNOWN"}</span>
-                        </div>
-                        {health_reason ? (
-                          <div className="text-xs text-muted-foreground">{health_reason}</div>
-                        ) : null}
-                        {auth_diagnostics?.reason ? (
-                          <div className="text-xs text-muted-foreground">Auth: {auth_diagnostics.reason}</div>
-                        ) : null}
                         <div className="text-xs">
                           Last heartbeat: {formatDateTime(last_heartbeat_at)}
                         </div>
