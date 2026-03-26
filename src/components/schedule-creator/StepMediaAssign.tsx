@@ -168,7 +168,7 @@ export function StepMediaAssign({ layout, slotMedia, onUpdateSlotMedia }: StepMe
       mediaType,
       mediaThumbnail: mediaType === "IMAGE" ? media.media_url ?? undefined : undefined,
       mediaUrl: media.media_url ?? null,
-      mediaContentType: media.source_content_type ?? media.content_type ?? null,
+      mediaContentType: media.content_type ?? media.source_content_type ?? null,
       order: newOrder,
       durationSeconds: media.duration_seconds || 10,
       fitMode: "cover",

@@ -40,7 +40,7 @@ export const resolveMediaFilename = (media?: MediaLike | null) =>
   trimToUndefined(media?.filename) ?? trimToUndefined(media?.name) ?? trimToUndefined(media?.id) ?? "file";
 
 export const resolveMediaMimeType = (media?: MediaLike | null) =>
-  trimToUndefined(media?.source_content_type) ?? trimToUndefined(media?.content_type);
+  trimToUndefined(media?.content_type) ?? trimToUndefined(media?.source_content_type);
 
 export const resolveMediaPreviewType = (media?: MediaLike | null) => {
   const explicitType = trimToUndefined(media?.type)?.toUpperCase();

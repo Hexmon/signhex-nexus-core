@@ -63,6 +63,8 @@ const resolveCopyTargetUrl = (media: MediaAsset) =>
     : media.media_url ?? null;
 
 const resolveStatusLabel = (media: MediaAsset) => media.status ?? "PENDING";
+const resolvePlayableMimeType = (media: MediaAsset) => media.content_type || media.source_content_type || null;
+const resolveOriginalMimeType = (media: MediaAsset) => media.source_content_type || null;
 
 const formatRelativeMediaTime = (value?: string | null) => {
   if (!value) return null;
@@ -611,8 +613,22 @@ export default function MediaLibrary() {
                     Reason: {item.status_reason}
                   </div>
                 ) : null}
+                {resolveLibraryMediaType(item) === "DOCUMENT" ? (
+                  <div className="space-y-1 text-xs">
+                    {resolveOriginalMimeType(item) ? <div>Original type: {resolveOriginalMimeType(item)}</div> : null}
+                    {resolvePlayableMimeType(item) ? <div>Playback type: {resolvePlayableMimeType(item)}</div> : null}
+                  </div>
+                ) : null}
                 {resolveLibraryMediaType(item) === "WEBPAGE" && item.source_url ? (
-                  <div className="text-xs break-all">URL: {item.source_url}</div>
+                  <div className="space-y-1 text-xs">
+                    <div className="break-all">URL: {item.source_url}</div>
+                    <div>Playback is anonymous/public only. CMS login state is not reused.</div>
+                  </div>
+                ) : null}
+                {resolveLibraryMediaType(item) === "WEBPAGE" && item.fallback_media_url ? (
+                  <div className="text-xs">
+                    Fallback preview: server-captured screenshot
+                  </div>
                 ) : null}
                 {resolveMediaUpdatedLabel(item) && (
                   <div className="text-xs">
@@ -743,7 +759,7 @@ export default function MediaLibrary() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              The server verifies the URL and generates a fallback preview before the webpage becomes ready for playback.
+              The server verifies the URL, captures a fallback screenshot, and only then marks it ready. Webpage playback is anonymous/public only; CMS login cookies are never reused on screens.
             </p>
           </div>
           <DialogFooter>
@@ -807,11 +823,18 @@ export default function MediaLibrary() {
                         </Button>
                       ) : null}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Playback uses the live URL only when it loads anonymously. Screens fall back to the captured preview when the live page is unavailable.
+                    </p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 rounded-md border bg-muted/40 p-6 text-center">
                     <FileText className="h-10 w-10 text-primary" />
                     <p className="text-sm text-muted-foreground">Document preview unavailable. Open in a new tab.</p>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      {resolveOriginalMimeType(previewMedia) ? <div>Original type: {resolveOriginalMimeType(previewMedia)}</div> : null}
+                      {resolvePlayableMimeType(previewMedia) ? <div>Playback type: {resolvePlayableMimeType(previewMedia)}</div> : null}
+                    </div>
                     <Button variant="outline" asChild>
                       <a href={resolveCopyTargetUrl(previewMedia) ?? undefined} target="_blank" rel="noreferrer">
                         Open document
