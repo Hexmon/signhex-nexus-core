@@ -421,9 +421,23 @@ export interface Department {
 
 export interface AuditLog {
   id: string;
-  user_id?: string;
-  resource_type?: string;
-  action?: string;
+  user_id?: string | null;
+  user?: {
+    id: string;
+    email: string;
+    first_name?: string | null;
+    last_name?: string | null;
+    role_id?: string;
+    department_id?: string | null;
+    is_active?: boolean;
+  } | null;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  action?: string | null;
+  changes?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  storage_object_id?: string | null;
   metadata?: Record<string, unknown>;
   created_at?: string;
 }

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp, Activity, Monitor, AlertTriangle, Bell, Shield, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { reportsApi } from "@/api/domains/reports";
 import { proofOfPlayApi } from "@/api/domains/proofOfPlay";
 import { auditLogsApi } from "@/api/domains/auditLogs";
@@ -16,7 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useAuthorization } from "@/hooks/useAuthorization";
-import type { ProofOfPlayListResponse } from "@/api/types";
+import type { AuditLog, ProofOfPlayListResponse } from "@/api/types";
+import { PageNavigation } from "@/components/common/PageNavigation";
+
+const AUDIT_LOGS_PAGE_SIZE = 5;
 
 const downloadBlobFile = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
@@ -29,11 +33,116 @@ const downloadBlobFile = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(url);
 };
 
+const formatAuditField = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+};
+
+const formatAuditTimestamp = (value?: string) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(date);
+};
+
+function AuditLogCard({ log }: { log: AuditLog }) {
+  const actorName = [log.user?.first_name, log.user?.last_name].filter(Boolean).join(" ").trim();
+  const actorLabel = actorName || log.user?.email || log.user_id || "system";
+  const changesValue =
+    log.changes && Object.keys(log.changes).length > 0 ? JSON.stringify(log.changes, null, 2) : "—";
+
+  const detailFields = [
+    { label: "Log ID", value: log.id, mono: true },
+    { label: "Resource type", value: log.resource_type },
+    { label: "Resource ID", value: log.resource_id, mono: true },
+    { label: "User ID", value: log.user_id, mono: true },
+    { label: "IP address", value: log.ip_address },
+    { label: "User agent", value: log.user_agent },
+    { label: "Storage object ID", value: log.storage_object_id, mono: true },
+    { label: "Created", value: formatAuditTimestamp(log.created_at) },
+  ];
+
+  const actorFields = [
+    { label: "Name", value: actorName || "—" },
+    { label: "Email", value: log.user?.email },
+    { label: "Role ID", value: log.user?.role_id, mono: true },
+    { label: "Department ID", value: log.user?.department_id, mono: true },
+    { label: "Active", value: log.user?.is_active },
+  ];
+
+  return (
+    <AccordionItem value={log.id} className="rounded-lg border bg-card px-4">
+      <AccordionTrigger className="py-4 hover:no-underline">
+        <div className="flex flex-1 flex-wrap items-start justify-between gap-3 pr-4 text-left">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{log.action ?? "ACTION"}</Badge>
+              <Badge variant="outline">{formatAuditField(log.resource_type)}</Badge>
+            </div>
+            <div>
+              <p className="font-medium">{actorLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                {log.user?.email ?? log.user_id ?? "system"}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-1 text-left sm:text-right">
+            <p className="text-sm font-medium">{formatAuditTimestamp(log.created_at)}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatAuditField(log.ip_address)}
+            </p>
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="pb-4">
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {detailFields.map((field) => (
+              <div key={field.label} className="rounded-md border bg-muted/20 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{field.label}</p>
+                <p className={field.mono ? "mt-1 break-all font-mono text-xs" : "mt-1 text-sm"}>
+                  {formatAuditField(field.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">User details</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {actorFields.map((field) => (
+                <div key={field.label}>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{field.label}</p>
+                  <p className={field.mono ? "mt-1 break-all font-mono text-xs" : "mt-1 text-sm"}>
+                    {formatAuditField(field.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Changes</p>
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-background px-3 py-2 font-mono text-xs">
+              {changesValue}
+            </pre>
+          </div>
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
 export default function Reports() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [resourceFilter, setResourceFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [auditLogsPage, setAuditLogsPage] = useState(1);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportingReportPdf, setIsExportingReportPdf] = useState(false);
   const [isExportingLogsPdf, setIsExportingLogsPdf] = useState(false);
@@ -57,14 +166,15 @@ export default function Reports() {
   });
 
   const auditLogsQuery = useQuery({
-    queryKey: ["audit-logs", debouncedResource, debouncedAction],
+    queryKey: ["audit-logs", auditLogsPage, AUDIT_LOGS_PAGE_SIZE, debouncedResource, debouncedAction],
     queryFn: () =>
       auditLogsApi.list({
-        page: 1,
-        limit: 10,
+        page: auditLogsPage,
+        limit: AUDIT_LOGS_PAGE_SIZE,
         resource_type: debouncedResource || undefined,
         action: debouncedAction || undefined,
       }),
+    placeholderData: keepPreviousData,
     enabled: canReadAuditLogs,
   });
 
@@ -103,6 +213,13 @@ export default function Reports() {
   const summary = summaryQuery.data;
   const popItems = (popQuery.data as ProofOfPlayListResponse | undefined)?.items ?? [];
   const auditLogs = auditLogsQuery.data?.items ?? [];
+  const auditLogsTotal = auditLogsQuery.data?.total ?? 0;
+  const auditLogsTotalPages = Math.max(
+    1,
+    Math.ceil(auditLogsTotal / AUDIT_LOGS_PAGE_SIZE),
+  );
+  const auditLogsRangeStart = auditLogs.length === 0 ? 0 : (auditLogsPage - 1) * AUDIT_LOGS_PAGE_SIZE + 1;
+  const auditLogsRangeEnd = auditLogs.length === 0 ? 0 : auditLogsRangeStart + auditLogs.length - 1;
   const notifications = notificationsQuery.data?.items ?? [];
   const emergencyStatus = emergencyQuery.data;
 
@@ -111,14 +228,36 @@ export default function Reports() {
   const auditPlaceholder = useMemo(
     () =>
       Array.from({ length: 5 }).map((_, idx) => (
-        <div key={idx} className="flex items-center justify-between py-2 border-b last:border-0">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-24" />
+        <div key={idx} className="rounded-lg border bg-card p-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-44" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
         </div>
       )),
     [],
   );
+
+  useEffect(() => {
+    setAuditLogsPage(1);
+  }, [resourceFilter, actionFilter]);
+
+  useEffect(() => {
+    if (!auditLogsQuery.data) return;
+    if (auditLogsPage > auditLogsTotalPages) {
+      setAuditLogsPage(auditLogsTotalPages);
+    }
+  }, [auditLogsPage, auditLogsTotalPages, auditLogsQuery.data]);
 
   const handleExportCsv = async () => {
     try {
@@ -221,24 +360,33 @@ export default function Reports() {
                 onChange={(e) => setActionFilter(e.target.value)}
               />
             </div>
-            <div className="divide-y rounded-md border">
+            <div className="space-y-3">
               {auditLogsQuery.isLoading
                 ? auditPlaceholder
-                : auditLogs.map((log) => (
-                    <div key={log.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{log.action ?? "ACTION"}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {log.resource_type ?? "resource"} — {log.user_id ?? "system"}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{log.created_at ?? ""}</span>
-                    </div>
-                  ))}
+                : (
+                    <Accordion type="single" collapsible className="space-y-3">
+                      {auditLogs.map((log) => (
+                        <AuditLogCard key={log.id} log={log} />
+                      ))}
+                    </Accordion>
+                  )}
               {!auditLogsQuery.isLoading && auditLogs.length === 0 && (
                 <div className="px-3 py-6 text-center text-sm text-muted-foreground">No logs found.</div>
               )}
             </div>
+            {!auditLogsQuery.isLoading && auditLogs.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  Showing {auditLogsRangeStart}-{auditLogsRangeEnd} of {auditLogsTotal} logs
+                </p>
+                <PageNavigation
+                  currentPage={auditLogsPage}
+                  totalPages={auditLogsTotalPages}
+                  onPageChange={setAuditLogsPage}
+                  showPageNumbers
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
