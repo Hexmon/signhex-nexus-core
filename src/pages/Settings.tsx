@@ -10,6 +10,7 @@ import {
   Palette,
   Save,
   Shield,
+  Trash2,
   Upload,
   Users,
 } from "lucide-react";
@@ -36,6 +37,8 @@ import {
 } from "@/components/ui/dialog";
 import { RolesPermissionsTab } from "@/components/settings/RolesPermissionsTab";
 import { DefaultMediaSection } from "@/components/settings/DefaultMediaSection";
+import { MediaPreview } from "@/components/common/MediaPreview";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useAuthorization } from "@/hooks/useAuthorization";
 import { useAppSelector } from "@/store/hooks";
 import {
@@ -43,6 +46,7 @@ import {
   useBackupRuns,
   useBackupSettings,
   useBrandingSettings,
+  useDeleteBackupRun,
   useGeneralSettings,
   useRecentLogs,
   useRunBackupNow,
@@ -55,7 +59,7 @@ import {
 } from "@/hooks/useSettingsApi";
 import { canManageBrandingSettings } from "@/lib/access";
 import { mediaApi } from "@/api/domains/media";
-import type { MediaAsset } from "@/api/types";
+import type { BackupRun, MediaAsset } from "@/api/types";
 import { uploadMediaWithPresign, validateUploadFile, getFriendlyUploadError } from "@/lib/mediaUploadFlow";
 import { useToast } from "@/hooks/use-toast";
 
@@ -79,6 +83,11 @@ const accentPresets = [
   { value: "slate", label: "Slate" },
 ] as const;
 
+function formatBackupError(message: string | null | undefined) {
+  if (!message) return null;
+  return message.replace(/\s+/g, " ").trim();
+}
+
 function BrandingAssetField({
   label,
   hint,
@@ -97,12 +106,12 @@ function BrandingAssetField({
   const { toast } = useToast();
   const mediaQuery = useQuery({
     queryKey: ["settings", "branding", "media-picker"],
-    queryFn: () => mediaApi.list({ limit: 50, status: "READY" as never }),
+    queryFn: () => mediaApi.list({ limit: 50, status: "READY" as never, type: "IMAGE" }),
     staleTime: 60_000,
     enabled: pickerOpen,
   });
 
-  const mediaItems = (mediaQuery.data?.items ?? []).filter((media) => (media.type || "").toUpperCase() !== "WEBPAGE");
+  const mediaItems = mediaQuery.data?.items ?? [];
 
   const handleUpload = async (fileList: FileList | null) => {
     const file = fileList?.[0];
@@ -117,7 +126,7 @@ function BrandingAssetField({
     setUploading(true);
     try {
       const result = await uploadMediaWithPresign(file, { displayName: `${label} ${file.name}` });
-      onChange(result.media.id, result.media.url ?? null);
+      onChange(result.media.id, result.media.media_url ?? result.media.fallback_media_url ?? null);
       toast({ title: `${label} updated`, description: "Uploaded media is now assigned." });
     } catch (error) {
       toast({
@@ -140,7 +149,13 @@ function BrandingAssetField({
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
             {mediaUrl ? (
-              <img src={mediaUrl} alt={label} className="h-full w-full object-contain" />
+              <MediaPreview
+                url={mediaUrl}
+                type="image"
+                alt={label}
+                fit="contain"
+                className="h-full w-full rounded-none"
+              />
             ) : (
               <ImageUp className="h-6 w-6 text-muted-foreground" />
             )}
@@ -189,14 +204,20 @@ function BrandingAssetField({
                   type="button"
                   className="rounded-lg border p-3 text-left hover:border-primary transition-colors"
                   onClick={() => {
-                    onChange(media.id, media.url ?? null);
+                    onChange(media.id, media.media_url ?? media.fallback_media_url ?? null);
                     setPickerOpen(false);
                   }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-14 w-14 rounded bg-muted/40 overflow-hidden flex items-center justify-center">
-                      {media.url ? (
-                        <img src={media.url} alt={media.name} className="h-full w-full object-cover" />
+                      {media.media_url || media.fallback_media_url ? (
+                        <MediaPreview
+                          media={media}
+                          url={media.media_url ?? media.fallback_media_url ?? undefined}
+                          type={media.content_type ?? media.source_content_type ?? media.type}
+                          alt={media.display_name ?? media.name}
+                          className="h-full w-full rounded-none"
+                        />
                       ) : (
                         <ImageUp className="h-5 w-5 text-muted-foreground" />
                       )}
@@ -240,6 +261,7 @@ const Settings = () => {
   const updateAppearance = useUpdateAppearanceSettings();
   const updateBackups = useUpdateBackupSettings();
   const runBackupNow = useRunBackupNow();
+  const deleteBackupRun = useDeleteBackupRun();
 
   const [general, setGeneral] = useState({ company_name: "", timezone: "UTC", language: "en" });
   const [branding, setBranding] = useState({
@@ -271,6 +293,7 @@ const Settings = () => {
     interval_hours: 24,
     log_level: "info" as const,
   });
+  const [backupPendingDelete, setBackupPendingDelete] = useState<BackupRun | null>(null);
 
   useEffect(() => {
     if (generalQuery.data) setGeneral(generalQuery.data);
@@ -294,6 +317,7 @@ const Settings = () => {
 
   const backupRuns = backupRunsQuery.data?.items ?? [];
   const recentLogs = recentLogsQuery.data?.items ?? [];
+  const automaticBackupsEnabled = backups.automatic_enabled;
 
   const brandingPreviewName = branding.app_name.trim() || "Signhex CMS";
 
@@ -318,6 +342,8 @@ const Settings = () => {
     if (security.password_policy.require_special) rules.push("special");
     return rules.join(", ");
   }, [security.password_policy]);
+
+  const canDeleteBackup = (run: BackupRun) => run.status !== "PENDING" && run.status !== "RUNNING";
 
   return (
     <div className="space-y-6">
@@ -632,6 +658,16 @@ const Settings = () => {
               <CardDescription>Automatic full backups for PostgreSQL and MinIO archives.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+                <Badge variant={automaticBackupsEnabled ? "default" : "outline"}>
+                  {automaticBackupsEnabled ? "Automatic backups on" : "Automatic backups off"}
+                </Badge>
+                <span className="text-muted-foreground">
+                  {automaticBackupsEnabled
+                    ? `Recurring backups are enabled for this installation and will be checked every ${backups.interval_hours} hour${backups.interval_hours === 1 ? "" : "s"}.`
+                    : "Automatic backups stay off until you enable them and save this section."}
+                </span>
+              </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div>
                   <p className="font-medium">Automatic backups</p>
@@ -708,16 +744,50 @@ const Settings = () => {
                           <a href={download.url} target="_blank" rel="noreferrer">{download.name}</a>
                         </Button>
                       ))}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={!canDeleteBackup(run) || deleteBackupRun.isPending}
+                        onClick={() => setBackupPendingDelete(run)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
                   {run.error_message ? (
-                    <p className="mt-2 text-sm text-destructive">{run.error_message}</p>
+                    <p className="mt-2 text-sm text-destructive">{formatBackupError(run.error_message)}</p>
                   ) : null}
                 </div>
               ))}
               {backupRuns.length === 0 ? <p className="text-sm text-muted-foreground">No backup history yet.</p> : null}
             </CardContent>
           </Card>
+
+          <ConfirmDialog
+            open={Boolean(backupPendingDelete)}
+            title="Delete backup"
+            description={
+              backupPendingDelete
+                ? "This will permanently remove the backup archives from storage and delete the history entry. This action cannot be undone."
+                : undefined
+            }
+            confirmLabel="Delete backup"
+            isLoading={deleteBackupRun.isPending}
+            confirmDisabled={!backupPendingDelete || !canDeleteBackup(backupPendingDelete)}
+            onCancel={() => {
+              if (deleteBackupRun.isPending) return;
+              setBackupPendingDelete(null);
+            }}
+            onConfirm={() => {
+              if (!backupPendingDelete) return;
+              deleteBackupRun.mutate(backupPendingDelete.id, {
+                onSuccess: () => {
+                  setBackupPendingDelete(null);
+                },
+              });
+            }}
+          />
 
           <Card>
             <CardHeader>

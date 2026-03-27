@@ -170,6 +170,7 @@ export const endpoints = {
     security: "/settings/security",
     appearance: "/settings/appearance",
     backups: "/settings/backups",
+    backupById: (backupId: string) => `/settings/backups/${backupId}`,
     backupRun: "/settings/backups/run",
     backupHistory: "/settings/backups/history",
     logs: "/settings/logs",

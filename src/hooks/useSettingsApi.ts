@@ -176,6 +176,29 @@ export const useRunBackupNow = () => {
   });
 };
 
+export const useDeleteBackupRun = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (backupId: string) => settingsApi.deleteBackupRun(backupId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settingsBackupRuns });
+      toast({
+        title: "Backup deleted",
+        description: "Backup archives and history were removed.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error instanceof ApiError ? error.message : "Unable to delete backup.",
+        variant: "destructive",
+      });
+    },
+  });
+};
+
 export const useRecentLogs = (filters?: { level?: string; limit?: number }) =>
   {
     const enabled = useSettingsQueriesEnabled();

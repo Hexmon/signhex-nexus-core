@@ -85,22 +85,6 @@ export const DepartmentCard = ({ department, onEdit, onDelete }: DepartmentCardP
               </Badge>
             </div>
 
-            {operators.length === 0 ? (
-              <p className="mt-3 text-xs text-muted-foreground">No operators assigned to this department.</p>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {operators.slice(0, 3).map((operator) => {
-                  const name = `${operator.first_name ?? ""} ${operator.last_name ?? ""}`.trim() || operator.email;
-                  return (
-                    <Badge key={operator.id} variant="outline" className="max-w-full truncate">
-                      {name}
-                    </Badge>
-                  );
-                })}
-                {operators.length > 3 && <Badge variant="outline">+{operators.length - 3} more</Badge>}
-              </div>
-            )}
-
             <Button
               variant="outline"
               size="sm"

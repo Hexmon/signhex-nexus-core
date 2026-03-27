@@ -172,10 +172,6 @@ export default function Reports() {
         </div>
         {canReadReports && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportCsv} disabled={isExportingCsv}>
-              <Download className="mr-2 h-4 w-4" />
-              {isExportingCsv ? "Exporting..." : "Export CSV"}
-            </Button>
             <Button onClick={handleExportReportPdf} disabled={isExportingReportPdf}>
               <Download className="mr-2 h-4 w-4" />
               {isExportingReportPdf ? "Exporting..." : "Report PDF"}
@@ -382,8 +378,16 @@ export default function Reports() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Proof-of-Play</CardTitle>
-              <CardDescription>Latest playbacks reported by devices.</CardDescription>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Recent Proof-of-Play</CardTitle>
+                  <CardDescription>Latest playbacks reported by devices.</CardDescription>
+                </div>
+                <Button variant="outline" onClick={handleExportCsv} disabled={isExportingCsv}>
+                  <Download className="mr-2 h-4 w-4" />
+                  {isExportingCsv ? "Exporting..." : "Export CSV"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {popQuery.isLoading ? (

@@ -100,6 +100,12 @@ export const settingsApi = {
       body: {},
     }),
 
+  deleteBackupRun: (backupId: string) =>
+    apiClient.request<{ id: string; deleted: true }>({
+      path: endpoints.settings.backupById(backupId),
+      method: "DELETE",
+    }),
+
   listBackupRuns: () =>
     apiClient.request<{ items: BackupRun[] }>({
       path: endpoints.settings.backupHistory,
