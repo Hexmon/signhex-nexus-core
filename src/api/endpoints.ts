@@ -9,6 +9,7 @@ export const endpoints = {
   auditLogs: {
     base: "/audit-logs",
     byId: (auditLogId: string) => `/audit-logs/${auditLogId}`,
+    export: "/audit-logs/export",
   },
   auth: {
     login: "/auth/login",
@@ -111,7 +112,8 @@ export const endpoints = {
     requestsByDepartment: "/reports/requests-by-department",
     offlineScreens: "/reports/offline-screens",
     storage: "/reports/storage",
-    systemHealth: "/health",
+    systemHealth: "/reports/system-health",
+    export: "/reports/export",
   },
   requests: {
     base: "/requests",

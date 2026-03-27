@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { FileBarChart, Download, Calendar, Filter, BarChart3 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Download, FileBarChart, Filter, Monitor, CheckCircle2 } from "lucide-react";
+import { proofOfPlayApi } from "@/api/domains/proofOfPlay";
+import { ApiError } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,205 +23,119 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
-interface PlayLog {
-  id: string;
-  screenName: string;
-  contentTitle: string;
-  department: string;
-  playedAt: string;
-  duration: number;
-  status: "completed" | "interrupted" | "skipped";
-}
+const downloadBlobFile = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
+const toStartOfDayIso = (value: string) => (value ? new Date(`${value}T00:00:00.000Z`).toISOString() : undefined);
+const toEndOfDayIso = (value: string) => (value ? new Date(`${value}T23:59:59.999Z`).toISOString() : undefined);
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
 
 const ProofOfPlay = () => {
   const { toast } = useToast();
-  const [dateFrom, setDateFrom] = useState("2024-01-01");
-  const [dateTo, setDateTo] = useState("2024-01-31");
-  const [selectedScreen, setSelectedScreen] = useState("all");
-  const [selectedDepartment, setSelectedDepartment] = useState("all");
-  const [selectedContent, setSelectedContent] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [screenId, setScreenId] = useState("");
+  const [mediaId, setMediaId] = useState("");
+  const [status, setStatus] = useState<"ALL" | "COMPLETED" | "INCOMPLETE">("ALL");
+  const [isExporting, setIsExporting] = useState(false);
 
-  const [playLogs] = useState<PlayLog[]>([
-    {
-      id: "1",
-      screenName: "Lobby Display 01",
-      contentTitle: "January Promotions",
-      department: "Marketing",
-      playedAt: "2024-01-20 14:23:15",
-      duration: 45,
-      status: "completed",
-    },
-    {
-      id: "2",
-      screenName: "Cafeteria Screen",
-      contentTitle: "Safety Training Video",
-      department: "HR",
-      playedAt: "2024-01-20 13:45:22",
-      duration: 180,
-      status: "completed",
-    },
-    {
-      id: "3",
-      screenName: "Reception Display",
-      contentTitle: "Company News",
-      department: "Communications",
-      playedAt: "2024-01-20 12:10:05",
-      duration: 60,
-      status: "interrupted",
-    },
-    {
-      id: "4",
-      screenName: "Conference Room A",
-      contentTitle: "Product Launch",
-      department: "Marketing",
-      playedAt: "2024-01-20 11:30:45",
-      duration: 120,
-      status: "completed",
-    },
-    {
-      id: "5",
-      screenName: "Lobby Display 02",
-      contentTitle: "Emergency Alert",
-      department: "Operations",
-      playedAt: "2024-01-20 10:15:00",
-      duration: 15,
-      status: "completed",
-    },
-  ]);
+  const filters = useMemo(
+    () => ({
+      page: 1,
+      limit: 50,
+      screen_id: screenId.trim() || undefined,
+      media_id: mediaId.trim() || undefined,
+      start: toStartOfDayIso(dateFrom),
+      end: toEndOfDayIso(dateTo),
+      status: status === "ALL" ? undefined : status,
+    }),
+    [dateFrom, dateTo, screenId, mediaId, status],
+  );
 
-  const handleExportCSV = () => {
-    const headers = ["Screen", "Content", "Department", "Played At", "Duration (s)", "Status"];
-    const rows = playLogs.map(log => [
-      log.screenName,
-      log.contentTitle,
-      log.department,
-      log.playedAt,
-      log.duration,
-      log.status,
-    ]);
+  const query = useQuery({
+    queryKey: ["proof-of-play", filters],
+    queryFn: () => proofOfPlayApi.list(filters),
+    staleTime: 30_000,
+  });
 
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.join(","))
-    ].join("\n");
+  const items = query.data?.items ?? [];
+  const totalPlays = items.length;
+  const completedPlays = items.filter((item) => item.status === "COMPLETED").length;
+  const uniqueScreens = new Set(items.map((item) => item.screen_id)).size;
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `proof-of-play-${dateFrom}-to-${dateTo}.csv`;
-    a.click();
-
-    toast({
-      title: "Export Successful",
-      description: "Proof of play report has been downloaded.",
-    });
-  };
-
-  const handleExportPDF = () => {
-    toast({
-      title: "PDF Export",
-      description: "Generating PDF report...",
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "default";
-      case "interrupted":
-        return "secondary";
-      case "skipped":
-        return "outline";
-      default:
-        return "secondary";
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      const csv = await proofOfPlayApi.export(filters);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      downloadBlobFile(blob, `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Unable to export proof-of-play CSV.";
+      toast({
+        title: "Export failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
-
-  const totalPlays = playLogs.length;
-  const totalDuration = playLogs.reduce((sum, log) => sum + log.duration, 0);
-  const completedPlays = playLogs.filter(log => log.status === "completed").length;
-  const completionRate = ((completedPlays / totalPlays) * 100).toFixed(1);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Proof of Play Reports</h1>
-          <p className="text-muted-foreground">
-            Detailed playback logs and compliance reporting
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Proof of Play</h1>
+          <p className="text-muted-foreground">Live playback records reported by devices.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportCSV}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button onClick={handleExportPDF}>
-            <Download className="mr-2 h-4 w-4" />
-            Export PDF
-          </Button>
-        </div>
+        <Button onClick={handleExportCsv} disabled={isExporting}>
+          <Download className="mr-2 h-4 w-4" />
+          {isExporting ? "Exporting..." : "Export CSV"}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Plays
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Plays</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalPlays}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              In selected period
-            </p>
+            {query.isLoading ? <Skeleton className="h-8 w-20" /> : <div className="text-2xl font-bold">{totalPlays}</div>}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Duration
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{Math.floor(totalDuration / 60)}m</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {totalDuration} seconds
-            </p>
+            {query.isLoading ? <Skeleton className="h-8 w-20" /> : <div className="text-2xl font-bold">{completedPlays}</div>}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Completion Rate
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Screens</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{completionRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {completedPlays} of {totalPlays} completed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active Screens
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(playLogs.map(l => l.screenName)).size}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Unique displays
-            </p>
+            {query.isLoading ? <Skeleton className="h-8 w-20" /> : <div className="text-2xl font-bold">{uniqueScreens}</div>}
           </CardContent>
         </Card>
       </div>
@@ -229,73 +146,50 @@ const ProofOfPlay = () => {
             <Filter className="h-5 w-5" />
             Filters
           </CardTitle>
-          <CardDescription>
-            Filter playback logs by date, screen, department, or content
-          </CardDescription>
+          <CardDescription>Filter live playback events by date, screen, media, or completion state.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
             <div className="space-y-2">
               <Label htmlFor="date-from">Date From</Label>
-              <Input
-                id="date-from"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
+              <Input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="date-to">Date To</Label>
+              <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="screen-id">Screen ID</Label>
               <Input
-                id="date-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                id="screen-id"
+                placeholder="Filter by screen id"
+                value={screenId}
+                onChange={(e) => setScreenId(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="screen">Screen</Label>
-              <Select value={selectedScreen} onValueChange={setSelectedScreen}>
-                <SelectTrigger id="screen">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Screens</SelectItem>
-                  <SelectItem value="lobby-01">Lobby Display 01</SelectItem>
-                  <SelectItem value="cafeteria">Cafeteria Screen</SelectItem>
-                  <SelectItem value="reception">Reception Display</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="media-id">Media ID</Label>
+              <Input
+                id="media-id"
+                placeholder="Filter by media id"
+                value={mediaId}
+                onChange={(e) => setMediaId(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger id="department">
+              <Label htmlFor="status">Status</Label>
+              <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
+                <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="hr">HR</SelectItem>
-                  <SelectItem value="operations">Operations</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Select value={selectedContent} onValueChange={setSelectedContent}>
-                <SelectTrigger id="content">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Content</SelectItem>
-                  <SelectItem value="promotions">Promotions</SelectItem>
-                  <SelectItem value="training">Training</SelectItem>
-                  <SelectItem value="news">News</SelectItem>
+                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                  <SelectItem value="INCOMPLETE">Incomplete</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -309,43 +203,65 @@ const ProofOfPlay = () => {
             <FileBarChart className="h-5 w-5" />
             Playback Logs
           </CardTitle>
-          <CardDescription>
-            Detailed record of all content playback events
-          </CardDescription>
+          <CardDescription>Most recent proof-of-play events for the active filter set.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Screen</TableHead>
-                <TableHead>Content</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Played At</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {playLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="font-medium">{log.screenName}</TableCell>
-                  <TableCell>{log.contentTitle}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{log.department}</Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {log.playedAt}
-                  </TableCell>
-                  <TableCell>{log.duration}s</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusColor(log.status)}>
-                      {log.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+          {query.isError && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+              {query.error instanceof ApiError ? query.error.message : "Unable to load proof-of-play records."}
+            </div>
+          )}
+
+          {query.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-10" />
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">No proof-of-play records found.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Screen</TableHead>
+                  <TableHead>Media</TableHead>
+                  <TableHead>Started</TableHead>
+                  <TableHead>Ended</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4 text-muted-foreground" />
+                        {item.screen_id}
+                      </div>
+                    </TableCell>
+                    <TableCell>{item.media_id}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDateTime(item.started_at || item.played_at)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatDateTime(item.ended_at)}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.status === "COMPLETED" ? "default" : "secondary"}>
+                        {item.status === "COMPLETED" ? (
+                          <span className="inline-flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Completed
+                          </span>
+                        ) : (
+                          "Incomplete"
+                        )}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

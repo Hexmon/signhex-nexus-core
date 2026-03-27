@@ -13,6 +13,7 @@ export interface ApiRequestOptions<TBody = unknown> {
   timeoutMs?: number;
   useApiKey?: boolean;
   rawBody?: BodyInit; // if you need FormData/Blob; skips JSON stringify
+  responseType?: "json" | "text" | "blob";
 }
 
 export interface ApiErrorShape {
@@ -143,7 +144,6 @@ export class ApiClient {
 
         const contentType = response.headers.get("content-type");
         const isJson = contentType?.includes("application/json");
-        const payload = isJson ? await response.json() : await response.text();
         const refreshedToken = response.headers.get("x-access-token");
         const refreshedExpiresAt = response.headers.get("x-access-token-expires-at") ?? undefined;
 
@@ -152,6 +152,7 @@ export class ApiClient {
         }
 
         if (!response.ok) {
+          const payload = isJson ? await response.json() : await response.text();
           const envelope = isJson ? parseErrorEnvelope(payload) : undefined;
           const envelopeMessage = envelope?.error?.message;
           throw new ApiError({
@@ -162,6 +163,13 @@ export class ApiClient {
             details: envelope?.error?.details ?? (isJson ? payload : undefined),
           });
         }
+
+        if (options.responseType === "blob") {
+          return (await response.blob()) as TResponse;
+        }
+
+        const payload =
+          options.responseType === "text" || !isJson ? await response.text() : await response.json();
 
         return payload as TResponse;
       } catch (error) {

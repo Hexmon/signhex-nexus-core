@@ -65,9 +65,38 @@ export const queryKeys = {
     limit?: number;
     status?: string;
     include?: string;
+    q?: string;
+    date_field?: string;
+    date_from?: string;
+    date_to?: string;
+    sort_direction?: string;
   }) =>
-    ["schedule-requests", filters?.status, filters?.page, filters?.limit, filters?.include] as const,
-  scheduleRequestSummary: ["schedule-requests", "status-summary"] as const,
+    [
+      "schedule-requests",
+      filters?.status,
+      filters?.page,
+      filters?.limit,
+      filters?.include,
+      filters?.q ?? null,
+      filters?.date_field ?? null,
+      filters?.date_from ?? null,
+      filters?.date_to ?? null,
+      filters?.sort_direction ?? null,
+    ] as const,
+  scheduleRequestSummary: (filters?: {
+    q?: string;
+    date_field?: string;
+    date_from?: string;
+    date_to?: string;
+  }) =>
+    [
+      "schedule-requests",
+      "status-summary",
+      filters?.q ?? null,
+      filters?.date_field ?? null,
+      filters?.date_from ?? null,
+      filters?.date_to ?? null,
+    ] as const,
   scheduleReservationsPreview: (payload?: {
     schedule_id?: string | null;
     start_at?: string | null;

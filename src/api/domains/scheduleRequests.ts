@@ -17,10 +17,11 @@ export const scheduleRequestsApi = {
       method: "GET",
       query: params,
     }),
-  statusSummary: () =>
+  statusSummary: (params?: Pick<ScheduleRequestListParams, "q" | "date_field" | "date_from" | "date_to">) =>
     apiClient.request<ScheduleRequestStatusSummary>({
       path: endpoints.scheduleRequests.statusSummary,
       method: "GET",
+      query: params,
     }),
   approve: (requestId: string, payload?: { comment?: string }) =>
     apiClient.request<ScheduleRequestReviewResponse>({

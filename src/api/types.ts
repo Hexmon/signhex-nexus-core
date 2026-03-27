@@ -277,8 +277,24 @@ export interface ProofOfPlay {
   screen_id: string;
   media_id: string;
   schedule_id?: string;
+  presentation_id?: string;
   status: "COMPLETED" | "INCOMPLETE";
   played_at: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_at?: string;
+  url?: string | null;
+}
+
+export interface ProofOfPlayPagination {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface ProofOfPlayListResponse {
+  items: ProofOfPlay[];
+  pagination: ProofOfPlayPagination | null;
 }
 
 export interface ProofOfPlayFilters extends PaginationParams {
@@ -290,6 +306,14 @@ export interface ProofOfPlayFilters extends PaginationParams {
   status?: "COMPLETED" | "INCOMPLETE";
   include_url?: boolean;
   group_by?: "day" | "screen" | "media";
+}
+
+export interface ReportExportParams {
+  resource_type?: string;
+  action?: string;
+  user_id?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface ReportSummary {
@@ -1078,6 +1102,11 @@ export interface ScheduleRequestListResponse {
 export interface ScheduleRequestListParams extends PaginationParams {
   status?: ScheduleRequestStatus;
   include?: string;
+  q?: string;
+  date_field?: "created_at" | "schedule_window";
+  date_from?: string;
+  date_to?: string;
+  sort_direction?: "asc" | "desc";
 }
 
 export interface ScheduleRequestStatusSummary {

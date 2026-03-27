@@ -14,6 +14,13 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingIndicator } from "@/components/common/LoadingIndicator";
 import { MediaPreview } from "@/components/common/MediaPreview";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { scheduleRequestsApi } from "@/api/domains/scheduleRequests";
 import { deviceScheduleApi } from "@/api/domains/deviceSchedule";
 import { queryKeys } from "@/api/queryKeys";
@@ -22,6 +29,7 @@ import { ApiError } from "@/api/apiClient";
 import type { ScheduleRequestListItem } from "@/api/types";
 import { useAppSelector } from "@/store/hooks";
 import { canManageEmergency } from "@/lib/access";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const PAGE_SIZE = 10;
 
@@ -35,6 +43,8 @@ const STATUS_TABS = [
 ] as const;
 
 type TabKey = (typeof STATUS_TABS)[number]["key"];
+type DateField = "created_at" | "schedule_window";
+type SortDirection = "asc" | "desc";
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
@@ -73,12 +83,19 @@ const formatReservationState = (request?: ScheduleRequestListItem) => {
     .join(" ");
 };
 
+const toStartOfDayIso = (value: string) => (value ? new Date(`${value}T00:00:00.000Z`).toISOString() : undefined);
+const toEndOfDayIso = (value: string) => (value ? new Date(`${value}T23:59:59.999Z`).toISOString() : undefined);
+
 export default function ScheduleQueue() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const currentUser = useAppSelector((state) => state.auth.user);
   const showEmergencyTakeover = canManageEmergency(currentUser);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateField, setDateField] = useState<DateField>("created_at");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
   const [selectedRequest, setSelectedRequest] = useState<ScheduleRequestListItem | null>(null);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
@@ -91,10 +108,22 @@ export default function ScheduleQueue() {
     expired: 1,
   });
   const [tabTotals, setTabTotals] = useState<Partial<Record<TabKey, number>>>({});
+  const debouncedSearchQuery = useDebounce(searchQuery, 350);
+  const dateFromIso = useMemo(() => toStartOfDayIso(dateFrom), [dateFrom]);
+  const dateToIso = useMemo(() => toEndOfDayIso(dateTo), [dateTo]);
+  const sharedFilters = useMemo(
+    () => ({
+      q: debouncedSearchQuery.trim() || undefined,
+      date_field: dateField,
+      date_from: dateFromIso,
+      date_to: dateToIso,
+    }),
+    [debouncedSearchQuery, dateField, dateFromIso, dateToIso],
+  );
 
   const summaryQuery = useQuery({
-    queryKey: queryKeys.scheduleRequestSummary,
-    queryFn: scheduleRequestsApi.statusSummary,
+    queryKey: queryKeys.scheduleRequestSummary(sharedFilters),
+    queryFn: () => scheduleRequestsApi.statusSummary(sharedFilters),
     staleTime: 30_000,
   });
 
@@ -107,6 +136,11 @@ export default function ScheduleQueue() {
       limit: PAGE_SIZE,
       status: activeConfig.apiStatus,
       include: "all",
+      q: sharedFilters.q,
+      date_field: sharedFilters.date_field,
+      date_from: sharedFilters.date_from,
+      date_to: sharedFilters.date_to,
+      sort_direction: sortDirection,
     }),
     queryFn: () =>
       scheduleRequestsApi.list({
@@ -114,6 +148,11 @@ export default function ScheduleQueue() {
         limit: PAGE_SIZE,
         status: activeConfig.apiStatus,
         include: "all",
+        q: sharedFilters.q,
+        date_field: sharedFilters.date_field,
+        date_from: sharedFilters.date_from,
+        date_to: sharedFilters.date_to,
+        sort_direction: sortDirection,
       }),
     keepPreviousData: true,
     staleTime: 30_000,
@@ -139,6 +178,17 @@ export default function ScheduleQueue() {
   }, [activeTab]);
 
   useEffect(() => {
+    setPageByStatus({
+      pending: 1,
+      approved: 1,
+      rejected: 1,
+      published: 1,
+      taken_down: 1,
+      expired: 1,
+    });
+  }, [sharedFilters, sortDirection]);
+
+  useEffect(() => {
     if (data?.pagination?.total === undefined) return;
     setTabTotals((prev) => ({ ...prev, [activeTab]: data.pagination.total }));
   }, [data?.pagination?.total, activeTab]);
@@ -161,28 +211,16 @@ export default function ScheduleQueue() {
     staleTime: 30_000,
   });
 
-  const filteredRequests = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return requests;
-    return requests.filter((req) => {
-      const scheduleName = (req.schedule?.name || "").toLowerCase();
-      const requester = getRequesterLabel(req).toLowerCase();
-      const email = (req.requested_by_user?.email || "").toLowerCase();
-      const department = (req.requested_by_user?.department?.name || "").toLowerCase();
-      const notes = (req.notes || "").toLowerCase();
-      return (
-        req.id.toLowerCase().includes(query) ||
-        scheduleName.includes(query) ||
-        requester.includes(query) ||
-        email.includes(query) ||
-        department.includes(query) ||
-        notes.includes(query)
-      );
-    });
-  }, [requests, searchQuery]);
-
-  const total = data?.pagination?.total ?? filteredRequests.length;
+  const total = data?.pagination?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setDateField("created_at");
+    setDateFrom("");
+    setDateTo("");
+    setSortDirection("desc");
+  };
 
   const handlePageChange = (nextPage: number) => {
     setPageByStatus((prev) => ({
@@ -216,18 +254,50 @@ export default function ScheduleQueue() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by schedule name, request ID, requester, or notes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Filters</CardTitle>
+            <CardDescription>Filter every tab by search, date field, range, and sort direction.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-5">
+              <div className="relative md:col-span-2">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by schedule, request, requester, or notes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={dateField} onValueChange={(value) => setDateField(value as DateField)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Date field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at">Created Date</SelectItem>
+                  <SelectItem value="schedule_window">Schedule Window</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as SortDirection)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest First</SelectItem>
+                  <SelectItem value="asc">Oldest First</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Status Tabs */}
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabKey)} className="flex-1 flex flex-col">
@@ -325,18 +395,18 @@ export default function ScheduleQueue() {
                   <div className="flex justify-center py-12">
                     <LoadingIndicator label="Loading schedule requests..." />
                   </div>
-                ) : filteredRequests.length === 0 ? (
+                ) : requests.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="text-lg font-medium">No requests found</p>
                     <p className="text-sm mt-2">
-                      {searchQuery
-                        ? "Try adjusting your search terms"
+                      {searchQuery || dateFrom || dateTo
+                        ? "Try adjusting your filters."
                         : "Create a new request to get started"}
                     </p>
                   </div>
                 ) : (
-                  filteredRequests.map((request) => {
+                  requests.map((request) => {
                     const scheduleName = request.schedule?.name || "Schedule request";
                     const requesterLabel = getRequesterLabel(request);
                     const departmentLabel = getDepartmentLabel(request);

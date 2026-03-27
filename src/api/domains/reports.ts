@@ -44,4 +44,12 @@ export const reportsApi = {
       path: endpoints.reports.systemHealth,
       method: "GET",
     }),
+
+  exportPdf: () =>
+    apiClient.request<Blob>({
+      path: endpoints.reports.export,
+      method: "GET",
+      responseType: "blob",
+      headers: { Accept: "application/pdf" },
+    }),
 };

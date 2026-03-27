@@ -23,4 +23,21 @@ export const auditLogsApi = {
       path: endpoints.auditLogs.byId(auditLogId),
       method: "GET",
     }),
+
+  exportPdf: (
+    params?: PaginationParams & {
+      user_id?: string;
+      resource_type?: string;
+      action?: string;
+      start_date?: string;
+      end_date?: string;
+    },
+  ) =>
+    apiClient.request<Blob>({
+      path: endpoints.auditLogs.export,
+      method: "GET",
+      query: params,
+      responseType: "blob",
+      headers: { Accept: "application/pdf" },
+    }),
 };

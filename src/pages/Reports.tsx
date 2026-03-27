@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Download, TrendingUp, Activity, Users, Monitor, AlertTriangle, Bell, Shield } from "lucide-react";
+import { Download, TrendingUp, Activity, Monitor, AlertTriangle, Bell, Shield, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,14 +16,27 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useAuthorization } from "@/hooks/useAuthorization";
-import type { PaginatedResponse, ProofOfPlay } from "@/api/types";
+import type { ProofOfPlayListResponse } from "@/api/types";
+
+const downloadBlobFile = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
 
 export default function Reports() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [resourceFilter, setResourceFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [isExportingReportPdf, setIsExportingReportPdf] = useState(false);
+  const [isExportingLogsPdf, setIsExportingLogsPdf] = useState(false);
   const debouncedResource = useDebounce(resourceFilter, 400);
   const debouncedAction = useDebounce(actionFilter, 400);
   const { can, isLoading: isAuthzLoading } = useAuthorization();
@@ -88,7 +101,7 @@ export default function Reports() {
   ]);
 
   const summary = summaryQuery.data;
-  const popItems = (popQuery.data as PaginatedResponse<ProofOfPlay> | undefined)?.items ?? [];
+  const popItems = (popQuery.data as ProofOfPlayListResponse | undefined)?.items ?? [];
   const auditLogs = auditLogsQuery.data?.items ?? [];
   const notifications = notificationsQuery.data?.items ?? [];
   const emergencyStatus = emergencyQuery.data;
@@ -109,22 +122,44 @@ export default function Reports() {
 
   const handleExportCsv = async () => {
     try {
-      setIsExporting(true);
+      setIsExportingCsv(true);
       const csv = await proofOfPlayApi.export();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      downloadBlobFile(blob, `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Unable to export proof-of-play CSV.";
       toast({ title: "Export failed", description: message, variant: "destructive" });
     } finally {
-      setIsExporting(false);
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportReportPdf = async () => {
+    try {
+      setIsExportingReportPdf(true);
+      const blob = await reportsApi.exportPdf();
+      downloadBlobFile(blob, `reports-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Unable to export reports PDF.";
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+    } finally {
+      setIsExportingReportPdf(false);
+    }
+  };
+
+  const handleExportLogsPdf = async () => {
+    try {
+      setIsExportingLogsPdf(true);
+      const blob = await auditLogsApi.exportPdf({
+        resource_type: debouncedResource || undefined,
+        action: debouncedAction || undefined,
+      });
+      downloadBlobFile(blob, `audit-logs-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Unable to export audit logs PDF.";
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+    } finally {
+      setIsExportingLogsPdf(false);
     }
   };
 
@@ -136,10 +171,16 @@ export default function Reports() {
           <p className="text-muted-foreground">View KPIs and recent proof-of-play records.</p>
         </div>
         {canReadReports && (
-          <Button onClick={handleExportCsv} disabled={isExporting}>
-            <Download className="mr-2 h-4 w-4" />
-            {isExporting ? "Exporting..." : "Export CSV"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleExportCsv} disabled={isExportingCsv}>
+              <Download className="mr-2 h-4 w-4" />
+              {isExportingCsv ? "Exporting..." : "Export CSV"}
+            </Button>
+            <Button onClick={handleExportReportPdf} disabled={isExportingReportPdf}>
+              <Download className="mr-2 h-4 w-4" />
+              {isExportingReportPdf ? "Exporting..." : "Report PDF"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -155,11 +196,19 @@ export default function Reports() {
       {canReadAuditLogs && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Audit Logs
-            </CardTitle>
-            <CardDescription>Filter by resource or action to reduce noise.</CardDescription>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Audit Logs
+                </CardTitle>
+                <CardDescription>Filter by resource or action to reduce noise.</CardDescription>
+              </div>
+              <Button variant="outline" onClick={handleExportLogsPdf} disabled={isExportingLogsPdf}>
+                <Download className="mr-2 h-4 w-4" />
+                {isExportingLogsPdf ? "Exporting..." : "Logs PDF"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-3">
@@ -318,8 +367,8 @@ export default function Reports() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Completed Requests</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 {summaryQuery.isLoading ? (
@@ -350,7 +399,7 @@ export default function Reports() {
                     <div>
                       <div className="font-semibold">Media: {item.media_id}</div>
                       <div className="text-muted-foreground text-xs">
-                        Screen: {item.screen_id} · {new Date(item.played_at).toLocaleString()}
+                        Screen: {item.screen_id} · {new Date(item.played_at || item.created_at || "").toLocaleString()}
                       </div>
                     </div>
                     <Badge variant="outline">Played</Badge>
