@@ -163,6 +163,9 @@ export const endpoints = {
   screenGroups: {
     snapshot: (groupId: string) => `/screen-groups/${groupId}/snapshot`,
   },
+  security: {
+    clientEvents: "/security/client-events",
+  },
   settings: {
     base: "/settings",
     general: "/settings/general",

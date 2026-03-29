@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { GlobalLoader } from "@/components/common/GlobalLoader";
 import { AppSettingsBootstrap } from "@/components/settings/AppSettingsBootstrap";
+import { ProductionSecurityBoundary } from "@/components/security/ProductionSecurityBoundary";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -117,7 +118,9 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AppRoutes />
+        <ProductionSecurityBoundary queryClient={queryClient}>
+          <AppRoutes />
+        </ProductionSecurityBoundary>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
