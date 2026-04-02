@@ -1,58 +1,39 @@
-# Welcome to your Lovable project
+# Signhex Nexus Core
 
-## Project info
+`signhex-nexus-core` is the CMS frontend for the Signhex platform.
 
-**URL**: https://lovable.dev/projects/8c3addf4-2c52-4eff-9a48-ce524b1b492a
+## Scope
 
-## How can I edit this code?
+This repo owns CMS product code only:
 
-There are several ways of editing your application.
+- React/Vite application source
+- UI components and pages
+- frontend build/test config
+- CMS-only developer docs
 
-**Use Lovable**
+Deployment, support, QA, production, and multi-service runbooks are owned by the `signhex-platform` repo.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/8c3addf4-2c52-4eff-9a48-ce524b1b492a) and start prompting.
+Canonical platform docs:
 
-Changes made via Lovable will be committed automatically to this repo.
+- QA: `signhex-platform/docs/runbooks/onprem-qa-setup.md`
+- production: `signhex-platform/docs/runbooks/onprem-production-setup.md`
+- bundle workflow: `signhex-platform/docs/runbooks/onprem-bundle-builder.md`
 
-**Use your preferred IDE**
+## Local Development
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Build
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm run build
+npm run preview
+```
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
+## Stack
 
 - Vite
 - TypeScript
@@ -60,14 +41,6 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
+## Deployment Note
 
-Simply open [Lovable](https://lovable.dev/projects/8c3addf4-2c52-4eff-9a48-ce524b1b492a) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Do not deploy this repo checkout directly to QA or production targets. The supported deployment path is to publish CMS build artifacts, then assemble runtime bundles from the `signhex-platform` repo.
