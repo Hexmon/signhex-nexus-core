@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Battery,
   Clock,
+  Cpu,
   Edit2,
   Flame,
+  HardDrive,
   HeartPulse,
   MapPin,
   Monitor,
+  Network,
   RadioTower,
   RefreshCcw,
   Save,
@@ -72,6 +76,33 @@ const getItemSummaryMediaLabel = (item: ScreenPlaybackItemSummary) => {
     .join(", ");
 };
 
+const formatNumber = (value?: number | null, digits = 1) =>
+  typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "N/A";
+
+const formatPercent = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : "N/A";
+
+const formatMegabytes = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} MB` : "N/A";
+
+const formatGigabytes = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)} GB` : "N/A";
+
+function TelemetryField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <Label className="text-muted-foreground">{label}</Label>
+      <p className="text-sm">{value}</p>
+    </div>
+  );
+}
+
 export function ScreenDetailsModal({
   screenId,
   screenName,
@@ -93,6 +124,12 @@ export function ScreenDetailsModal({
   const screenQuery = useQuery({
     queryKey: ["screen", screenId],
     queryFn: () => screensApi.getById(screenId),
+    enabled: open,
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ["screen-status", screenId],
+    queryFn: () => screensApi.getStatus(screenId),
     enabled: open,
   });
 
@@ -157,6 +194,7 @@ export function ScreenDetailsModal({
   }, "Unable to trigger screenshot.");
 
   const screen = screenQuery.data;
+  const screenStatusDetails = statusQuery.data;
   const nowPlaying = nowPlayingQuery.data;
   const screenStatus = nowPlaying?.status || screen?.status || "UNKNOWN";
   const healthState = nowPlaying?.health_state || "UNKNOWN";
@@ -180,6 +218,7 @@ export function ScreenDetailsModal({
   const activeItemSummaries = nowPlaying?.active_item_summaries ?? [];
   const upcomingItemSummaries = nowPlaying?.upcoming_item_summaries ?? [];
   const isTakingSnapshot = triggerScreenshot.isPending || Boolean(pendingSnapshotCapture);
+  const telemetry = screenStatusDetails?.latest_heartbeat?.payload ?? null;
 
   useEffect(() => {
     if (screen) {
@@ -245,7 +284,8 @@ export function ScreenDetailsModal({
     });
   };
 
-  const initialLoading = (screenQuery.isLoading || nowPlayingQuery.isLoading) && !screen && !nowPlaying;
+  const initialLoading =
+    (screenQuery.isLoading || nowPlayingQuery.isLoading || statusQuery.isLoading) && !screen && !nowPlaying;
 
   if (initialLoading) {
     return (
@@ -535,52 +575,154 @@ export function ScreenDetailsModal({
 
             <TabsContent value="status">
               {nowPlaying ? (
-                <Card className="p-4 space-y-3">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <Label className="text-muted-foreground">Live state</Label>
-                      <p className="text-lg font-semibold">{screenStatus}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Health state</Label>
-                      <p className="text-lg font-semibold">{healthState}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Playback source</Label>
-                      <p className="text-lg font-semibold">
-                        {getScreenPlaybackSourceLabel(playback?.source, {
-                          hasPublish: Boolean(nowPlaying?.publish),
-                        })}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Last heartbeat</Label>
-                      <p className="text-sm">{formatDateTime(nowPlaying.last_heartbeat_at)}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Booked until</Label>
-                      <p className="text-sm">{formatDateTime(nowPlaying.booked_until)}</p>
-                    </div>
-                    {playback?.heartbeat_received_at && (
+                <div className="space-y-4">
+                  <Card className="p-4 space-y-3">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
-                        <Label className="text-muted-foreground">Heartbeat received</Label>
-                        <p className="text-sm">{formatDateTime(playback.heartbeat_received_at)}</p>
+                        <Label className="text-muted-foreground">Live state</Label>
+                        <p className="text-lg font-semibold">{screenStatus}</p>
                       </div>
-                    )}
-                    {playback?.last_proof_of_play_at && (
                       <div>
-                        <Label className="text-muted-foreground">Last proof-of-play</Label>
-                        <p className="text-sm">{formatDateTime(playback.last_proof_of_play_at)}</p>
+                        <Label className="text-muted-foreground">Health state</Label>
+                        <p className="text-lg font-semibold">{healthState}</p>
                       </div>
-                    )}
-                    {activePairing?.mode && (
                       <div>
-                        <Label className="text-muted-foreground">Active pairing</Label>
-                        <p className="text-sm">{activePairing.mode}</p>
+                        <Label className="text-muted-foreground">Playback source</Label>
+                        <p className="text-lg font-semibold">
+                          {getScreenPlaybackSourceLabel(playback?.source, {
+                            hasPublish: Boolean(nowPlaying?.publish),
+                          })}
+                        </p>
                       </div>
+                      <div>
+                        <Label className="text-muted-foreground">Last heartbeat</Label>
+                        <p className="text-sm">{formatDateTime(nowPlaying.last_heartbeat_at)}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Booked until</Label>
+                        <p className="text-sm">{formatDateTime(nowPlaying.booked_until)}</p>
+                      </div>
+                      {playback?.heartbeat_received_at && (
+                        <div>
+                          <Label className="text-muted-foreground">Heartbeat received</Label>
+                          <p className="text-sm">{formatDateTime(playback.heartbeat_received_at)}</p>
+                        </div>
+                      )}
+                      {playback?.last_proof_of_play_at && (
+                        <div>
+                          <Label className="text-muted-foreground">Last proof-of-play</Label>
+                          <p className="text-sm">{formatDateTime(playback.last_proof_of_play_at)}</p>
+                        </div>
+                      )}
+                      {activePairing?.mode && (
+                        <div>
+                          <Label className="text-muted-foreground">Active pairing</Label>
+                          <p className="text-sm">{activePairing.mode}</p>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+                  <Card className="p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-primary" />
+                      <h3 className="font-semibold">Latest Device Telemetry</h3>
+                    </div>
+                    {telemetry ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <TelemetryField label="CPU usage" value={formatPercent(telemetry.cpu_usage)} />
+                          <TelemetryField label="CPU temp" value={telemetry.cpu_temp_c !== undefined ? `${formatNumber(telemetry.cpu_temp_c)} °C` : telemetry.temperature !== undefined ? `${formatNumber(telemetry.temperature)} °C` : "N/A"} />
+                          <TelemetryField label="CPU cores" value={telemetry.cpu_cores ? String(telemetry.cpu_cores) : "N/A"} />
+                          <TelemetryField label="Load avg" value={[telemetry.cpu_load_1m, telemetry.cpu_load_5m, telemetry.cpu_load_15m].some((value) => typeof value === "number") ? `${formatNumber(telemetry.cpu_load_1m, 2)} / ${formatNumber(telemetry.cpu_load_5m, 2)} / ${formatNumber(telemetry.cpu_load_15m, 2)}` : "N/A"} />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <TelemetryField label="RAM usage" value={formatPercent(telemetry.memory_usage)} />
+                          <TelemetryField label="RAM total" value={formatMegabytes(telemetry.memory_total_mb)} />
+                          <TelemetryField label="RAM used" value={formatMegabytes(telemetry.memory_used_mb)} />
+                          <TelemetryField label="RAM free" value={formatMegabytes(telemetry.memory_free_mb)} />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <TelemetryField label="Disk usage" value={formatPercent(telemetry.disk_usage_percent)} />
+                          <TelemetryField label="Disk total" value={formatGigabytes(telemetry.disk_total_gb)} />
+                          <TelemetryField label="Disk used" value={formatGigabytes(telemetry.disk_used_gb)} />
+                          <TelemetryField label="Disk free" value={formatGigabytes(telemetry.disk_free_gb)} />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <TelemetryField label="GPU usage" value={formatPercent(telemetry.gpu_usage)} />
+                          <TelemetryField label="GPU temp" value={telemetry.gpu_temp_c !== undefined ? `${formatNumber(telemetry.gpu_temp_c)} °C` : "N/A"} />
+                          <TelemetryField label="Battery" value={telemetry.battery_percent !== undefined ? `${formatNumber(telemetry.battery_percent)}%` : "N/A"} />
+                          <TelemetryField label="Power source" value={telemetry.power_source || "N/A"} />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <TelemetryField label="Charging" value={typeof telemetry.is_charging === "boolean" ? (telemetry.is_charging ? "Yes" : "No") : "N/A"} />
+                          <TelemetryField label="Hostname" value={telemetry.hostname || "N/A"} />
+                          <TelemetryField label="OS version" value={telemetry.os_version || "N/A"} />
+                          <TelemetryField label="Player uptime" value={telemetry.player_uptime_seconds !== undefined ? `${telemetry.player_uptime_seconds}s` : telemetry.uptime !== undefined ? `${telemetry.uptime}s` : "N/A"} />
+                        </div>
+
+                        <Card className="border-dashed p-3">
+                          <div className="mb-2 flex items-center gap-2">
+                            <Network className="h-4 w-4 text-primary" />
+                            <h4 className="font-medium">Network</h4>
+                          </div>
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <TelemetryField label="Interface" value={telemetry.network_interface || "N/A"} />
+                            <TelemetryField label="IP address" value={telemetry.network_ip || "N/A"} />
+                            <TelemetryField label="RTT" value={telemetry.network_rtt_ms !== undefined ? `${formatNumber(telemetry.network_rtt_ms)} ms` : "N/A"} />
+                            <TelemetryField label="Packet loss" value={formatPercent(telemetry.network_packet_loss_percent)} />
+                          </div>
+                        </Card>
+
+                        <Card className="border-dashed p-3">
+                          <div className="mb-2 flex items-center gap-2">
+                            <Monitor className="h-4 w-4 text-primary" />
+                            <h4 className="font-medium">Displays</h4>
+                          </div>
+                          <p className="mb-3 text-sm text-muted-foreground">
+                            Reported displays: {telemetry.display_count ?? telemetry.displays?.length ?? 0}
+                          </p>
+                          {telemetry.displays?.length ? (
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              {telemetry.displays.map((display, index) => (
+                                <div key={display.id || `${display.width}x${display.height}-${index}`} className="rounded border p-3 text-sm">
+                                  <p className="font-medium">{display.model || display.id || `Display ${index + 1}`}</p>
+                                  <p className="text-muted-foreground">{display.width} x {display.height}</p>
+                                  <p className="text-muted-foreground">
+                                    {display.orientation || "unknown"}{display.refresh_rate_hz ? ` · ${display.refresh_rate_hz} Hz` : ""}
+                                  </p>
+                                  <p className="text-muted-foreground">
+                                    {typeof display.connected === "boolean" ? (display.connected ? "Connected" : "Disconnected") : "Connection unknown"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No display inventory reported yet.</p>
+                          )}
+                        </Card>
+
+                        {telemetry.metrics && Object.keys(telemetry.metrics).length > 0 ? (
+                          <Card className="border-dashed p-3">
+                            <div className="mb-2 flex items-center gap-2">
+                              <Battery className="h-4 w-4 text-primary" />
+                              <h4 className="font-medium">Additional Metrics</h4>
+                            </div>
+                            <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                              {JSON.stringify(telemetry.metrics, null, 2)}
+                            </pre>
+                          </Card>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No heartbeat telemetry payload has been reported for this screen yet.</p>
                     )}
-                  </div>
-                </Card>
+                  </Card>
+                </div>
               ) : (
                 <p className="text-center text-muted-foreground py-8">No status data available</p>
               )}

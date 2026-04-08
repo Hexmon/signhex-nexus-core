@@ -108,6 +108,7 @@ export const endpoints = {
   },
   reports: {
     summary: "/reports/summary",
+    schedules: "/reports/schedules",
     trends: "/reports/trends",
     requestsByDepartment: "/reports/requests-by-department",
     offlineScreens: "/reports/offline-screens",

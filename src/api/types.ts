@@ -325,6 +325,45 @@ export interface ReportSummary {
   offline_screens?: number;
 }
 
+export interface ScheduleReportEntry {
+  publish_id: string;
+  schedule_id: string;
+  schedule_name: string;
+  target_id: string;
+  target_name: string;
+  target_type: "screen" | "group";
+  published_at?: string | null;
+  taken_down_at?: string | null;
+  schedule_start_at?: string | null;
+  schedule_end_at?: string | null;
+  lifecycle_status: string;
+  target_status: string;
+  target_error?: string | null;
+}
+
+export interface ScheduleReportGroup {
+  target_id: string;
+  target_name: string;
+  target_type: "screen" | "group";
+  latest_activity_at?: string | null;
+  entries: ScheduleReportEntry[];
+}
+
+export interface ScheduleActivityReport {
+  range_start: string;
+  range_end: string;
+  summary: {
+    schedules: number;
+    target_events: number;
+    successful_targets: number;
+    failed_targets: number;
+    screens: number;
+    groups: number;
+  };
+  by_screen: ScheduleReportGroup[];
+  by_group: ScheduleReportGroup[];
+}
+
 export interface MetricsOverview {
   totals?: {
     users?: number;
@@ -522,9 +561,72 @@ export interface ScreenAspectRatioListResponse {
 }
 
 export interface ScreenStatus {
-  screen_id: string;
+  id: string;
+  name?: string;
   status: "ACTIVE" | "OFFLINE" | "INACTIVE";
   last_heartbeat_at?: string | null;
+  current_schedule_id?: string | null;
+  current_media_id?: string | null;
+  health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string | null;
+  health_reason?: string | null;
+  auth_diagnostics?: ScreenOverviewItem["auth_diagnostics"];
+  active_pairing?: ScreenOverviewItem["active_pairing"];
+  latest_heartbeat?: {
+    id: string;
+    status?: string | null;
+    created_at?: string | null;
+    payload?: {
+      uptime?: number;
+      memory_usage?: number;
+      cpu_usage?: number;
+      temperature?: number;
+      memory_total_mb?: number;
+      memory_used_mb?: number;
+      memory_free_mb?: number;
+      cpu_cores?: number;
+      cpu_load_1m?: number;
+      cpu_load_5m?: number;
+      cpu_load_15m?: number;
+      cpu_temp_c?: number;
+      gpu_usage?: number;
+      gpu_temp_c?: number;
+      disk_total_gb?: number;
+      disk_used_gb?: number;
+      disk_free_gb?: number;
+      disk_usage_percent?: number;
+      network_ip?: string;
+      network_interface?: string;
+      network_rtt_ms?: number;
+      network_packet_loss_percent?: number;
+      network_up_mbps?: number;
+      network_down_mbps?: number;
+      display_count?: number;
+      displays?: Array<{
+        id?: string;
+        width: number;
+        height: number;
+        refresh_rate_hz?: number;
+        orientation?: "portrait" | "landscape";
+        connected?: boolean;
+        model?: string;
+      }>;
+      audio_output?: string;
+      volume?: number;
+      muted?: boolean;
+      app_version?: string;
+      os_version?: string;
+      hostname?: string;
+      device_model?: string;
+      device_serial?: string;
+      player_uptime_seconds?: number;
+      last_error?: string;
+      crash_count?: number;
+      battery_percent?: number;
+      is_charging?: boolean;
+      power_source?: "AC" | "BATTERY" | "USB" | "UNKNOWN";
+      metrics?: Record<string, unknown>;
+    } | null;
+  } | null;
   uptime_seconds?: number;
 }
 
@@ -1201,7 +1303,13 @@ export interface Publish {
   taken_down_at?: string | null;
   taken_down_by?: string | null;
   takedown_reason?: string | null;
-  targets?: Array<{ id: string; status: string; error?: string | null }>;
+  targets?: Array<{
+    id: string;
+    status: string;
+    error?: string | null;
+    screen_id?: string | null;
+    screen_group_id?: string | null;
+  }>;
 }
 
 export interface RequestTicket {

@@ -37,6 +37,8 @@ import { useNavigate } from "react-router-dom";
 import { mapMediaDeleteError } from "@/lib/mediaDeleteErrors";
 import { OnlineScreensDetailsModal } from "@/components/dashboard/OnlineScreensDetailsModal";
 import { ActiveScheduledTimelineModal } from "@/components/dashboard/ActiveScheduledTimelineModal";
+import { AllScreensDetailsModal } from "@/components/dashboard/AllScreensDetailsModal";
+import { ScheduleReportModal } from "@/components/dashboard/ScheduleReportModal";
 import { resolveMediaDisplayName } from "@/lib/media";
 
 const formatBytes = (bytes?: number | null) => {
@@ -75,6 +77,7 @@ export default function Dashboard() {
   const [previewMedia, setPreviewMedia] = useState<MediaAsset | null>(null);
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MediaAsset | null>(null);
+  const [scheduleReportOpen, setScheduleReportOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -484,7 +487,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setScheduleReportOpen(true)}>
             <Calendar className="mr-2 h-4 w-4" />
             Schedule Report
           </Button>
@@ -678,6 +681,17 @@ export default function Dashboard() {
         }}
       />
 
+      {selectedKPI === "total-screens" ? (
+        <AllScreensDetailsModal
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedKPI(null);
+            }
+          }}
+        />
+      ) : null}
+
       {selectedKPI === "active-scheduled" ? (
         <ActiveScheduledTimelineModal
           open
@@ -689,9 +703,16 @@ export default function Dashboard() {
         />
       ) : null}
 
+      <ScheduleReportModal open={scheduleReportOpen} onOpenChange={setScheduleReportOpen} />
+
       {/* KPI Detail Dialog */}
       <Dialog
-        open={!!selectedKPI && selectedKPI !== "online-screens" && selectedKPI !== "active-scheduled"}
+        open={
+          !!selectedKPI &&
+          selectedKPI !== "online-screens" &&
+          selectedKPI !== "active-scheduled" &&
+          selectedKPI !== "total-screens"
+        }
         onOpenChange={() => setSelectedKPI(null)}
       >
         <DialogContent className={selectedKPI === "storage" ? "max-w-5xl" : "max-w-2xl"}>
