@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatPercent, getMachineStatusTone, getServiceStatusTone } from "@/lib/observability";
+import {
+  formatBytes,
+  formatPercent,
+  getMachineRoleLabel,
+  getMachineStatusTone,
+  getServiceStatusTone,
+} from "@/lib/observability";
 
 describe("observability helpers", () => {
   it("formats bytes safely", () => {
@@ -19,5 +25,11 @@ describe("observability helpers", () => {
     expect(getMachineStatusTone("critical")).toContain("red");
     expect(getServiceStatusTone("up")).toContain("emerald");
     expect(getServiceStatusTone("down")).toContain("red");
+  });
+
+  it("maps machine roles to operator labels", () => {
+    expect(getMachineRoleLabel("backend")).toBe("Server VM");
+    expect(getMachineRoleLabel("cms")).toBe("CMS VM");
+    expect(getMachineRoleLabel("development")).toBe("Development Host");
   });
 });

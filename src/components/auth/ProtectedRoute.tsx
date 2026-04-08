@@ -24,7 +24,9 @@ export function ProtectedRoute({
 
   const isAuthed = Boolean(token || user);
   const roleName = user?.role;
-  const roleAllowed = Boolean(allowRoles?.length && roleName && allowRoles.includes(roleName));
+  const roleAllowed = Boolean(
+    allowRoles?.length && roleName && allowRoles.includes(roleName),
+  );
 
   if (!isAuthed) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -35,6 +37,10 @@ export function ProtectedRoute({
     if (!canAccessModule(moduleKey, user ?? undefined, can)) {
       return <Navigate to="/dashboard" replace />;
     }
+  }
+
+  if (allowRoles?.length && !roleAllowed) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (requirePermissions?.length) {

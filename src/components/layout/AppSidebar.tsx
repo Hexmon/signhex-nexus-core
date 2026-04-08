@@ -1,4 +1,5 @@
 import {
+  Activity,
   LayoutDashboard,
   Calendar,
   Building2,
@@ -42,15 +43,61 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
-  { title: "Media Library", url: "/media", icon: FolderOpen, moduleKey: "media" },
-  { title: "Layouts", url: "/layouts", icon: PanelsTopLeft, moduleKey: "layouts" },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
+    moduleKey: "dashboard",
+  },
+  {
+    title: "Media Library",
+    url: "/media",
+    icon: FolderOpen,
+    moduleKey: "media",
+  },
+  {
+    title: "Layouts",
+    url: "/layouts",
+    icon: PanelsTopLeft,
+    moduleKey: "layouts",
+  },
   { title: "Screens", url: "/screens", icon: Monitor, moduleKey: "screens" },
-  { title: "Schedule Queue", url: "/schedule", icon: Calendar, moduleKey: "schedule" },
-  { title: "Conversations", url: "/chat", icon: Kanban, moduleKey: "conversations" },
-  { title: "Notifications", url: "/notifications", icon: BellRing, moduleKey: "notifications" },
-  { title: "Operators", url: "/operators", icon: Users, moduleKey: "operators" },
-  { title: "Departments", url: "/departments", icon: Building2, moduleKey: "departments" },
+  {
+    title: "Observability",
+    url: "/observability",
+    icon: Activity,
+    allowRoles: ["SUPER_ADMIN", "ADMIN", "OPERATOR"],
+  },
+  {
+    title: "Schedule Queue",
+    url: "/schedule",
+    icon: Calendar,
+    moduleKey: "schedule",
+  },
+  {
+    title: "Conversations",
+    url: "/chat",
+    icon: Kanban,
+    moduleKey: "conversations",
+  },
+  {
+    title: "Notifications",
+    url: "/notifications",
+    icon: BellRing,
+    moduleKey: "notifications",
+  },
+  {
+    title: "Operators",
+    url: "/operators",
+    icon: Users,
+    moduleKey: "operators",
+  },
+  {
+    title: "Departments",
+    url: "/departments",
+    icon: Building2,
+    moduleKey: "departments",
+  },
   { title: "Users", url: "/users", icon: Users, moduleKey: "users" },
   {
     title: "Reports & Logs",
@@ -78,7 +125,12 @@ export function AppSidebar() {
       if (isAuthzLoading) return false;
       return canAccessModule(item.moduleKey, user ?? undefined, can);
     }
-    if (item.allowRoles?.length && user?.role && item.allowRoles.includes(user.role)) return true;
+    if (
+      item.allowRoles?.length &&
+      user?.role &&
+      item.allowRoles.includes(user.role)
+    )
+      return true;
     if (!item.permissions?.length) return true;
     if (isAuthzLoading) return false;
     const requireAny = item.requireAny ?? true;
@@ -88,17 +140,24 @@ export function AppSidebar() {
   });
 
   return (
-    <Sidebar collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
+    <Sidebar
+      collapsible="icon"
+      className="border-r bg-sidebar text-sidebar-foreground"
+    >
       <SidebarContent>
-        <div className={`flex items-center px-4 py-6 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+        <div
+          className={`flex items-center px-4 py-6 ${isCollapsed ? "justify-center" : "gap-3"}`}
+        >
           {branding?.logo_url ? (
             <img
               src={branding.logo_url}
               alt={branding.app_name}
-              className={`${isCollapsed ? 'h-8 w-8' : 'h-10 w-10'} object-contain`}
+              className={`${isCollapsed ? "h-8 w-8" : "h-10 w-10"} object-contain`}
             />
           ) : (
-            <div className={`${isCollapsed ? 'h-8 w-8' : 'h-10 w-10'} rounded-xl bg-primary/15 flex items-center justify-center text-primary font-semibold`}>
+            <div
+              className={`${isCollapsed ? "h-8 w-8" : "h-10 w-10"} rounded-xl bg-primary/15 flex items-center justify-center text-primary font-semibold`}
+            >
               {(branding?.app_name ?? "S").slice(0, 1)}
             </div>
           )}
