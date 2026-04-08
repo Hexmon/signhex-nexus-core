@@ -34,6 +34,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { ScreenHealthDashboard } from "@/components/screens/ScreenHealthDashboard";
 import { screensApi } from "@/api/domains/screens";
 import { queryKeys } from "@/api/queryKeys";
 import type { ScreenPlaybackItemSummary } from "@/api/types";
@@ -214,11 +215,13 @@ export function ScreenDetailsModal({
   const nowPlayingError = nowPlayingQuery.error instanceof ApiError ? nowPlayingQuery.error : null;
   const availability = availabilityQuery.data;
   const snapshot = snapshotQuery.data;
+  const snapshotRefetch = snapshotQuery.refetch;
   const latestPreview = snapshot?.preview ?? nowPlaying?.preview ?? null;
   const activeItemSummaries = nowPlaying?.active_item_summaries ?? [];
   const upcomingItemSummaries = nowPlaying?.upcoming_item_summaries ?? [];
   const isTakingSnapshot = triggerScreenshot.isPending || Boolean(pendingSnapshotCapture);
   const telemetry = screenStatusDetails?.latest_heartbeat?.payload ?? null;
+  const latestNowPlayingPreviewCapturedAt = nowPlayingQuery.data?.preview?.captured_at ?? null;
 
   useEffect(() => {
     if (screen) {
@@ -240,9 +243,9 @@ export function ScreenDetailsModal({
 
     let cancelled = false;
     const interval = window.setInterval(async () => {
-      const snapshotResult = await snapshotQuery.refetch();
+      const snapshotResult = await snapshotRefetch();
       const currentCapturedAt =
-        snapshotResult.data?.preview?.captured_at ?? nowPlayingQuery.data?.preview?.captured_at ?? null;
+        snapshotResult.data?.preview?.captured_at ?? latestNowPlayingPreviewCapturedAt;
 
       if (currentCapturedAt && currentCapturedAt !== pendingSnapshotCapture.previousCapturedAt) {
         if (!cancelled) {
@@ -269,12 +272,12 @@ export function ScreenDetailsModal({
       window.clearInterval(interval);
     };
   }, [
-    nowPlayingQuery.data?.preview?.captured_at,
+    latestNowPlayingPreviewCapturedAt,
     open,
     pendingSnapshotCapture,
     queryClient,
     screenId,
-    snapshotQuery.refetch,
+    snapshotRefetch,
   ]);
 
   const handleSave = () => {
@@ -398,9 +401,10 @@ export function ScreenDetailsModal({
           )
         ) : (
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="status">Status</TabsTrigger>
+              <TabsTrigger value="observability">Observability</TabsTrigger>
               <TabsTrigger value="playing">Now Playing</TabsTrigger>
               <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
             </TabsList>
@@ -726,6 +730,10 @@ export function ScreenDetailsModal({
               ) : (
                 <p className="text-center text-muted-foreground py-8">No status data available</p>
               )}
+            </TabsContent>
+
+            <TabsContent value="observability">
+              <ScreenHealthDashboard screenId={screenId} screenName={screenName || screen?.name || "Screen"} />
             </TabsContent>
 
             <TabsContent value="playing" className="space-y-4">

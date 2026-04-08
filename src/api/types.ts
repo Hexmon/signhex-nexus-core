@@ -401,6 +401,111 @@ export interface HealthStatus {
   timestamp?: string;
 }
 
+export interface ObservabilityGrafanaLink {
+  label: string;
+  url: string;
+}
+
+export interface ObservabilityMachineSummary {
+  id: string;
+  name: string;
+  role: "data" | "backend" | "cms" | "development";
+  status: "healthy" | "degraded" | "critical" | "unknown" | "unconfigured";
+  scrape_status: {
+    reachable_targets: number;
+    expected_targets: number;
+  };
+  resources: {
+    cpu_percent: number | null;
+    memory_percent: number | null;
+    disk_percent: number | null;
+  };
+  services: Array<{
+    id: string;
+    label: string;
+    status: "up" | "down" | "unknown";
+  }>;
+  grafana: {
+    dashboard_url: string | null;
+  };
+}
+
+export interface ObservabilityOverview {
+  generated_at: string;
+  deployment_mode: "development" | "qa" | "production";
+  current_state_source: "backend_and_prometheus";
+  fleet: {
+    total_players: number | null;
+    active_players: number | null;
+    inactive_players: number | null;
+    offline_players: number | null;
+    reachable_players: number | null;
+    configured_player_targets: number | null;
+  };
+  alerts: {
+    available: boolean;
+    firing: number;
+    highest_severity: "critical" | "warning" | "info" | "none" | "unknown";
+    status: "healthy" | "degraded" | "critical" | "unknown" | "unconfigured";
+  };
+  machines: ObservabilityMachineSummary[];
+  grafana: {
+    enabled: boolean;
+    embed_enabled: boolean;
+    base_path: string;
+    links: {
+      backend_service: string | null;
+      players_fleet: string | null;
+      machines: Record<string, string | null>;
+    };
+  };
+}
+
+export interface ObservabilityMachinesResponse {
+  generated_at: string;
+  machines: ObservabilityMachineSummary[];
+}
+
+export interface ScreenObservabilitySummary {
+  generated_at: string;
+  screen: {
+    id: string;
+    name: string;
+    status: string;
+    health_state: string | null;
+    health_reason: string | null;
+    last_backend_heartbeat_at: string | null;
+  };
+  player_scrape: {
+    configured: boolean;
+    status: "up" | "down" | "unknown";
+    last_successful_player_heartbeat_at: string | null;
+  };
+  latest_player_metrics: {
+    cpu_percent: number | null;
+    memory_used_bytes: number | null;
+    memory_total_bytes: number | null;
+    disk_used_bytes: number | null;
+    disk_total_bytes: number | null;
+    temperature_celsius: number | null;
+    battery_percent: number | null;
+    power_connected: boolean | null;
+    request_queue_items: number | null;
+    request_queue_oldest_age_seconds: number | null;
+    cache_used_bytes: number | null;
+    cache_total_bytes: number | null;
+    last_schedule_sync_at: string | null;
+    display_count: number | null;
+  };
+  latest_backend_telemetry: Record<string, unknown> | null;
+  grafana: {
+    enabled: boolean;
+    embed_enabled: boolean;
+    links: ObservabilityGrafanaLink[];
+    embed_url: string | null;
+  };
+}
+
 export interface DepartmentRequestsReport {
   department_id: string | null;
   department_name: string | null;

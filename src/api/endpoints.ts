@@ -83,6 +83,11 @@ export const endpoints = {
   metrics: {
     overview: "/metrics/overview",
   },
+  observability: {
+    overview: "/observability/overview",
+    machines: "/observability/machines",
+    screen: (screenId: string) => `/observability/screens/${screenId}`,
+  },
   notifications: {
     base: "/notifications",
     unreadCount: "/notifications/unread-count",

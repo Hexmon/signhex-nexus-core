@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Calendar, Eye, HardDrive, Monitor, Plus, Trash2 } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, Eye, HardDrive, Monitor, Plus, Server, Trash2 } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
 import { ToastAction } from "@/components/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { metricsApi } from "@/api/domains/metrics";
+import { observabilityApi } from "@/api/domains/observability";
 import { ApiError } from "@/api/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAppSelector } from "@/store/hooks";
@@ -39,6 +40,7 @@ import { OnlineScreensDetailsModal } from "@/components/dashboard/OnlineScreensD
 import { ActiveScheduledTimelineModal } from "@/components/dashboard/ActiveScheduledTimelineModal";
 import { AllScreensDetailsModal } from "@/components/dashboard/AllScreensDetailsModal";
 import { ScheduleReportModal } from "@/components/dashboard/ScheduleReportModal";
+import { getMachineStatusTone, getServiceStatusTone } from "@/lib/observability";
 import { resolveMediaDisplayName } from "@/lib/media";
 
 const formatBytes = (bytes?: number | null) => {
@@ -105,6 +107,18 @@ export default function Dashboard() {
   } = useQuery({
     queryKey: ["health"],
     queryFn: healthApi.get,
+    staleTime: 30_000,
+  });
+
+  const {
+    data: observabilityOverview,
+    isLoading: isObservabilityLoading,
+    isError: isObservabilityError,
+    error: observabilityError,
+  } = useQuery({
+    queryKey: ["observability-overview"],
+    queryFn: observabilityApi.getOverview,
+    enabled: isAuthenticated,
     staleTime: 30_000,
   });
 
@@ -317,6 +331,16 @@ export default function Dashboard() {
   }, [isHealthError, healthError, toast]);
 
   useEffect(() => {
+    if (isObservabilityError) {
+      toast({
+        title: "Observability overview unavailable",
+        description: getErrorMessage(observabilityError, "Unable to load observability summary."),
+        variant: "destructive",
+      });
+    }
+  }, [isObservabilityError, observabilityError, toast]);
+
+  useEffect(() => {
     if (isMediaError) {
       toast({
         title: "Media load failed",
@@ -349,6 +373,10 @@ export default function Dashboard() {
   const heartbeats5m = overview?.system_health?.heartbeats?.last_5m ?? screensMetrics.online_last_5m;
   const heartbeats1h = overview?.system_health?.heartbeats?.last_1h;
   const lastHeartbeatAt = overview?.system_health?.last_heartbeat_at;
+  const machineSummaries = observabilityOverview?.machines ?? [];
+  const observabilityGrafanaLinks = observabilityOverview?.grafana?.links;
+  const playerTargetsReachable = observabilityOverview?.fleet.reachable_players;
+  const playerTargetsConfigured = observabilityOverview?.fleet.configured_player_targets;
 
   const kpiData = useMemo(() => {
     const storageTrend =
@@ -463,8 +491,22 @@ export default function Dashboard() {
       });
     }
 
+    if ((observabilityOverview?.alerts.firing ?? 0) > 0) {
+      items.push({
+        id: "observability-alerts",
+        type: observabilityOverview?.alerts.highest_severity === "critical" ? "error" : "warning",
+        message: `${observabilityOverview?.alerts.firing ?? 0} observability alert${(observabilityOverview?.alerts.firing ?? 0) === 1 ? "" : "s"} currently firing`,
+        action: "Open Grafana",
+        onClick: () => {
+          if (observabilityGrafanaLinks?.players_fleet) {
+            window.open(observabilityGrafanaLinks.players_fleet, "_blank", "noopener,noreferrer");
+          }
+        },
+      });
+    }
+
     return items;
-  }, [offlineScreens, quotaPercent, navigate]);
+  }, [offlineScreens, observabilityGrafanaLinks?.players_fleet, observabilityOverview?.alerts.firing, observabilityOverview?.alerts.highest_severity, quotaPercent, navigate]);
 
   const readyMedia = useMemo(() => (allMedia ?? []).filter((item) => item.status === "READY"), [allMedia]);
 
@@ -546,6 +588,65 @@ export default function Dashboard() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Observability Overview</CardTitle>
+            <CardDescription>Current-state fleet and alert posture from backend summaries</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Fleet totals</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {isObservabilityLoading ? "Loading..." : String(observabilityOverview?.fleet.total_players ?? "—")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Active {observabilityOverview?.fleet.active_players ?? "—"} · Offline {observabilityOverview?.fleet.offline_players ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Player scrape reachability</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {isObservabilityLoading ? "Loading..." : `${playerTargetsReachable ?? "—"} / ${playerTargetsConfigured ?? "—"}`}
+                </p>
+                <p className="text-xs text-muted-foreground">Reachable Prometheus player targets</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Alert state</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant="outline" className={observabilityOverview ? getMachineStatusTone(observabilityOverview.alerts.status) : "border-slate-400 text-slate-700"}>
+                    {isObservabilityLoading ? "Loading..." : observabilityOverview?.alerts.status ?? "unknown"}
+                  </Badge>
+                  <span className="text-sm font-medium">{observabilityOverview?.alerts.firing ?? 0} firing</span>
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Historical drill-down</p>
+                <div className="mt-2 flex gap-2">
+                  {observabilityGrafanaLinks?.backend_service ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(observabilityGrafanaLinks.backend_service!, "_blank", "noopener,noreferrer")}
+                    >
+                      Backend
+                    </Button>
+                  ) : null}
+                  {observabilityGrafanaLinks?.players_fleet ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(observabilityGrafanaLinks.players_fleet!, "_blank", "noopener,noreferrer")}
+                    >
+                      Players
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Pending Requests */}
         <Card>
           <CardHeader>
@@ -671,6 +772,81 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Machine Health
+          </CardTitle>
+          <CardDescription>VM summaries are native CMS cards. Use Grafana for history and full drill-down.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            {machineSummaries.map((machine) => (
+              <Card key={machine.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{machine.name}</p>
+                    <p className="text-xs text-muted-foreground">{machine.role}</p>
+                  </div>
+                  <Badge variant="outline" className={getMachineStatusTone(machine.status)}>
+                    {machine.status}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">CPU</p>
+                    <p className="font-medium">{formatPercent(machine.resources.cpu_percent)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Memory</p>
+                    <p className="font-medium">{formatPercent(machine.resources.memory_percent)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Disk</p>
+                    <p className="font-medium">{formatPercent(machine.resources.disk_percent)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Scrape targets</span>
+                    <span>
+                      {machine.scrape_status.reachable_targets}/{machine.scrape_status.expected_targets}
+                    </span>
+                  </div>
+                  {machine.services.map((service) => (
+                    <div key={service.id} className="flex items-center justify-between text-sm">
+                      <span>{service.label}</span>
+                      <span className={getServiceStatusTone(service.status)}>{service.status}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {machine.grafana.dashboard_url ? (
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(machine.grafana.dashboard_url!, "_blank", "noopener,noreferrer")}
+                    >
+                      Open in Grafana
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
+            ))}
+
+            {!isObservabilityLoading && machineSummaries.length === 0 ? (
+              <div className="col-span-full rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                Machine summaries are unavailable. Check backend observability configuration.
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
 
       <OnlineScreensDetailsModal
         open={selectedKPI === "online-screens"}
