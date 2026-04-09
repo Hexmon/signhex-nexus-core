@@ -151,8 +151,8 @@ const ApiKeys = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">API Key Management</h1>
           <p className="text-muted-foreground">
             Generate and manage API keys for programmatic access
@@ -165,7 +165,7 @@ const ApiKeys = () => {
               Create API Key
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New API Key</DialogTitle>
               <DialogDescription>
@@ -187,7 +187,7 @@ const ApiKeys = () => {
 
               <div className="space-y-3">
                 <Label>Permissions & Scopes</Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {availableScopes.map((scope) => (
                     <div key={scope.id} className="flex items-center space-x-2">
                       <Checkbox
@@ -210,7 +210,7 @@ const ApiKeys = () => {
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 Cancel
               </Button>
@@ -235,7 +235,7 @@ const ApiKeys = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -270,8 +270,8 @@ const ApiKeys = () => {
                     <TableRow key={apiKey.id}>
                       <TableCell className="font-medium">{apiKey.name}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <code className="max-w-[14rem] truncate rounded bg-muted px-2 py-1 text-xs sm:max-w-none">
                             {visibleKeys.has(apiKey.id) ? displayKey : maskKey(displayKey)}
                           </code>
                           <Button

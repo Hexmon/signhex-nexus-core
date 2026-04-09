@@ -73,7 +73,7 @@ export default function Operators() {
     queryFn: () => departmentsApi.list({ page: 1, limit: 100 }),
     enabled: canPickDepartment,
   });
-  const departments = departmentsData?.items ?? [];
+  const departments = useMemo(() => departmentsData?.items ?? [], [departmentsData?.items]);
   const departmentMap = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
   const passwordMismatch = !selectedUser && Boolean(formData.confirm_password) && formData.password !== formData.confirm_password;
 
@@ -229,8 +229,8 @@ export default function Operators() {
         }
       />
 
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-[260px]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="w-full lg:max-w-md">
           <SearchBar placeholder="Search operators..." onSearch={setSearchQuery} initialValue={searchQuery} />
         </div>
         <div className="text-sm text-muted-foreground">
@@ -239,26 +239,28 @@ export default function Operators() {
       </div>
 
       {isLoading ? (
-        <LoadingIndicator fullScreen label="Loading operators..." />
+        <div className="rounded-md border p-6">
+          <LoadingIndicator label="Loading operators..." />
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState title="No operators found" description="Try adjusting your search or add a new operator." />
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((operator: ApiUser) => (
-              <Card key={operator.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between">
-                <div className="flex items-start gap-3">
+              <Card key={operator.id} className="transition-shadow hover:shadow-md">
+              <CardHeader className="flex flex-row items-start justify-between p-5 pb-3">
+                <div className="flex min-w-0 items-start gap-3">
                   <div className="p-2 rounded-full bg-primary/10">
                     <User className="h-4 w-4 text-primary" />
                   </div>
-                  <div>
-                    <div className="font-semibold">
+                  <div className="min-w-0">
+                    <div className="break-words font-semibold">
                       {operator.first_name || operator.last_name
                         ? `${operator.first_name ?? ""} ${operator.last_name ?? ""}`.trim()
                         : operator.email}
                     </div>
-                    <div className="text-xs text-muted-foreground">{operator.id}</div>
+                    <div className="break-all text-xs text-muted-foreground">{operator.id}</div>
                   </div>
                 </div>
                 {canManageOperators ? (
@@ -344,7 +346,7 @@ export default function Operators() {
         </div>
       )}
       <Dialog open={canManageOperators && isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="sm:max-w-[520px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedUser ? "Edit Operator" : "Add Operator"}</DialogTitle>
           </DialogHeader>
@@ -360,7 +362,7 @@ export default function Operators() {
                 disabled={createOrUpdate.isPending}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="first-name">First name</Label>
                 <Input
@@ -383,7 +385,7 @@ export default function Operators() {
               </div>
             </div>
             {!selectedUser && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <Input
@@ -414,7 +416,7 @@ export default function Operators() {
                 ) : null}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
                 {isRolesLoading ? (
@@ -465,7 +467,7 @@ export default function Operators() {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setIsFormOpen(false)} disabled={createOrUpdate.isPending}>
               Cancel
             </Button>

@@ -85,7 +85,6 @@ export const endpoints = {
   },
   observability: {
     overview: "/observability/overview",
-    machines: "/observability/machines",
     screen: (screenId: string) => `/observability/screens/${screenId}`,
   },
   notifications: {

@@ -154,8 +154,8 @@ const Departments = () => {
         onAction={() => setFormOpen(true)}
       />
 
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-[260px] max-w-md">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="w-full lg:max-w-md">
           <SearchBar placeholder="Search departments..." onSearch={setSearchQuery} initialValue={searchQuery} />
         </div>
         <div className="text-sm text-muted-foreground">
@@ -164,7 +164,9 @@ const Departments = () => {
       </div>
 
       {isLoading ? (
-        <LoadingIndicator fullScreen label="Loading departments..." />
+        <div className="rounded-md border p-6">
+          <LoadingIndicator label="Loading departments..." />
+        </div>
       ) : (
         <>
           {filteredDepartments.length === 0 ? (

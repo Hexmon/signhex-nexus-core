@@ -20,15 +20,15 @@ export function PageHeader({
   trailingContent,
 }: PageHeaderProps) {
   return (
-    <div className="flex items-center justify-between gap-4 flex-wrap">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">{title}</h1>
-        {description && <p className="text-muted-foreground mt-1">{description}</p>}
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{title}</h1>
+        {description && <p className="mt-1 text-sm text-muted-foreground sm:text-base">{description}</p>}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
         {trailingContent}
         {actionLabel && onAction && (
-          <Button onClick={onAction} disabled={actionDisabled} className="gap-2">
+          <Button onClick={onAction} disabled={actionDisabled} className="w-full gap-2 sm:w-auto">
             {actionIcon}
             {actionLabel}
           </Button>

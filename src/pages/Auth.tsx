@@ -92,17 +92,17 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-6">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background px-4 py-6 sm:px-6">
+      <div className="w-full max-w-md space-y-5 sm:space-y-6">
         {/* Logo */}
         <div className="text-center space-y-2">
           <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-lg">
-              <Monitor className="w-10 h-10 text-primary-foreground" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-lg sm:h-16 sm:w-16">
+              <Monitor className="h-8 w-8 text-primary-foreground sm:h-10 sm:w-10" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">Signhex CMS</h1>
-          <p className="text-muted-foreground">Enterprise Digital Signage Management</p>
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Signhex CMS</h1>
+          <p className="text-sm text-muted-foreground sm:text-base">Enterprise Digital Signage Management</p>
         </div>
 
         {/* Auth Card */}
@@ -119,7 +119,7 @@ const Auth = () => {
             <TabsContent value="login">
               <form onSubmit={handleLogin}>
                 <CardContent className="space-y-4">
-                  <CardTitle className="text-2xl">Welcome back</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl">Welcome back</CardTitle>
                   <CardDescription>
                     Enter your credentials to access your dashboard
                   </CardDescription>
@@ -178,7 +178,7 @@ const Auth = () => {
             <TabsContent value="signup">
               <form onSubmit={handleSignup}>
                 <CardContent className="space-y-4">
-                  <CardTitle className="text-2xl">Create account</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl">Create account</CardTitle>
                   <CardDescription>
                     Get started with Signhex CMS today
                   </CardDescription>

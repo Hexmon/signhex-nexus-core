@@ -232,14 +232,14 @@ const Layouts = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">Layouts</h1>
           <p className="text-muted-foreground">
             Manage mosaic templates used to place content on screens.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -251,16 +251,16 @@ const Layouts = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex-1 max-w-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="w-full lg:max-w-sm">
           <SearchBar
             placeholder="Search by name or description..."
             onSearch={setSearchQuery}
           />
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:justify-end">
           <Select value={aspectRatioFilter} onValueChange={setAspectRatioFilter}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-full sm:w-[150px]">
               <SelectValue placeholder="Aspect Ratio" />
             </SelectTrigger>
             <SelectContent>
@@ -299,7 +299,7 @@ const Layouts = () => {
         />
       ) : (
         <div className="rounded-md border">
-          <Table>
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -322,8 +322,8 @@ const Layouts = () => {
                       {layout.is_shared ? <Badge variant="secondary">Shared</Badge> : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-[300px] truncate">
-                    {layout.description}
+                  <TableCell className="max-w-[300px] text-muted-foreground">
+                    <span className="line-clamp-2 break-words">{layout.description}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{layout.aspect_ratio}</Badge>
@@ -379,7 +379,7 @@ const Layouts = () => {
         </div>
       )}
 
-      <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} className="flex justify-end" />
+      <PageNavigation currentPage={page} totalPages={totalPages} onPageChange={setPage} className="justify-end" />
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -408,7 +408,7 @@ const Layouts = () => {
       </ConfirmDialog>
 
       <Dialog open={!!previewTarget} onOpenChange={(open) => !open && setPreviewTarget(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{previewTarget?.name || "Layout preview"}</DialogTitle>
           </DialogHeader>
@@ -418,7 +418,7 @@ const Layouts = () => {
                 <Badge variant="secondary">{previewTarget.aspect_ratio}</Badge>
                 <Badge variant="outline">{previewTarget.spec.slots.length} slots</Badge>
               </div>
-              <div className="flex justify-center rounded-lg border bg-muted/20 p-6">
+              <div className="overflow-x-auto rounded-lg border bg-muted/20 p-4 sm:p-6">
                 {renderLayoutPreview(previewTarget)}
               </div>
             </div>

@@ -437,14 +437,14 @@ export default function MediaLibrary() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold text-foreground">Media Library</h1>
           <p className="text-muted-foreground mt-1">
             Browse uploaded assets, conversion jobs, and webpage playback items.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setIsWebpageOpen(true)}>
             <Globe className="h-4 w-4 mr-2" />
             Add Webpage
@@ -456,7 +456,7 @@ export default function MediaLibrary() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Total Files" value={stats.total} icon={<FileText className="h-5 w-5 text-primary" />} />
         <StatCard title="Images" value={stats.images} icon={<ImageIcon className="h-5 w-5 text-blue-600" />} />
         <StatCard title="Videos" value={stats.videos} icon={<Video className="h-5 w-5 text-purple-600" />} />
@@ -465,14 +465,14 @@ export default function MediaLibrary() {
       </div>
 
       <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="image">Images</TabsTrigger>
-              <TabsTrigger value="video">Videos</TabsTrigger>
-              <TabsTrigger value="document">Documents</TabsTrigger>
-              <TabsTrigger value="webpage">Webpages</TabsTrigger>
+            <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+              <TabsTrigger value="all" className="shrink-0">All</TabsTrigger>
+              <TabsTrigger value="image" className="shrink-0">Images</TabsTrigger>
+              <TabsTrigger value="video" className="shrink-0">Videos</TabsTrigger>
+              <TabsTrigger value="document" className="shrink-0">Documents</TabsTrigger>
+              <TabsTrigger value="webpage" className="shrink-0">Webpages</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="text-sm text-muted-foreground">

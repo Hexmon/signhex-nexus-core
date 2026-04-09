@@ -136,7 +136,7 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh]">
+      <DialogContent className="max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Frame/Layout Editor</DialogTitle>
           <DialogDescription>
@@ -144,9 +144,9 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-4 h-full overflow-hidden">
+        <div className="flex min-h-0 flex-col gap-4 overflow-hidden lg:h-[min(70svh,800px)] lg:flex-row">
           {/* Left Panel - Controls */}
-          <div className="w-80 space-y-4 overflow-y-auto">
+          <div className="w-full space-y-4 overflow-y-auto lg:w-80">
             <div className="space-y-2">
               <Label htmlFor="layout-name">Layout Name</Label>
               <Input
@@ -230,7 +230,7 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label className="text-xs">X Position (%)</Label>
                       <Input
@@ -257,7 +257,7 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Width (%)</Label>
                       <Input
@@ -310,8 +310,8 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
           </div>
 
           {/* Right Panel - Preview */}
-          <div className="flex-1 space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Badge variant="outline">
                 <Grid className="h-3 w-3 mr-1" />
                 Preview (9:16)
@@ -324,8 +324,8 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
               </div>
             </div>
 
-            <Card className="relative bg-muted p-4 h-[calc(100%-4rem)]">
-              <div className="relative w-full h-full max-w-md mx-auto bg-background rounded-lg border-2 border-dashed border-border overflow-hidden">
+            <Card className="relative min-h-[20rem] bg-muted p-4 lg:flex-1">
+              <div className="relative mx-auto aspect-[9/16] h-full max-h-[70svh] w-full max-w-md overflow-hidden rounded-lg border-2 border-dashed border-border bg-background">
                 {zones.map((zone) => (
                   <div
                     key={zone.id}
@@ -355,7 +355,7 @@ export function FrameLayoutEditor({ open, onOpenChange }: FrameLayoutEditorProps
               </div>
             </Card>
 
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>

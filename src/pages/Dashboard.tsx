@@ -574,7 +574,7 @@ export default function Dashboard() {
               alerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className="flex items-center justify-between p-3 bg-background rounded-lg"
+                  className="flex flex-col gap-3 rounded-lg bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <span className="text-sm">{alert.message}</span>
                   <Button variant="outline" size="sm" onClick={alert.onClick}>
@@ -654,7 +654,7 @@ export default function Dashboard() {
             <CardDescription>Requests requiring review or approval</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Department</TableHead>
@@ -1015,7 +1015,7 @@ export default function Dashboard() {
 
       {previewMedia && (
         <Dialog open={!!previewMedia} onOpenChange={(open) => !open && setPreviewMedia(null)}>
-          <DialogContent className="h-[90vh] w-[95vw] max-w-6xl p-4">
+          <DialogContent className="max-w-6xl p-4 sm:w-[95vw]">
             <DialogHeader>
               <DialogTitle>{resolveMediaDisplayName(previewMedia)}</DialogTitle>
               <DialogDescription>
@@ -1028,7 +1028,7 @@ export default function Dashboard() {
                 url={previewMedia.media_url}
                 type={previewMedia.source_content_type ?? previewMedia.content_type}
                 alt={resolveMediaDisplayName(previewMedia)}
-                className="h-full max-h-[75vh] w-full"
+                className="h-full max-h-[75svh] w-full"
               />
             </div>
           </DialogContent>
@@ -1037,7 +1037,7 @@ export default function Dashboard() {
 
       {deleteTarget && (
         <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[480px] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Hard delete media</DialogTitle>
               <DialogDescription>
@@ -1053,7 +1053,7 @@ export default function Dashboard() {
                 Size: {formatMegabytes(deleteTarget.source_size ?? deleteTarget.size)}
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="outline"
                 onClick={() => setDeleteTarget(null)}

@@ -149,7 +149,7 @@ const ProofOfPlay = () => {
           <CardDescription>Filter live playback events by date, screen, media, or completion state.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <div className="space-y-2">
               <Label htmlFor="date-from">Date From</Label>
               <Input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -221,7 +221,7 @@ const ProofOfPlay = () => {
           ) : items.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">No proof-of-play records found.</div>
           ) : (
-            <Table>
+            <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Screen</TableHead>

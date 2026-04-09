@@ -52,19 +52,19 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center gap-4 px-4">
+      <div className="flex min-h-16 flex-wrap items-center gap-3 px-3 py-2 sm:px-4">
         <SidebarTrigger />
 
-        <div className="flex flex-1 items-center justify-between gap-4">
-          <div className="relative w-full max-w-2xl">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 lg:flex-nowrap">
+          <div className="order-2 relative w-full min-w-0 lg:order-1 lg:max-w-2xl">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search screens, media, requests..."
-              className="pl-9 bg-muted/50"
+              className="h-10 pl-9 bg-muted/50"
             />
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="order-1 ml-auto flex shrink-0 items-center gap-2 lg:order-2">
             <Button
               variant="ghost"
               size="icon"
@@ -85,7 +85,7 @@ export function AppHeader() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2">
+                <Button variant="ghost" className="min-w-0 gap-2 px-2 sm:px-3">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       {getInitials(
@@ -94,14 +94,14 @@ export function AppHeader() {
                       )}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="hidden md:flex flex-col items-start text-xs">
-                    <span className="font-medium">
+                  <div className="hidden min-w-0 md:flex flex-col items-start text-xs">
+                    <span className="max-w-[12rem] truncate font-medium lg:max-w-[16rem]">
                       {user
                         ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() ||
                           "Signed in"
                         : "Super Admin"}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="max-w-[12rem] truncate text-muted-foreground lg:max-w-[16rem]">
                       {user?.email ?? "admin@signhex.com"}
                     </span>
                   </div>

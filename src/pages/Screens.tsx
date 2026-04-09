@@ -261,8 +261,8 @@ export default function Screens() {
       </div>
 
       <Card className="p-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex-1 min-w-[260px]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="w-full lg:max-w-2xl">
             <SearchBar
               placeholder="Search screens and groups by name, location, description, or ID..."
               onSearch={setSearch}
@@ -278,7 +278,9 @@ export default function Screens() {
       </Card>
 
       {overviewQuery.isLoading && !overviewQuery.data ? (
-        <LoadingIndicator fullScreen label="Loading screens..." />
+        <div className="rounded-md border p-6">
+          <LoadingIndicator label="Loading screens..." />
+        </div>
       ) : overviewQuery.isError && !overviewQuery.data ? (
         <Card className="p-6 space-y-4">
           <div className="flex items-center gap-3 text-destructive">

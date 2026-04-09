@@ -52,12 +52,12 @@ export function ComprehensiveDetailDrawer({
   ];
 
   return (
-    <div className="w-[600px] border-l bg-background flex flex-col h-full">
+    <div className="flex h-full w-full min-w-0 flex-col rounded-lg border bg-background xl:w-[600px] xl:rounded-none xl:border-l xl:border-y-0 xl:border-r-0">
       {/* Header */}
-      <div className="p-6 border-b space-y-4">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
+      <div className="space-y-4 border-b p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold">{request.title}</h2>
               <StatusBadge status={request.status === "submitted" ? "pending" : 
                                    request.status === "in_progress" ? "in_review" :
@@ -71,7 +71,7 @@ export function ComprehensiveDetailDrawer({
         </div>
 
         {/* Quick Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {request.status === "dept_review" && (
             <>
               <Button size="sm" variant="default" onClick={onApprove}>
@@ -103,7 +103,7 @@ export function ComprehensiveDetailDrawer({
 
       {/* Tabs Content */}
       <Tabs defaultValue="summary" className="flex-1 flex flex-col">
-        <TabsList className="mx-6 mt-4">
+        <TabsList className="mx-4 mt-4 h-auto justify-start gap-2 overflow-x-auto sm:mx-6">
           <TabsTrigger value="summary" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Summary
@@ -129,8 +129,8 @@ export function ComprehensiveDetailDrawer({
         {/* Summary Tab */}
         <TabsContent value="summary" className="flex-1 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 p-4 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Department</p>
                   <p className="font-medium">{request.department}</p>
@@ -159,7 +159,7 @@ export function ComprehensiveDetailDrawer({
 
               <div className="space-y-4">
                 <h3 className="font-semibold">Content Details</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Card>
                     <CardContent className="p-4 space-y-1">
                       <p className="text-sm text-muted-foreground">Media Items</p>
@@ -234,8 +234,8 @@ export function ComprehensiveDetailDrawer({
         {/* Media Tab */}
         <TabsContent value="media" className="flex-1 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold">Media Items ({mockMedia.length})</h3>
                 <Button size="sm" variant="outline">Add Media</Button>
               </div>
@@ -244,7 +244,7 @@ export function ComprehensiveDetailDrawer({
                 {mockMedia.map((media, index) => (
                   <Card key={media.id}>
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center justify-center w-10 h-10 bg-muted rounded font-semibold">
                           {index + 1}
                         </div>
@@ -268,11 +268,11 @@ export function ComprehensiveDetailDrawer({
         {/* Scheduling Tab */}
         <TabsContent value="scheduling" className="flex-1 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-6 space-y-6">
+            <div className="space-y-6 p-4 sm:p-6">
               <div className="space-y-4">
                 <h3 className="font-semibold">Schedule Configuration</h3>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Start Date & Time</label>
                     <Input type="datetime-local" defaultValue="2024-03-01T09:00" />
@@ -302,7 +302,7 @@ export function ComprehensiveDetailDrawer({
 
                 <div className="space-y-3">
                   <h4 className="font-semibold text-sm">Dayparting</h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <label className="text-sm">Start Time</label>
                       <Input type="time" defaultValue="09:00" />
@@ -321,8 +321,8 @@ export function ComprehensiveDetailDrawer({
         {/* Screens Tab */}
         <TabsContent value="screens" className="flex-1 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold">Target Screens ({mockScreens.length})</h3>
                 <Button size="sm" variant="outline">Add Screens</Button>
               </div>
@@ -362,7 +362,7 @@ export function ComprehensiveDetailDrawer({
         {/* Activity Tab */}
         <TabsContent value="activity" className="flex-1 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-6 space-y-6">
+            <div className="space-y-6 p-4 sm:p-6">
               {/* Comments Section */}
               <div className="space-y-4">
                 <h3 className="font-semibold">Comments & Notes</h3>
@@ -388,9 +388,9 @@ export function ComprehensiveDetailDrawer({
                   ))}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Textarea placeholder="Add a comment... Use @mentions to notify team members" />
-                  <Button>Post</Button>
+                  <Button className="sm:self-end">Post</Button>
                 </div>
               </div>
 

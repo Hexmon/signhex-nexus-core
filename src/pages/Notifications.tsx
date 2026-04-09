@@ -83,22 +83,22 @@ export default function Notifications() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2">
             <BellRing className="h-5 w-5" />
             Notifications
           </CardTitle>
-          <Button size="sm" variant="outline" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>
+          <Button size="sm" variant="outline" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="w-full sm:w-auto">
             <CheckCheck className="mr-2 h-4 w-4" />
             Mark all read
           </Button>
         </CardHeader>
         <CardContent className="space-y-3">
           <Tabs value={readFilter} onValueChange={(value) => setReadFilter(value as ReadFilter)}>
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="unread">Unread ({unreadCount})</TabsTrigger>
-              <TabsTrigger value="read">Read</TabsTrigger>
+            <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+              <TabsTrigger value="all" className="shrink-0">All</TabsTrigger>
+              <TabsTrigger value="unread" className="shrink-0">Unread ({unreadCount})</TabsTrigger>
+              <TabsTrigger value="read" className="shrink-0">Read</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -122,10 +122,10 @@ export default function Notifications() {
                     }`}
                     disabled={!chatData}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 space-y-1">
                         <p className="text-sm font-semibold">{notification.title || chatData?.notificationType || "Notification"}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="break-words text-xs text-muted-foreground">
                           {chatData?.snippet || notification.body || "Open chat conversation"}
                         </p>
                       </div>

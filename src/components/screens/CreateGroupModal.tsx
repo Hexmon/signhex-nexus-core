@@ -108,7 +108,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Create Screen Group</DialogTitle>
                     <DialogDescription>
@@ -142,7 +142,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
                     </div>
 
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <Label>Select Available Screens</Label>
                             <Badge variant="secondary">
                                 {selectedScreenIds.length} selected
@@ -174,7 +174,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
                                     return (
                                         <div
                                             key={id}
-                                            className="flex items-center gap-3 p-3 hover:bg-accent cursor-pointer transition-colors"
+                                            className="flex cursor-pointer flex-col gap-3 p-3 transition-colors hover:bg-accent sm:flex-row sm:items-center"
                                             onClick={() => handleToggleScreen(id)}
                                         >
                                             <Checkbox
@@ -184,7 +184,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
                                             />
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-medium truncate">{name}</p>
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                                     <span className="truncate">{location || "No location"}</span>
                                                     <span>•</span>
                                                     <Badge
@@ -209,7 +209,7 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
                     </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <Button variant="outline" onClick={handleClose} disabled={createGroup.isPending}>
                         Cancel
                     </Button>

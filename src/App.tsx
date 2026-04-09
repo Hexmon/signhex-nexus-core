@@ -33,7 +33,6 @@ import Users from "./pages/Users";
 import Layouts from "./pages/Layouts";
 import LayoutEditor from "./pages/LayoutEditor";
 import Notifications from "./pages/Notifications";
-import Observability from "./pages/Observability";
 import { useAppearanceSettings } from "@/hooks/useSettingsApi";
 
 const queryClient = new QueryClient({
@@ -62,9 +61,9 @@ const AuthenticatedAppShell = () => {
       <SidebarProvider defaultOpen={sidebarDefaultOpen}>
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
-          <div className="flex-1 flex flex-col w-full">
+          <div className="flex min-w-0 flex-1 flex-col">
             <AppHeader />
-            <main className="flex-1 p-6 overflow-auto">
+            <main className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
               <Routes>
                 <Route
                   path="/dashboard"
@@ -192,16 +191,6 @@ const AuthenticatedAppShell = () => {
                   element={
                     <ProtectedRoute moduleKey="notifications">
                       <Notifications />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/observability"
-                  element={
-                    <ProtectedRoute
-                      allowRoles={["SUPER_ADMIN", "ADMIN", "OPERATOR"]}
-                    >
-                      <Observability />
                     </ProtectedRoute>
                   }
                 />

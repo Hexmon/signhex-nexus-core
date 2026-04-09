@@ -461,11 +461,6 @@ export interface ObservabilityOverview {
   };
 }
 
-export interface ObservabilityMachinesResponse {
-  generated_at: string;
-  machines: ObservabilityMachineSummary[];
-}
-
 export interface ScreenObservabilitySummary {
   generated_at: string;
   screen: {

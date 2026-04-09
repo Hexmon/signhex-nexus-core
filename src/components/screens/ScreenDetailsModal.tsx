@@ -337,27 +337,29 @@ export function ScreenDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
               <DialogTitle className="flex items-center gap-2">
                 {isEditing ? (
                   <Input
                     value={editForm.name}
                     onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))}
-                    className="text-lg font-semibold"
+                    className="w-full max-w-full text-lg font-semibold"
                   />
                 ) : (
                   <>
                     <Monitor className="h-5 w-5" />
-                    {title}
+                    <span className="truncate">{title}</span>
                   </>
                 )}
               </DialogTitle>
-              <DialogDescription className="font-mono">{formatMaskedScreenId(screenId)}</DialogDescription>
+              <DialogDescription className="break-all font-mono">
+                {formatMaskedScreenId(screenId)}
+              </DialogDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               {isEditing ? (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
@@ -400,13 +402,23 @@ export function ScreenDetailsModal({
             "The selected screen no longer exists.",
           )
         ) : (
-          <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="status">Status</TabsTrigger>
-              <TabsTrigger value="observability">Observability</TabsTrigger>
-              <TabsTrigger value="playing">Now Playing</TabsTrigger>
-              <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
+          <Tabs defaultValue="overview" className="mt-4 min-w-0">
+            <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+              <TabsTrigger value="overview" className="shrink-0">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="status" className="shrink-0">
+                Status
+              </TabsTrigger>
+              <TabsTrigger value="observability" className="shrink-0">
+                Observability
+              </TabsTrigger>
+              <TabsTrigger value="playing" className="shrink-0">
+                Now Playing
+              </TabsTrigger>
+              <TabsTrigger value="snapshot" className="shrink-0">
+                Snapshot
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
@@ -424,7 +436,7 @@ export function ScreenDetailsModal({
 
               {nowPlayingError?.status === 500 && nowPlaying ? (
                 <Card className="border-amber-200 bg-amber-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2 text-amber-800">
                       <AlertTriangle className="h-4 w-4" />
                       <p className="text-sm">Live playback refresh failed. Showing the last known state.</p>

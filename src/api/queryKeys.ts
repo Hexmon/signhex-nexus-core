@@ -42,7 +42,6 @@ export const queryKeys = {
   users: ["users"] as const,
   settings: ["settings"] as const,
   observabilityOverview: ["observability", "overview"] as const,
-  observabilityMachines: ["observability", "machines"] as const,
   observabilityScreen: (screenId?: string) => ["observability", "screen", screenId] as const,
   settingsGeneral: ["settings", "general"] as const,
   settingsBranding: ["settings", "branding"] as const,
