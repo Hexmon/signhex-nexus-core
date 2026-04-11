@@ -325,6 +325,45 @@ export interface ReportSummary {
   offline_screens?: number;
 }
 
+export interface ScheduleReportEntry {
+  publish_id: string;
+  schedule_id: string;
+  schedule_name: string;
+  target_id: string;
+  target_name: string;
+  target_type: "screen" | "group";
+  published_at?: string | null;
+  taken_down_at?: string | null;
+  schedule_start_at?: string | null;
+  schedule_end_at?: string | null;
+  lifecycle_status: string;
+  target_status: string;
+  target_error?: string | null;
+}
+
+export interface ScheduleReportGroup {
+  target_id: string;
+  target_name: string;
+  target_type: "screen" | "group";
+  latest_activity_at?: string | null;
+  entries: ScheduleReportEntry[];
+}
+
+export interface ScheduleActivityReport {
+  range_start: string;
+  range_end: string;
+  summary: {
+    schedules: number;
+    target_events: number;
+    successful_targets: number;
+    failed_targets: number;
+    screens: number;
+    groups: number;
+  };
+  by_screen: ScheduleReportGroup[];
+  by_group: ScheduleReportGroup[];
+}
+
 export interface MetricsOverview {
   totals?: {
     users?: number;
@@ -360,6 +399,106 @@ export interface MetricsOverview {
 export interface HealthStatus {
   status: string;
   timestamp?: string;
+}
+
+export interface ObservabilityGrafanaLink {
+  label: string;
+  url: string;
+}
+
+export interface ObservabilityMachineSummary {
+  id: string;
+  name: string;
+  role: "data" | "backend" | "cms" | "development";
+  status: "healthy" | "degraded" | "critical" | "unknown" | "unconfigured";
+  scrape_status: {
+    reachable_targets: number;
+    expected_targets: number;
+  };
+  resources: {
+    cpu_percent: number | null;
+    memory_percent: number | null;
+    disk_percent: number | null;
+  };
+  services: Array<{
+    id: string;
+    label: string;
+    status: "up" | "down" | "unknown";
+  }>;
+  grafana: {
+    dashboard_url: string | null;
+  };
+}
+
+export interface ObservabilityOverview {
+  generated_at: string;
+  deployment_mode: "development" | "qa" | "production";
+  current_state_source: "backend_and_prometheus";
+  fleet: {
+    total_players: number | null;
+    active_players: number | null;
+    inactive_players: number | null;
+    offline_players: number | null;
+    reachable_players: number | null;
+    configured_player_targets: number | null;
+  };
+  alerts: {
+    available: boolean;
+    firing: number;
+    highest_severity: "critical" | "warning" | "info" | "none" | "unknown";
+    status: "healthy" | "degraded" | "critical" | "unknown" | "unconfigured";
+  };
+  machines: ObservabilityMachineSummary[];
+  grafana: {
+    enabled: boolean;
+    embed_enabled: boolean;
+    base_path: string;
+    links: {
+      backend_service: string | null;
+      players_fleet: string | null;
+      machines: Record<string, string | null>;
+    };
+  };
+}
+
+export interface ScreenObservabilitySummary {
+  generated_at: string;
+  screen: {
+    id: string;
+    name: string;
+    status: string;
+    health_state: string | null;
+    health_reason: string | null;
+    last_backend_heartbeat_at: string | null;
+  };
+  player_scrape: {
+    configured: boolean;
+    status: "up" | "down" | "unknown";
+    last_successful_player_heartbeat_at: string | null;
+  };
+  latest_player_metrics: {
+    cpu_percent: number | null;
+    memory_used_bytes: number | null;
+    memory_total_bytes: number | null;
+    disk_used_bytes: number | null;
+    disk_total_bytes: number | null;
+    temperature_celsius: number | null;
+    battery_percent: number | null;
+    power_connected: boolean | null;
+    request_queue_items: number | null;
+    request_queue_oldest_age_seconds: number | null;
+    cache_used_bytes: number | null;
+    cache_total_bytes: number | null;
+    last_schedule_sync_at: string | null;
+    display_count: number | null;
+  };
+  latest_backend_telemetry: Record<string, unknown> | null;
+  grafana: {
+    enabled: boolean;
+    embed_enabled: boolean;
+    links: ObservabilityGrafanaLink[];
+    embed_url: string | null;
+  };
 }
 
 export interface DepartmentRequestsReport {
@@ -522,9 +661,72 @@ export interface ScreenAspectRatioListResponse {
 }
 
 export interface ScreenStatus {
-  screen_id: string;
+  id: string;
+  name?: string;
   status: "ACTIVE" | "OFFLINE" | "INACTIVE";
   last_heartbeat_at?: string | null;
+  current_schedule_id?: string | null;
+  current_media_id?: string | null;
+  health_state?: "ONLINE" | "OFFLINE" | "STALE" | "ERROR" | "RECOVERY_REQUIRED" | string | null;
+  health_reason?: string | null;
+  auth_diagnostics?: ScreenOverviewItem["auth_diagnostics"];
+  active_pairing?: ScreenOverviewItem["active_pairing"];
+  latest_heartbeat?: {
+    id: string;
+    status?: string | null;
+    created_at?: string | null;
+    payload?: {
+      uptime?: number;
+      memory_usage?: number;
+      cpu_usage?: number;
+      temperature?: number;
+      memory_total_mb?: number;
+      memory_used_mb?: number;
+      memory_free_mb?: number;
+      cpu_cores?: number;
+      cpu_load_1m?: number;
+      cpu_load_5m?: number;
+      cpu_load_15m?: number;
+      cpu_temp_c?: number;
+      gpu_usage?: number;
+      gpu_temp_c?: number;
+      disk_total_gb?: number;
+      disk_used_gb?: number;
+      disk_free_gb?: number;
+      disk_usage_percent?: number;
+      network_ip?: string;
+      network_interface?: string;
+      network_rtt_ms?: number;
+      network_packet_loss_percent?: number;
+      network_up_mbps?: number;
+      network_down_mbps?: number;
+      display_count?: number;
+      displays?: Array<{
+        id?: string;
+        width: number;
+        height: number;
+        refresh_rate_hz?: number;
+        orientation?: "portrait" | "landscape";
+        connected?: boolean;
+        model?: string;
+      }>;
+      audio_output?: string;
+      volume?: number;
+      muted?: boolean;
+      app_version?: string;
+      os_version?: string;
+      hostname?: string;
+      device_model?: string;
+      device_serial?: string;
+      player_uptime_seconds?: number;
+      last_error?: string;
+      crash_count?: number;
+      battery_percent?: number;
+      is_charging?: boolean;
+      power_source?: "AC" | "BATTERY" | "USB" | "UNKNOWN";
+      metrics?: Record<string, unknown>;
+    } | null;
+  } | null;
   uptime_seconds?: number;
 }
 
@@ -1201,7 +1403,13 @@ export interface Publish {
   taken_down_at?: string | null;
   taken_down_by?: string | null;
   takedown_reason?: string | null;
-  targets?: Array<{ id: string; status: string; error?: string | null }>;
+  targets?: Array<{
+    id: string;
+    status: string;
+    error?: string | null;
+    screen_id?: string | null;
+    screen_group_id?: string | null;
+  }>;
 }
 
 export interface RequestTicket {

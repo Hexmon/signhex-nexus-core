@@ -193,8 +193,8 @@ const Webhooks = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">Webhook Configuration</h1>
           <p className="text-muted-foreground">
             Configure webhooks to receive real-time event notifications
@@ -207,7 +207,7 @@ const Webhooks = () => {
               Add Webhook
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Webhook</DialogTitle>
               <DialogDescription>
@@ -228,7 +228,7 @@ const Webhooks = () => {
 
               <div className="space-y-3">
                 <Label>Event Types</Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {availableEvents.map((event) => (
                     <div key={event.id} className="flex items-center space-x-2">
                       <Checkbox
@@ -251,7 +251,7 @@ const Webhooks = () => {
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 Cancel
               </Button>
@@ -262,12 +262,12 @@ const Webhooks = () => {
       </div>
 
       <Tabs defaultValue="webhooks" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="webhooks">
+        <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+          <TabsTrigger value="webhooks" className="shrink-0">
             <Webhook className="mr-2 h-4 w-4" />
             Webhooks
           </TabsTrigger>
-          <TabsTrigger value="logs">
+          <TabsTrigger value="logs" className="shrink-0">
             <Send className="mr-2 h-4 w-4" />
             Delivery Logs
           </TabsTrigger>
@@ -282,7 +282,7 @@ const Webhooks = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>URL</TableHead>
@@ -295,7 +295,7 @@ const Webhooks = () => {
                 <TableBody>
                   {webhooks.map((webhook) => (
                     <TableRow key={webhook.id}>
-                      <TableCell className="font-mono text-sm">{webhook.url}</TableCell>
+                      <TableCell className="max-w-[240px] break-words font-mono text-sm">{webhook.url}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {webhook.events.slice(0, 2).map((event) => (

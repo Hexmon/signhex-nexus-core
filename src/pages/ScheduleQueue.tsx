@@ -230,17 +230,17 @@ export default function ScheduleQueue() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
+    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] xl:items-start">
       {/* Left Panel - Request List */}
-      <div className="flex-1 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-foreground">Schedule Queue</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Manage playlists, approvals, and publishing workflow
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {showEmergencyTakeover && (
               <Button variant="outline" size="sm" onClick={() => setIsEmergencyModalOpen(true)}>
                 <Zap className="h-4 w-4 mr-2" />
@@ -260,8 +260,8 @@ export default function ScheduleQueue() {
             <CardDescription>Filter every tab by search, date field, range, and sort direction.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 md:grid-cols-5">
-              <div className="relative md:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="relative sm:col-span-2 xl:col-span-2">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search by schedule, request, requester, or notes..."
@@ -282,9 +282,9 @@ export default function ScheduleQueue() {
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
-            <div className="mt-3 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as SortDirection)}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Sort direction" />
                 </SelectTrigger>
                 <SelectContent>
@@ -301,19 +301,19 @@ export default function ScheduleQueue() {
 
         {/* Status Tabs */}
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabKey)} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
             {STATUS_TABS.map((tab) => (
-              <TabsTrigger key={tab.key} value={tab.key}>
-                {tab.label}
-                <Badge variant="secondary" className="ml-2">
+              <TabsTrigger key={tab.key} value={tab.key} className="shrink-0">
+                <span>{tab.label}</span>
+                <Badge variant="secondary" className="ml-2 shrink-0">
                   {summaryQuery.data?.counts?.[tab.key] ?? tabTotals[tab.key] ?? "—"}
                 </Badge>
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <TabsContent value={activeTab} className="flex-1 mt-4">
-            <ScrollArea className="h-full">
+          <TabsContent value={activeTab} className="mt-4 min-w-0 flex-1">
+            <ScrollArea className="min-w-0">
           <div className="space-y-3 pr-4">
             {activeTab === "published" && (
               <Card>
@@ -350,7 +350,7 @@ export default function ScheduleQueue() {
                         )}
                       </div>
                       {deviceScheduleQuery.data?.schedule?.items?.length ? (
-                        <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 lg:grid-cols-2">
                           {deviceScheduleQuery.data.schedule.items.map((item) => (
                             <div key={item.id} className="flex gap-3 rounded-lg border border-border/60 p-3 bg-card">
                               <MediaPreview
@@ -449,14 +449,14 @@ export default function ScheduleQueue() {
                             : "border-border bg-card hover:border-primary/50"
                         }`}
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-foreground">{scheduleName}</h3>
-                              <Badge variant="outline">{reservationState}</Badge>
+                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                              <h3 className="truncate font-semibold text-foreground">{scheduleName}</h3>
+                              <Badge variant="outline" className="shrink-0">{reservationState}</Badge>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <span className="break-words">
                                 {formatRequestId(request.id)} · {requesterLabel}
                                 {departmentLabel ? ` · ${departmentLabel}` : ""}
                               </span>
@@ -473,7 +473,7 @@ export default function ScheduleQueue() {
                           <StatusBadge status={displayStatus} />
                         </div>
 
-                        <div className="grid grid-cols-4 gap-4 text-sm">
+                        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 2xl:grid-cols-4">
                           {mediaCount > 0 && (
                             <div>
                               <p className="text-muted-foreground">Media</p>
@@ -513,7 +513,7 @@ export default function ScheduleQueue() {
                         )}
 
                         {request.schedule?.start_at && (
-                          <div className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-sm text-muted-foreground">
                             <Clock className="h-4 w-4" />
                             <span>
                               {formatDateTime(request.schedule.start_at)} → {formatDateTime(request.schedule.end_at)}
@@ -534,7 +534,7 @@ export default function ScheduleQueue() {
 
             {!isLoading && (
               <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     Page {activePage} of {totalPages}
                   </span>
@@ -592,7 +592,9 @@ export default function ScheduleQueue() {
 
       {/* Right Panel - Detail Drawer */}
       {selectedRequest && (
-        <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+        <div className="min-w-0 xl:sticky xl:top-20">
+          <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+        </div>
       )}
     </div>
   );

@@ -142,7 +142,7 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{recoveryScreen ? "Recover Screen" : "Pair Device"}</DialogTitle>
           <DialogDescription>
@@ -152,10 +152,16 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="mt-2">
-          <TabsList className={`grid w-full ${recoveryScreen ? "grid-cols-2" : "grid-cols-1"}`}>
-            <TabsTrigger value="confirm">Confirm</TabsTrigger>
-            {recoveryScreen ? <TabsTrigger value="recover">Recover</TabsTrigger> : null}
+        <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="mt-2 min-w-0">
+          <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+            <TabsTrigger value="confirm" className="shrink-0">
+              Confirm
+            </TabsTrigger>
+            {recoveryScreen ? (
+              <TabsTrigger value="recover" className="shrink-0">
+                Recover
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           <TabsContent value="confirm" className="space-y-4 py-3">
@@ -218,10 +224,12 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
           {recoveryScreen ? (
             <TabsContent value="recover" className="space-y-4 py-3">
               <Card className="p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-semibold">{recoveryScreen.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{formatMaskedScreenId(recoveryScreen.id)}</p>
+                    <p className="break-all text-xs font-mono text-muted-foreground">
+                      {formatMaskedScreenId(recoveryScreen.id)}
+                    </p>
                   </div>
                   <StatusBadge status={recoveryScreen.health_state || recoveryScreen.status || "offline"} />
                 </div>
@@ -263,18 +271,19 @@ export function PairDeviceModal({ open, onOpenChange, recoveryScreen = null }: P
                     <div className="bg-white p-3 rounded-lg shadow-sm">
                       <QRCodeSVG value={pairingUrl} size={160} level="H" />
                     </div>
-                    <div className="flex items-center gap-2 w-full">
+                    <div className="flex w-full flex-wrap items-center gap-2">
                       <Input
                         value={generatedCode}
                         readOnly
-                        className="text-center text-base font-mono font-bold tracking-wider"
+                        className="min-w-0 flex-1 text-center text-base font-mono font-bold tracking-wider"
                       />
-                      <Button variant="outline" size="icon" onClick={handleCopyCode}>
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={handleCopyCode}>
                         {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                       </Button>
                       <Button
                         variant="outline"
                         size="icon"
+                        className="shrink-0"
                         onClick={() => generateRecoveryCode.mutate({ device_id: recoveryScreen.id, expires_in: DEFAULT_EXPIRES_IN })}
                         disabled={generateRecoveryCode.isPending}
                       >

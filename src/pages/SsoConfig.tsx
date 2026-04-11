@@ -69,8 +69,8 @@ const SsoConfig = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">SSO / OIDC Configuration</h1>
           <p className="text-muted-foreground">
             Configure Single Sign-On authentication for your organization
@@ -85,12 +85,12 @@ const SsoConfig = () => {
       </div>
 
       <Tabs defaultValue="configuration" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="configuration">
+        <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto p-1">
+          <TabsTrigger value="configuration" className="shrink-0">
             <Shield className="mr-2 h-4 w-4" />
             Configuration
           </TabsTrigger>
-          <TabsTrigger value="mapping">
+          <TabsTrigger value="mapping" className="shrink-0">
             <Link2 className="mr-2 h-4 w-4" />
             Attribute Mapping
           </TabsTrigger>
@@ -163,7 +163,7 @@ const SsoConfig = () => {
 
               <div className="space-y-2">
                 <Label>Redirect URL</Label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={redirectUrl}
                     readOnly
@@ -172,6 +172,7 @@ const SsoConfig = () => {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       navigator.clipboard.writeText(redirectUrl);
                       toast({
@@ -190,7 +191,7 @@ const SsoConfig = () => {
 
               <Separator />
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={handleTestConnection}
                   disabled={isTesting || !clientId || !clientSecret}
@@ -231,7 +232,7 @@ const SsoConfig = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                   <div>
                     <p className="text-muted-foreground">Provider</p>
                     <p className="font-medium capitalize">{provider}</p>
@@ -263,7 +264,7 @@ const SsoConfig = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Application Field</Label>
                   <Input value="Email" readOnly className="bg-muted" />
@@ -274,7 +275,7 @@ const SsoConfig = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Application Field</Label>
                   <Input value="First Name" readOnly className="bg-muted" />
@@ -285,7 +286,7 @@ const SsoConfig = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Application Field</Label>
                   <Input value="Last Name" readOnly className="bg-muted" />
@@ -296,7 +297,7 @@ const SsoConfig = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Application Field</Label>
                   <Input value="Department" readOnly className="bg-muted" />
@@ -307,7 +308,7 @@ const SsoConfig = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Application Field</Label>
                   <Input value="Role" readOnly className="bg-muted" />

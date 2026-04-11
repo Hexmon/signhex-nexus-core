@@ -4,6 +4,7 @@ import type {
   DepartmentRequestsReport,
   OfflineScreensReport,
   ReportSummary,
+  ScheduleActivityReport,
   StorageReport,
   SystemHealthReport,
 } from "../types";
@@ -13,6 +14,13 @@ export const reportsApi = {
     apiClient.request<ReportSummary>({
       path: endpoints.reports.summary,
       method: "GET",
+    }),
+
+  getScheduleActivity: (params?: { days?: number }) =>
+    apiClient.request<ScheduleActivityReport>({
+      path: endpoints.reports.schedules,
+      method: "GET",
+      query: params,
     }),
 
   getTrends: () =>

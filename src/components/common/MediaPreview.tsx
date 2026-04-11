@@ -35,7 +35,8 @@ export function MediaPreview({
   videoAutoPlay = false,
   videoLoop = false,
 }: MediaPreviewProps) {
-  const sourceUrl = url ?? media?.media_url ?? media?.thumbnail_object_id;
+  const isExplicitWebpage = (media?.type ?? "").toLowerCase() === "webpage";
+  const sourceUrl = url ?? (isExplicitWebpage ? media?.fallback_media_url ?? media?.media_url : media?.media_url) ?? media?.thumbnail_object_id;
   const [pdfLoaded, setPdfLoaded] = useState(false);
   const normalizedType = (
     type ??

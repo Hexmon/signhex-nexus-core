@@ -83,6 +83,10 @@ export const endpoints = {
   metrics: {
     overview: "/metrics/overview",
   },
+  observability: {
+    overview: "/observability/overview",
+    screen: (screenId: string) => `/observability/screens/${screenId}`,
+  },
   notifications: {
     base: "/notifications",
     unreadCount: "/notifications/unread-count",
@@ -108,6 +112,7 @@ export const endpoints = {
   },
   reports: {
     summary: "/reports/summary",
+    schedules: "/reports/schedules",
     trends: "/reports/trends",
     requestsByDepartment: "/reports/requests-by-department",
     offlineScreens: "/reports/offline-screens",

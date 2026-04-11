@@ -52,7 +52,8 @@ const queryClient = new QueryClient({
 
 const AuthenticatedAppShell = () => {
   const { data: appearance } = useAppearanceSettings();
-  const sidebarDefaultOpen = appearance?.sidebar_mode === "collapsed" ? false : true;
+  const sidebarDefaultOpen =
+    appearance?.sidebar_mode === "collapsed" ? false : true;
 
   return (
     <ProtectedRoute>
@@ -60,31 +61,171 @@ const AuthenticatedAppShell = () => {
       <SidebarProvider defaultOpen={sidebarDefaultOpen}>
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
-          <div className="flex-1 flex flex-col w-full">
+          <div className="flex min-w-0 flex-1 flex-col">
             <AppHeader />
-            <main className="flex-1 p-6 overflow-auto">
+            <main className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
               <Routes>
-                <Route path="/dashboard" element={<ProtectedRoute moduleKey="dashboard"><Dashboard /></ProtectedRoute>} />
-                <Route path="/schedule" element={<ProtectedRoute moduleKey="schedule"><ScheduleQueue /></ProtectedRoute>} />
-                <Route path="/schedule/new" element={<ProtectedRoute moduleKey="schedule"><ScheduleCreator /></ProtectedRoute>} />
-                <Route path="/layouts" element={<ProtectedRoute moduleKey="layouts"><Layouts /></ProtectedRoute>} />
-                <Route path="/layouts/new" element={<ProtectedRoute moduleKey="layouts"><LayoutEditor /></ProtectedRoute>} />
-                <Route path="/layouts/:id" element={<ProtectedRoute moduleKey="layouts"><LayoutEditor /></ProtectedRoute>} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute moduleKey="dashboard">
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/schedule"
+                  element={
+                    <ProtectedRoute moduleKey="schedule">
+                      <ScheduleQueue />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/schedule/new"
+                  element={
+                    <ProtectedRoute moduleKey="schedule">
+                      <ScheduleCreator />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/layouts"
+                  element={
+                    <ProtectedRoute moduleKey="layouts">
+                      <Layouts />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/layouts/new"
+                  element={
+                    <ProtectedRoute moduleKey="layouts">
+                      <LayoutEditor />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/layouts/:id"
+                  element={
+                    <ProtectedRoute moduleKey="layouts">
+                      <LayoutEditor />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/requests" element={<Requests />} />
-                <Route path="/departments" element={<ProtectedRoute moduleKey="departments"><Departments /></ProtectedRoute>} />
-                <Route path="/operators" element={<ProtectedRoute moduleKey="operators"><Operators /></ProtectedRoute>} />
-                <Route path="/users" element={<ProtectedRoute moduleKey="users"><Users /></ProtectedRoute>} />
-                <Route path="/chat" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/chat/:conversationId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/chat/:conversationId/thread/:threadRootId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/conversations" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/conversations/:conversationId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/conversations/:conversationId/thread/:threadRootId" element={<ProtectedRoute moduleKey="conversations"><Conversations /></ProtectedRoute>} />
-                <Route path="/notifications" element={<ProtectedRoute moduleKey="notifications"><Notifications /></ProtectedRoute>} />
-                <Route path="/screens" element={<ProtectedRoute moduleKey="screens"><Screens /></ProtectedRoute>} />
-                <Route path="/media" element={<ProtectedRoute moduleKey="media"><MediaLibrary /></ProtectedRoute>} />
-                <Route path="/reports" element={<ProtectedRoute moduleKey="reports"><Reports /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute moduleKey="settings"><Settings /></ProtectedRoute>} />
+                <Route
+                  path="/departments"
+                  element={
+                    <ProtectedRoute moduleKey="departments">
+                      <Departments />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/operators"
+                  element={
+                    <ProtectedRoute moduleKey="operators">
+                      <Operators />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/users"
+                  element={
+                    <ProtectedRoute moduleKey="users">
+                      <Users />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat/:conversationId"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/chat/:conversationId/thread/:threadRootId"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/conversations"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/conversations/:conversationId"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/conversations/:conversationId/thread/:threadRootId"
+                  element={
+                    <ProtectedRoute moduleKey="conversations">
+                      <Conversations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute moduleKey="notifications">
+                      <Notifications />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/screens"
+                  element={
+                    <ProtectedRoute moduleKey="screens">
+                      <Screens />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/media"
+                  element={
+                    <ProtectedRoute moduleKey="media">
+                      <MediaLibrary />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/reports"
+                  element={
+                    <ProtectedRoute moduleKey="reports">
+                      <Reports />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute moduleKey="settings">
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/api-keys" element={<ApiKeys />} />
                 <Route path="/webhooks" element={<Webhooks />} />
                 <Route path="/sso-config" element={<SsoConfig />} />

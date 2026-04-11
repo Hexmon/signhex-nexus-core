@@ -758,11 +758,11 @@ export default function Conversations() {
   return (
     <div
       className={cn(
-        "grid min-h-[calc(100vh-11rem)] gap-4 lg:h-[calc(100vh-11rem)]",
+        "grid min-h-[calc(100svh-11rem)] gap-4 lg:h-[calc(100svh-11rem)]",
         isSidebarCollapsed ? "lg:grid-cols-[68px,1fr]" : "lg:grid-cols-[320px,1fr]",
       )}
     >
-      <div className="min-h-0">
+      <div className="min-h-[5rem] lg:min-h-0">
         {isSidebarCollapsed ? (
           <div className="flex h-full flex-col items-center gap-2 rounded-lg border bg-card p-2">
             <Button
@@ -776,9 +776,9 @@ export default function Conversations() {
             <p className="text-xs text-muted-foreground">{conversations.length} chats</p>
           </div>
         ) : (
-          <div className="flex h-full min-h-0 flex-col space-y-3">
-            <div className="flex items-center gap-2">
-              <Button className="flex-1" onClick={() => setCreateOpen(true)}>
+          <div className="flex h-full min-h-[20rem] flex-col space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button className="min-w-[10rem] flex-1 sm:flex-none" onClick={() => setCreateOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New chat
               </Button>
@@ -842,7 +842,7 @@ export default function Conversations() {
         )}
       </div>
 
-      <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card">
+      <div className="relative flex h-full min-h-[24rem] flex-col overflow-hidden rounded-lg border bg-card">
         <ChatHeader
           conversation={selectedConversation}
           onOpenSettings={() => setSettingsOpen(true)}

@@ -542,25 +542,25 @@ const LayoutEditor = () => {
   return (
     <div className="space-y-6">
       {/* Top Bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
           <Button variant="ghost" size="icon" onClick={handleCancel}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span>Settings</span>
               <span>/</span>
               <span>Layouts</span>
               <span>/</span>
-              <span className="text-foreground">{isEditMode ? name || "Edit Layout" : "New Layout"}</span>
+              <span className="truncate text-foreground">{isEditMode ? name || "Edit Layout" : "New Layout"}</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight mt-1">
               {isEditMode ? name || "Edit Layout" : "New Layout"}
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
@@ -581,9 +581,9 @@ const LayoutEditor = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column: Form + Slots List */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {/* Form */}
           <Card>
             <CardHeader>
@@ -700,7 +700,7 @@ const LayoutEditor = () => {
                   {slots.map((slot) => (
                     <div
                       key={slot.id}
-                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer transition-colors ${
+                      className={`flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 transition-colors ${
                         selectedSlotId === slot.id
                           ? "border-primary bg-primary/5"
                           : "hover:bg-muted/50"
@@ -728,11 +728,11 @@ const LayoutEditor = () => {
         </div>
 
         {/* Center Column: Canvas */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           {/* Canvas Controls */}
-          <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant={isDrawing ? "default" : "outline"}
@@ -761,7 +761,7 @@ const LayoutEditor = () => {
                   value={String(gridStep)}
                   onValueChange={(value) => setGridStep(Number(value))}
                 >
-                  <SelectTrigger className="h-9 w-[110px]" aria-label="Grid density">
+                  <SelectTrigger className="h-9 w-full sm:w-[110px]" aria-label="Grid density">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -796,8 +796,8 @@ const LayoutEditor = () => {
 
           {/* Canvas */}
           <Card>
-            <CardContent className="p-4">
-              <div className="mx-auto w-fit">
+            <CardContent className="overflow-x-auto p-4">
+              <div className="mx-auto min-w-max w-fit">
                 {showGrid && (
                   <div className="mb-2 ml-10 relative" style={{ width: canvasDimensions.width }}>
                     {gridMarkers.map((marker) => (
@@ -933,7 +933,7 @@ const LayoutEditor = () => {
                   )}
                 </div>
                 <Separator />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="slot-x">X ({Math.round(selectedSlot.x * 100)}%)</Label>
                     <Input
@@ -1024,7 +1024,7 @@ const LayoutEditor = () => {
                             {Math.round(slot.w * 100)}% × {Math.round(slot.h * 100)}%
                           </Badge>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">X ({(slot.x * 100).toFixed(0)}%)</Label>
                             <Input

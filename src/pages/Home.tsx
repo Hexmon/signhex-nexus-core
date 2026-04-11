@@ -10,30 +10,30 @@ const Home = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
       {/* Header */}
       <header className="border-b border-border/50 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Monitor className="w-6 h-6 text-primary-foreground" />
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <Monitor className="h-6 w-6 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Signhex CMS</h1>
+            <h1 className="truncate text-xl font-bold text-foreground sm:text-2xl">Signhex CMS</h1>
           </div>
-          <Button onClick={() => navigate("/login")} variant="default" size="lg">
+          <Button onClick={() => navigate("/login")} variant="default" size="lg" className="w-full sm:w-auto">
             Sign In
           </Button>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-6 py-20 text-center">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <h2 className="text-5xl md:text-6xl font-bold text-foreground">
+      <section className="container mx-auto px-4 py-16 text-center sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-4xl space-y-6">
+          <h2 className="text-4xl font-bold text-foreground sm:text-5xl md:text-6xl">
             Enterprise Digital Signage
             <span className="text-primary"> Made Simple</span>
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="mx-auto max-w-2xl text-base text-muted-foreground sm:text-xl">
             Manage thousands of screens, schedule content, and monitor your digital signage network in real-time with our powerful CMS platform.
           </p>
-          <div className="flex gap-4 justify-center pt-6">
+          <div className="flex flex-col justify-center gap-4 pt-6 sm:flex-row">
             <Button onClick={() => navigate("/login")} size="lg" className="text-lg px-8">
               Get Started
             </Button>
@@ -45,8 +45,8 @@ const Home = () => {
       </section>
 
       {/* Features Grid */}
-      <section className="container mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-6">
+      <section className="container mx-auto px-4 py-16 sm:px-6">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           <Card className="border-border hover:shadow-lg transition-shadow">
             <CardContent className="p-6 space-y-3">
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -122,13 +122,13 @@ const Home = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-6 py-20">
+      <section className="container mx-auto px-4 py-20 sm:px-6">
         <Card className="bg-gradient-to-r from-primary to-primary/80 border-0">
-          <CardContent className="p-12 text-center space-y-6">
-            <h3 className="text-3xl md:text-4xl font-bold text-primary-foreground">
+          <CardContent className="space-y-6 p-6 text-center sm:p-10 md:p-12">
+            <h3 className="text-2xl font-bold text-primary-foreground sm:text-3xl md:text-4xl">
               Ready to Transform Your Digital Signage?
             </h3>
-            <p className="text-xl text-primary-foreground/90 max-w-2xl mx-auto">
+            <p className="mx-auto max-w-2xl text-base text-primary-foreground/90 sm:text-xl">
               Join hundreds of enterprises managing millions of screens with Signhex CMS.
             </p>
             <Button 
@@ -145,7 +145,7 @@ const Home = () => {
 
       {/* Footer */}
       <footer className="border-t border-border bg-muted/30">
-        <div className="container mx-auto px-6 py-8">
+        <div className="container mx-auto px-4 py-8 sm:px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">

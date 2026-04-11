@@ -70,7 +70,7 @@ export const schedulesApi = {
     }),
 
   listPublishes: (scheduleId: string) =>
-    apiClient.request<Publish[]>({
+    apiClient.request<{ items: Publish[] }>({
       path: endpoints.schedules.publishesForSchedule(scheduleId),
       method: "GET",
     }),

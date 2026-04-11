@@ -320,19 +320,19 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
     : "";
 
   return (
-    <div className="w-[480px] border-l border-border bg-background flex flex-col">
+    <div className="flex w-full min-w-0 flex-col rounded-lg border border-border bg-background xl:w-[480px] xl:rounded-none xl:border-l xl:border-y-0 xl:border-r-0">
       {/* Header */}
-      <div className="p-6 border-b border-border">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-foreground mb-1">
+      <div className="border-b border-border p-4 sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="mb-1 truncate text-xl font-bold text-foreground">
                 {currentRequest.schedule?.name || "Schedule request"}
               </h2>
               <StatusBadge status={currentRequest.status} />
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{formatRequestId(currentRequest.id)}</span>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span className="break-all">{formatRequestId(currentRequest.id)}</span>
               <Button variant="ghost" size="icon" onClick={handleCopyId} aria-label="Copy request ID">
                 <Copy className="h-3.5 w-3.5" />
               </Button>
@@ -401,7 +401,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
 
       {/* Tabs */}
       <Tabs defaultValue="summary" className="flex-1 flex flex-col">
-        <TabsList className="grid w-full grid-cols-5 px-6">
+        <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto px-4 py-2 sm:px-6">
           <TabsTrigger value="summary">
             <FileText className="h-4 w-4 mr-1" />
             Summary
@@ -426,14 +426,14 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
 
         <ScrollArea className="flex-1">
           {/* Summary Tab */}
-          <TabsContent value="summary" className="p-6 space-y-6">
+          <TabsContent value="summary" className="space-y-6 p-4 sm:p-6">
             {(requestedByLabel || currentRequest.created_at || currentRequest.updated_at || showRequestNotes || showReviewNotes) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Request Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {requestedByLabel && (
                       <div>
                         <p className="text-sm text-muted-foreground">Requested By</p>
@@ -547,7 +547,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
           </TabsContent>
 
           {/* Media Tab */}
-          <TabsContent value="media" className="p-6 space-y-4">
+          <TabsContent value="media" className="space-y-4 p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Media Items ({mediaItems.length})</h3>
             </div>
@@ -561,8 +561,8 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
                     <CardContent className="p-4">
                       <div className="flex flex-wrap items-center gap-4">
                         <MediaPreview media={media} />
-                        <div className="flex-1 min-w-[220px] space-y-1">
-                          <p className="font-medium text-sm truncate">{resolveMediaDisplayName(media)}</p>
+                        <div className="min-w-0 flex-1 space-y-1 sm:min-w-[220px]">
+                          <p className="truncate text-sm font-medium">{resolveMediaDisplayName(media)}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <ContentTypeBadge type={resolveContentType(media)} />
                             {media.duration_seconds && (
@@ -643,7 +643,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
           </TabsContent>
 
           {/* Schedule Tab */}
-          <TabsContent value="schedule" className="p-6 space-y-4">
+          <TabsContent value="schedule" className="space-y-4 p-4 sm:p-6">
             {currentRequest.schedule && (
               <Card>
                 <CardHeader>
@@ -694,7 +694,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
           </TabsContent>
 
           {/* Screens Tab */}
-          <TabsContent value="screens" className="p-6 space-y-4">
+          <TabsContent value="screens" className="space-y-4 p-4 sm:p-6">
             {layoutSlots.length > 0 && (
               <Card>
                 <CardHeader>
@@ -767,7 +767,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
             {screens.length > 0 && (
               <div>
                 <h3 className="font-semibold mb-3">Target Screens ({screens.length})</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {screens.map((screen) => (
                     <div
                       key={screen.id}
@@ -814,7 +814,7 @@ export function RequestDetailDrawer({ request, onClose }: RequestDetailDrawerPro
           </TabsContent>
 
           {/* Activity Tab */}
-          <TabsContent value="activity" className="p-6 space-y-4">
+          <TabsContent value="activity" className="space-y-4 p-4 sm:p-6">
             <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
               No activity data is provided by the schedule-requests API.
             </div>

@@ -146,7 +146,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Edit Screen Group</DialogTitle>
                     <DialogDescription>
@@ -187,7 +187,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
                         </div>
 
                         <div className="space-y-2">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                                 <Label>Manage Screens</Label>
                                 <Badge variant="secondary">
                                     {selectedScreenIds.length} selected
@@ -210,7 +210,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
                                         return (
                                             <div
                                                 key={id}
-                                                className="flex items-center gap-3 p-3 hover:bg-accent cursor-pointer transition-colors"
+                                                className="flex cursor-pointer flex-col gap-3 p-3 transition-colors hover:bg-accent sm:flex-row sm:items-center"
                                                 onClick={() => handleToggleScreen(id)}
                                             >
                                                 <Checkbox
@@ -220,7 +220,7 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
                                                 />
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-medium truncate">{name}</p>
-                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                                         <span className="truncate">{location || "No location"}</span>
                                                         <span>•</span>
                                                         <Badge
@@ -246,12 +246,12 @@ export function UpdateGroupModal({ open, onOpenChange, groupId }: UpdateGroupMod
                     </div>
                 )}
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
                     <Button
                         variant="destructive"
                         onClick={handleDelete}
                         disabled={deleteGroup.isPending || updateGroup.isPending}
-                        className="mr-auto"
+                        className="w-full sm:mr-auto sm:w-auto"
                     >
                         <Trash2 className="h-4 w-4 mr-2" />
                         {deleteGroup.isPending ? "Deleting..." : "Delete Group"}
