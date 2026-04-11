@@ -230,7 +230,11 @@ export default function ScheduleQueue() {
   };
 
   return (
-    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] xl:items-start">
+    <div
+      className={`flex flex-col gap-4 ${
+        selectedRequest ? "xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] xl:items-start" : ""
+      }`}
+    >
       {/* Left Panel - Request List */}
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
