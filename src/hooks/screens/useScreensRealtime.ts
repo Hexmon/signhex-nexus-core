@@ -13,11 +13,14 @@ import { connectScreensSocket } from "@/lib/screensSocket";
 import { useAppSelector } from "@/store/hooks";
 import {
   applyScreensSyncAck,
+  getScreensListRealtimeFilters,
+  patchScreenInPaginatedList,
   patchScreenInOverview,
   patchScreenNowPlaying,
   patchScreenPreviewInNowPlaying,
   patchScreenPreviewInOverview,
   SCREENS_REFRESH_DEBOUNCE_MS,
+  shouldInvalidateFilteredScreensList,
   shouldRefetchScreenDetail,
 } from "@/hooks/screens/screensRealtimeUtils";
 
@@ -64,6 +67,7 @@ export const useScreensRealtime = ({
       }),
     [activeScreenId, includePreview],
   );
+  const listRealtimeFilters = useMemo(() => getScreensListRealtimeFilters(listQueryKey), [listQueryKey]);
 
   useEffect(() => {
     if (!enabled || !authToken) {
@@ -215,7 +219,16 @@ export const useScreensRealtime = ({
           return patchScreenInOverview(current as never, payload.screen, payload.server_time);
         });
       } else {
-        void refetchList();
+        const shouldInvalidateList = shouldInvalidateFilteredScreensList(listRealtimeFilters, payload.screen);
+        const patched =
+          !shouldInvalidateList && listQueryKey
+            ? queryClient.setQueryData(listQueryKey, (current: ReturnType<typeof patchScreenInPaginatedList>) =>
+                patchScreenInPaginatedList(current as never, payload.screen, payload.server_time),
+              )
+            : undefined;
+        if (shouldInvalidateList || !patched) {
+          void refetchList();
+        }
       }
 
       if (activeScreenId === payload.screen.id) {
@@ -315,6 +328,7 @@ export const useScreensRealtime = ({
     includePreview,
     groupsQueryKey,
     listQueryKey,
+    listRealtimeFilters,
     onlineOnly,
     queryClient,
     syncMode,

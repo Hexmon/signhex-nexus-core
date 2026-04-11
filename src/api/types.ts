@@ -799,6 +799,16 @@ export interface ScreenPlaybackSummary {
   is_live?: boolean;
   current_media_id?: string | null;
   current_schedule_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: Array<{
+    scene_id: string;
+    slot_id: string;
+    item_id: string;
+    media_id?: string | null;
+    schedule_id?: string | null;
+    playback_instance_id: string;
+    started_at: string;
+  }>;
   current_item_id?: string | null;
   started_at?: string | null;
   ends_at?: string | null;
@@ -839,6 +849,8 @@ export interface ScreenOverviewItem extends Screen {
   } | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: ScreenPlaybackSummary["active_slots"];
   active_items?: ScheduleItem[];
   upcoming_items?: ScheduleItem[];
   booked_until?: string | null;
@@ -867,6 +879,8 @@ export interface ScreenNowPlayingResponse {
   last_heartbeat_at?: string | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: ScreenPlaybackSummary["active_slots"];
   current_schedule?: ScreenScheduleSummary | null;
   publish?: ScreenPublishSummary | null;
   active_items?: ScheduleItem[];

@@ -211,6 +211,8 @@ export function ScreenDetailsModal({
   );
   const playback = nowPlaying?.playback;
   const currentMedia = playback?.current_media;
+  const currentSceneId = playback?.current_scene_id ?? nowPlaying?.current_scene_id ?? null;
+  const activeSlots = playback?.active_slots ?? nowPlaying?.active_slots ?? [];
   const timingLabel = getPlaybackTimingLabel(playback?.started_at, playback?.ends_at, serverNowMs);
   const nowPlayingError = nowPlayingQuery.error instanceof ApiError ? nowPlayingQuery.error : null;
   const availability = availabilityQuery.data;
@@ -758,7 +760,9 @@ export function ScreenDetailsModal({
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <Label className="text-muted-foreground">Current media</Label>
+                        <Label className="text-muted-foreground">
+                          {activeSlots.length > 1 ? "Current media (primary slot)" : "Current media"}
+                        </Label>
                         <p className="text-lg font-semibold">
                           {currentMedia?.name || playback?.current_media_id || "No media playing"}
                         </p>
@@ -780,6 +784,43 @@ export function ScreenDetailsModal({
                           </p>
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                          <Label className="text-muted-foreground">Current scene</Label>
+                          <p className="text-sm font-mono">{currentSceneId || "No active scene reported"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Active slots</Label>
+                          <p className="text-sm">
+                            {activeSlots.length > 0
+                              ? `${activeSlots.length} slot${activeSlots.length === 1 ? "" : "s"} reporting playback`
+                              : "No slot-level playback reported"}
+                          </p>
+                        </div>
+                      </div>
+                      {activeSlots.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Slot playback</Label>
+                          <div className="space-y-2">
+                            {activeSlots.map((slot) => (
+                              <div key={slot.playback_instance_id} className="rounded border p-3 text-sm space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline">{slot.slot_id}</Badge>
+                                  <span className="font-medium">{slot.media_id || "No media id reported"}</span>
+                                </div>
+                                <p className="text-muted-foreground">
+                                  Item {slot.item_id}
+                                  {slot.schedule_id ? ` • Schedule ${slot.schedule_id}` : ""}
+                                </p>
+                                <p className="text-muted-foreground">Started {formatDateTime(slot.started_at)}</p>
+                                <p className="text-xs font-mono text-muted-foreground">
+                                  {slot.playback_instance_id}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </Card>
 

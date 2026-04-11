@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { ScreenNowPlayingResponse, ScreenOverviewItem, ScreensOverview } from "@/api/types";
 import {
   applyScreensSyncAck,
+  getScreensListRealtimeFilters,
   getServerClockOffsetMs,
   getServerNowFromOffset,
   patchScreenInOverview,
@@ -10,6 +11,7 @@ import {
   patchScreenPreviewInNowPlaying,
   patchScreenPreviewInOverview,
   SCREENS_REFRESH_DEBOUNCE_MS,
+  shouldInvalidateFilteredScreensList,
   shouldRefetchScreenDetail,
 } from "@/hooks/screens/screensRealtimeUtils";
 
@@ -56,11 +58,24 @@ describe("screens realtime cache helpers", () => {
     const next = patchScreenNowPlaying(current, {
       ...baseScreen,
       status: "OFFLINE",
+      current_scene_id: "scene-2",
+      active_slots: [
+        {
+          scene_id: "scene-2",
+          slot_id: "slot-a",
+          item_id: "item-a",
+          media_id: "media-3",
+          playback_instance_id: "11111111-1111-4111-8111-111111111111",
+          started_at: "2026-03-10T07:15:30.000Z",
+        },
+      ],
       playback: { source: "DEFAULT", current_media_id: "media-3" },
     }, "2026-03-10T07:16:00.000Z");
 
     expect(next?.status).toBe("OFFLINE");
     expect(next?.playback?.source).toBe("DEFAULT");
+    expect(next?.current_scene_id).toBe("scene-2");
+    expect(next?.active_slots).toHaveLength(1);
     expect(next?.server_time).toBe("2026-03-10T07:16:00.000Z");
   });
 
@@ -183,5 +198,24 @@ describe("screens realtime cache helpers", () => {
 
   test("refresh debounce constant remains at 500ms", () => {
     expect(SCREENS_REFRESH_DEBOUNCE_MS).toBe(500);
+  });
+
+  test("extracts realtime list filters from the screens list query key", () => {
+    expect(
+      getScreensListRealtimeFilters(["screens", "list", 2, 20, "ONLINE", "lobby", true, true, false]),
+    ).toEqual({
+      status: "ONLINE",
+      q: "lobby",
+    });
+  });
+
+  test("invalidates filtered screen lists instead of patching them optimistically", () => {
+    expect(shouldInvalidateFilteredScreensList({ q: "lobby" }, baseScreen)).toBe(true);
+    expect(
+      shouldInvalidateFilteredScreensList({ status: "ONLINE" }, { ...baseScreen, health_state: "OFFLINE" }),
+    ).toBe(true);
+    expect(
+      shouldInvalidateFilteredScreensList({ status: "ONLINE" }, { ...baseScreen, health_state: "ONLINE" }),
+    ).toBe(true);
   });
 });
