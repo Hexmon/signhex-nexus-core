@@ -54,8 +54,6 @@ import {
   getScreenIndicatorBadgeClassName,
   getScreenPlaybackHeadline,
   getScreenPlaybackSourceLabel,
-  matchesScreenGroupSearch,
-  matchesScreenSearch,
 } from "@/lib/screens";
 
 const PAGE_SIZE = 9;
@@ -89,10 +87,53 @@ export default function Screens() {
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const [page, setPage] = useState(1);
+  const normalizedSearch = search.trim() || undefined;
+  const screensListQueryKey = useMemo(
+    () =>
+      queryKeys.screensList({
+        page,
+        limit: PAGE_SIZE,
+        q: normalizedSearch,
+        includeSummary: true,
+        includeMedia: true,
+      }),
+    [page, normalizedSearch],
+  );
+  const screenGroupsListQueryKey = useMemo(
+    () =>
+      queryKeys.screenGroupsList({
+        page: 1,
+        limit: 100,
+        q: normalizedSearch,
+        includeSummary: true,
+      }),
+    [normalizedSearch],
+  );
 
-  const overviewQuery = useQuery({
-    queryKey: queryKeys.screensOverview({ includeMedia: true }),
-    queryFn: () => screensApi.getOverview({ include_media: true }),
+  const screensQuery = useQuery({
+    queryKey: screensListQueryKey,
+    queryFn: () =>
+      screensApi.listSummaries({
+        page,
+        limit: PAGE_SIZE,
+        q: normalizedSearch,
+        include_media: true,
+      }),
+  });
+
+  const screenGroupsQuery = useQuery({
+    queryKey: screenGroupsListQueryKey,
+    queryFn: () =>
+      screensApi.listGroupSummaries({
+        page: 1,
+        limit: 100,
+        q: normalizedSearch,
+      }),
+  });
+
+  const screensSummaryQuery = useQuery({
+    queryKey: queryKeys.screensSummary(),
+    queryFn: () => screensApi.getSummary(),
   });
 
   const { data: pairingsData } = useQuery({
@@ -101,8 +142,8 @@ export default function Screens() {
     enabled: canManageScreens,
   });
 
-  const screens = useMemo(() => overviewQuery.data?.screens ?? [], [overviewQuery.data?.screens]);
-  const screenGroups = useMemo(() => overviewQuery.data?.groups ?? [], [overviewQuery.data?.groups]);
+  const screens = useMemo(() => screensQuery.data?.items ?? [], [screensQuery.data?.items]);
+  const screenGroups = useMemo(() => screenGroupsQuery.data?.items ?? [], [screenGroupsQuery.data?.items]);
   const pairings = useMemo(() => pairingsData?.items ?? [], [pairingsData]);
   const selectedScreen = useMemo(
     () => screens.find((screen) => screen.id === selectedScreenId) ?? null,
@@ -114,8 +155,8 @@ export default function Screens() {
   );
 
   useEffect(() => {
-    setServerClockOffsetMs(getServerClockOffsetMs(overviewQuery.data?.server_time));
-  }, [overviewQuery.data?.server_time]);
+    setServerClockOffsetMs(getServerClockOffsetMs(screensQuery.data?.server_time));
+  }, [screensQuery.data?.server_time]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setClockTick(Date.now()), 1000);
@@ -130,13 +171,16 @@ export default function Screens() {
   const { rejectedScreenIds, pendingEmergencyScreenIds } = useScreensRealtime({
     activeScreenId: selectedScreenId,
     enabled: true,
+    syncMode: "invalidate",
+    listQueryKey: screensListQueryKey,
+    groupsQueryKey: screenGroupsListQueryKey,
   });
 
   const deleteScreen = useSafeMutation({
     mutationFn: (id: string) => screensApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
-      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.screensSummary() });
       toast.success("Screen deleted successfully");
     },
   }, "Unable to delete screen.");
@@ -147,47 +191,24 @@ export default function Screens() {
       queryClient.invalidateQueries({ queryKey: queryKeys.screenGroups });
       queryClient.invalidateQueries({ queryKey: ["available-screens"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.screens });
-      queryClient.invalidateQueries({ queryKey: queryKeys.screensOverview({ includeMedia: true }) });
       toast.success("Group deleted successfully");
     },
   }, "Unable to delete group.");
-
-  const filteredScreens = useMemo(
-    () => screens.filter((screen) => matchesScreenSearch(screen, search)),
-    [screens, search],
-  );
-  const screenNamesById = useMemo(
-    () => new Map(screens.map((screen) => [screen.id, screen.name ?? screen.id])),
-    [screens],
-  );
-  const filteredScreenGroups = useMemo(
-    () => screenGroups.filter((group) => matchesScreenGroupSearch(group, search, screenNamesById)),
-    [screenGroups, search, screenNamesById],
-  );
-  const totalPages = Math.max(1, Math.ceil(filteredScreens.length / PAGE_SIZE));
-  const paginatedScreens = useMemo(
-    () => filteredScreens.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filteredScreens, page],
-  );
 
   useEffect(() => {
     setPage(1);
   }, [search]);
 
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
-
   const stats = useMemo(() => {
-    const total = screens.length;
-    const online = screens.filter((screen) => screen.health_state === "ONLINE").length;
-    const recovery = screens.filter((screen) => screen.health_state === "RECOVERY_REQUIRED").length;
-    const stale = screens.filter((screen) => screen.health_state === "STALE").length;
-    const offline = screens.filter((screen) => screen.health_state === "OFFLINE").length;
-    return { total, online, recovery, stale, offline };
-  }, [screens]);
+    const summary = screensSummaryQuery.data;
+    return {
+      total: summary?.total ?? 0,
+      online: summary?.online ?? 0,
+      recovery: summary?.recovery ?? 0,
+      stale: summary?.stale ?? 0,
+      offline: summary?.offline ?? 0,
+    };
+  }, [screensSummaryQuery.data]);
 
   const handleDeleteScreen = (screen: ScreenOverviewItem) => {
     setDeleteTarget(screen);
@@ -212,8 +233,23 @@ export default function Screens() {
     setSelectedGroupId(groupId);
   };
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil((screensQuery.data?.pagination?.total ?? 0) / (screensQuery.data?.pagination?.limit ?? PAGE_SIZE)),
+  );
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const screensErrorMessage =
-    overviewQuery.error instanceof Error ? overviewQuery.error.message : "Unable to load screens.";
+    screensQuery.error instanceof Error
+      ? screensQuery.error.message
+      : screenGroupsQuery.error instanceof Error
+        ? screenGroupsQuery.error.message
+        : "Unable to load screens.";
 
   return (
     <div className="space-y-6">
@@ -270,18 +306,18 @@ export default function Screens() {
             />
           </div>
           <div className="text-sm text-muted-foreground">
-            {overviewQuery.isFetching
+            {screensQuery.isFetching || screenGroupsQuery.isFetching
               ? "Refreshing live playback..."
-              : `${filteredScreens.length} screens, ${filteredScreenGroups.length} groups`}
+              : `${screensQuery.data?.pagination?.total ?? screens.length} screens, ${screenGroupsQuery.data?.pagination?.total ?? screenGroups.length} groups`}
           </div>
         </div>
       </Card>
 
-      {overviewQuery.isLoading && !overviewQuery.data ? (
+      {screensQuery.isLoading && !screensQuery.data ? (
         <div className="rounded-md border p-6">
           <LoadingIndicator label="Loading screens..." />
         </div>
-      ) : overviewQuery.isError && !overviewQuery.data ? (
+      ) : screensQuery.isError && !screensQuery.data ? (
         <Card className="p-6 space-y-4">
           <div className="flex items-center gap-3 text-destructive">
             <AlertTriangle className="h-5 w-5" />
@@ -292,7 +328,10 @@ export default function Screens() {
           </div>
           <Button
             variant="outline"
-            onClick={() => overviewQuery.refetch()}
+            onClick={() => {
+              void screensQuery.refetch();
+              void screenGroupsQuery.refetch();
+            }}
             className="w-fit"
           >
             Retry
@@ -300,7 +339,7 @@ export default function Screens() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {filteredScreens.length === 0 ? (
+          {screens.length === 0 ? (
             <EmptyState
               title="No screens found"
               description={
@@ -312,7 +351,7 @@ export default function Screens() {
           ) : (
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {paginatedScreens.map((screen) => {
+                {screens.map((screen) => {
                   const {
                     id,
                     name,
@@ -330,7 +369,7 @@ export default function Screens() {
                   } = screen;
                   const isEmergency = pendingEmergencyScreenIds.includes(id) || playback?.source === "EMERGENCY";
                   const isOffline = health_state === "OFFLINE" || status === "OFFLINE";
-                  const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, overviewQuery.data?.server_time);
+                  const hasStaleHeartbeat = isHeartbeatStale(last_heartbeat_at, screensQuery.data?.server_time);
                   const playbackLabel = getScreenPlaybackHeadline(screen);
                   const playbackSourceLabel = getScreenPlaybackSourceLabel(playback?.source, {
                     hasPublish: Boolean(publish),
@@ -503,7 +542,7 @@ export default function Screens() {
           </div>
 
           <div className="divide-y rounded-md border max-h-72 overflow-auto">
-            {filteredScreenGroups.length === 0 ? (
+            {screenGroups.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground text-center">
                 {search
                   ? "No screen groups match the current search."
@@ -511,7 +550,7 @@ export default function Screens() {
               </div>
             ) : (
               <>
-                {filteredScreenGroups.map((group: ScreenGroup) => {
+                {screenGroups.map((group: ScreenGroup) => {
                   const { id, name, description, screen_ids, booked_until, active_items, upcoming_items } = group;
 
                   return (

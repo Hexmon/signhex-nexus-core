@@ -15,6 +15,9 @@ import type {
   ScreenGroupNowPlaying,
   ScreensOverview,
   ScreenAspectRatioListResponse,
+  ScreenFleetSummary,
+  ScreenGroupListSummaryResponse,
+  ScreenListSummaryResponse,
 } from "../types";
 
 export const screensApi = {
@@ -24,6 +27,29 @@ export const screensApi = {
       path: endpoints.screens.base,
       method: "GET",
       query: params,
+    }),
+
+  listSummaries: (
+    params?: PaginationParams & {
+      status?: string;
+      q?: string;
+      include_media?: boolean;
+      include_preview?: boolean;
+    },
+  ) =>
+    apiClient.request<ScreenListSummaryResponse>({
+      path: endpoints.screens.base,
+      method: "GET",
+      query: {
+        ...params,
+        include_summary: true,
+      },
+    }),
+
+  getSummary: () =>
+    apiClient.request<ScreenFleetSummary>({
+      path: endpoints.screens.summary,
+      method: "GET",
     }),
 
   getById: (screenId: string) =>
@@ -134,6 +160,20 @@ export const screensApi = {
       path: endpoints.screens.groups,
       method: "GET",
       query: params,
+    }),
+
+  listGroupSummaries: (
+    params?: PaginationParams & {
+      q?: string;
+    },
+  ) =>
+    apiClient.request<ScreenGroupListSummaryResponse>({
+      path: endpoints.screens.groups,
+      method: "GET",
+      query: {
+        ...params,
+        include_summary: true,
+      },
     }),
 
   updateGroup: (groupId: string, payload: Partial<{ name?: string; description?: string; screen_ids?: string[] }>) =>

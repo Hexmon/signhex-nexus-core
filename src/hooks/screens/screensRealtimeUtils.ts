@@ -1,7 +1,9 @@
 import type {
+  ScreenGroupListSummaryResponse,
   ScreenNowPlayingResponse,
   ScreenPreviewSummary,
   ScreenPreviewUpdateEvent,
+  ScreenListSummaryResponse,
   ScreenOverviewItem,
   ScreenRefreshRequiredEvent,
   ScreenScheduleTimelineResponse,
@@ -11,6 +13,11 @@ import type {
 
 export const SCREENS_STALE_HEARTBEAT_MS = 2 * 60 * 1000;
 export const SCREENS_REFRESH_DEBOUNCE_MS = 500;
+
+type ScreensListRealtimeFilters = {
+  status?: string | null;
+  q?: string | null;
+};
 
 export const patchScreenInOverview = (
   current: ScreensOverview | undefined,
@@ -24,6 +31,31 @@ export const patchScreenInOverview = (
     ...current,
     server_time: serverTime ?? current.server_time,
     screens: hasMatch ? nextScreens : [screen, ...current.screens],
+  };
+};
+
+export const patchScreenInPaginatedList = (
+  current: ScreenListSummaryResponse | undefined,
+  screen: ScreenOverviewItem,
+  serverTime?: string,
+) => {
+  if (!current) return current;
+  const nextItems = current.items.map((item) => (item.id === screen.id ? { ...item, ...screen } : item));
+  return {
+    ...current,
+    server_time: serverTime ?? current.server_time,
+    items: nextItems,
+  };
+};
+
+export const patchScreenGroupInPaginatedList = (
+  current: ScreenGroupListSummaryResponse | undefined,
+  groupId: string,
+) => {
+  if (!current) return current;
+  return {
+    ...current,
+    items: current.items.map((item) => (item.id === groupId ? { ...item } : item)),
   };
 };
 
@@ -44,6 +76,8 @@ export const patchScreenNowPlaying = (
     last_heartbeat_at: screen.last_heartbeat_at ?? current.last_heartbeat_at,
     current_schedule_id: screen.current_schedule_id ?? current.current_schedule_id,
     current_media_id: screen.current_media_id ?? current.current_media_id,
+    current_scene_id: screen.current_scene_id ?? current.current_scene_id,
+    active_slots: screen.active_slots ?? current.active_slots,
     active_items: screen.active_items ?? current.active_items,
     upcoming_items: screen.upcoming_items ?? current.upcoming_items,
     booked_until: screen.booked_until ?? current.booked_until,
@@ -52,6 +86,35 @@ export const patchScreenNowPlaying = (
     emergency: screen.emergency ?? current.emergency,
     preview: screen.preview ?? current.preview,
   };
+};
+
+export const getScreensListRealtimeFilters = (
+  queryKey?: readonly unknown[] | null,
+): ScreensListRealtimeFilters => {
+  if (!Array.isArray(queryKey)) {
+    return {};
+  }
+
+  return {
+    status: typeof queryKey[4] === "string" ? queryKey[4] : null,
+    q: typeof queryKey[5] === "string" ? queryKey[5] : null,
+  };
+};
+
+export const shouldInvalidateFilteredScreensList = (
+  filters: ScreensListRealtimeFilters,
+  screen: ScreenOverviewItem,
+) => {
+  const normalizedSearch = filters.q?.trim().toLowerCase();
+  if (normalizedSearch) {
+    return true;
+  }
+
+  const normalizedStatus = filters.status?.trim().toLowerCase();
+  if (!normalizedStatus || normalizedStatus === "all") {
+    return false;
+  }
+  return true;
 };
 
 const mergePreview = (

@@ -56,6 +56,17 @@ export interface PaginatedResponse<T> {
   total: number;
 }
 
+export interface PaginationEnvelope {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface PaginatedApiResponse<T> {
+  items: T[];
+  pagination: PaginationEnvelope;
+}
+
 export interface ApiKey {
   id: string;
   name: string;
@@ -647,6 +658,16 @@ export interface Screen {
   updated_at?: string;
 }
 
+export interface ScreenFleetSummary {
+  server_time?: string;
+  total: number;
+  online: number;
+  recovery: number;
+  stale: number;
+  offline: number;
+  error: number;
+}
+
 export interface ScreenAspectRatio {
   id: string | null;
   name: string;
@@ -778,6 +799,16 @@ export interface ScreenPlaybackSummary {
   is_live?: boolean;
   current_media_id?: string | null;
   current_schedule_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: Array<{
+    scene_id: string;
+    slot_id: string;
+    item_id: string;
+    media_id?: string | null;
+    schedule_id?: string | null;
+    playback_instance_id: string;
+    started_at: string;
+  }>;
   current_item_id?: string | null;
   started_at?: string | null;
   ends_at?: string | null;
@@ -818,6 +849,8 @@ export interface ScreenOverviewItem extends Screen {
   } | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: ScreenPlaybackSummary["active_slots"];
   active_items?: ScheduleItem[];
   upcoming_items?: ScheduleItem[];
   booked_until?: string | null;
@@ -846,6 +879,8 @@ export interface ScreenNowPlayingResponse {
   last_heartbeat_at?: string | null;
   current_schedule_id?: string | null;
   current_media_id?: string | null;
+  current_scene_id?: string | null;
+  active_slots?: ScreenPlaybackSummary["active_slots"];
   current_schedule?: ScreenScheduleSummary | null;
   publish?: ScreenPublishSummary | null;
   active_items?: ScheduleItem[];
@@ -998,6 +1033,14 @@ export interface ScreensOverview {
     offline_screens: number;
     total_groups: number;
   };
+}
+
+export interface ScreenListSummaryResponse extends PaginatedApiResponse<ScreenOverviewItem> {
+  server_time?: string;
+}
+
+export interface ScreenGroupListSummaryResponse extends PaginatedApiResponse<ScreenGroup> {
+  server_time?: string;
 }
 
 export interface ScreensSubscribeAck {

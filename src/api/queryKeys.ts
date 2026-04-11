@@ -1,6 +1,27 @@
 export const queryKeys = {
   departments: ["departments"] as const,
   screens: ["screens"] as const,
+  screensList: (filters?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    q?: string;
+    includeSummary?: boolean;
+    includeMedia?: boolean;
+    includePreview?: boolean;
+  }) =>
+    [
+      "screens",
+      "list",
+      filters?.page ?? 1,
+      filters?.limit ?? 20,
+      filters?.status ?? null,
+      filters?.q ?? null,
+      Boolean(filters?.includeSummary),
+      Boolean(filters?.includeMedia),
+      Boolean(filters?.includePreview),
+    ] as const,
+  screensSummary: () => ["screens", "summary"] as const,
   screensOverview: (filters?: { includeMedia?: boolean; includePreview?: boolean; onlineOnly?: boolean }) =>
     [
       "screens",
@@ -34,6 +55,20 @@ export const queryKeys = {
       Boolean(filters?.includePreview),
     ] as const,
   screenGroups: ["screen-groups"] as const,
+  screenGroupsList: (filters?: {
+    page?: number;
+    limit?: number;
+    q?: string;
+    includeSummary?: boolean;
+  }) =>
+    [
+      "screen-groups",
+      "list",
+      filters?.page ?? 1,
+      filters?.limit ?? 20,
+      filters?.q ?? null,
+      Boolean(filters?.includeSummary),
+    ] as const,
   screenSnapshot: (screenId?: string) => ["screens", "snapshot", screenId] as const,
   screenGroupSnapshot: (groupId?: string) => ["screen-groups", "snapshot", groupId] as const,
   media: ["media"] as const,
