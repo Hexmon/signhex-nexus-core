@@ -56,6 +56,17 @@ export interface PaginatedResponse<T> {
   total: number;
 }
 
+export interface PaginationEnvelope {
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface PaginatedApiResponse<T> {
+  items: T[];
+  pagination: PaginationEnvelope;
+}
+
 export interface ApiKey {
   id: string;
   name: string;
@@ -647,6 +658,16 @@ export interface Screen {
   updated_at?: string;
 }
 
+export interface ScreenFleetSummary {
+  server_time?: string;
+  total: number;
+  online: number;
+  recovery: number;
+  stale: number;
+  offline: number;
+  error: number;
+}
+
 export interface ScreenAspectRatio {
   id: string | null;
   name: string;
@@ -998,6 +1019,14 @@ export interface ScreensOverview {
     offline_screens: number;
     total_groups: number;
   };
+}
+
+export interface ScreenListSummaryResponse extends PaginatedApiResponse<ScreenOverviewItem> {
+  server_time?: string;
+}
+
+export interface ScreenGroupListSummaryResponse extends PaginatedApiResponse<ScreenGroup> {
+  server_time?: string;
 }
 
 export interface ScreensSubscribeAck {

@@ -153,6 +153,7 @@ export const endpoints = {
   },
   screens: {
     base: "/screens",
+    summary: "/screens/summary",
     byId: (screenId: string) => `/screens/${screenId}`,
     overview: "/screens/overview",
     scheduleTimeline: "/screens/schedule-timeline",
